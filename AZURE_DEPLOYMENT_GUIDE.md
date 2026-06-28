@@ -336,203 +336,117 @@ az acr repository list --name $ACR_NAME --output table
 Write-Host "✓ Docker images built and pushed" -ForegroundColor Green
 ```
 
-### Step 9: Create App Service Plan (5 minutes)
+> ⚠️ **Steps 9–13 replaced with Azure Container Apps** — the original App Service plan
+> approach is blocked by VM quota limits on this subscription. Container Apps is serverless,
+> cheaper (scales to zero), and works without any quota requests.
+
+### Step 9: Create Container Apps Environment (5 minutes)
 
 ```powershell
-Write-Host "Creating App Service Plan..." -ForegroundColor Cyan
+Write-Host "Creating Container Apps Environment..." -ForegroundColor Cyan
 
-az appservice plan create `
+az provider register --namespace Microsoft.App
+
+# Poll until registered
+do {
+    Start-Sleep -Seconds 10
+    $state = az provider show --namespace Microsoft.App --query "registrationState" -o tsv
+    Write-Host "  Microsoft.App: $state"
+} while ($state -ne "Registered")
+
+az containerapp env create `
+  --name ai-content-env `
   --resource-group $RESOURCE_GROUP `
-  --name $APP_SERVICE_PLAN `
-  --location $LOCATION `
-  --is-linux `
-  --sku B2
+  --location $LOCATION
 
-Write-Host "✓ App Service Plan created" -ForegroundColor Green
+Write-Host "✓ Container Apps Environment created" -ForegroundColor Green
 ```
 
-### Step 10: Deploy Backend (15 minutes)
+### Step 10: Deploy Backend (10 minutes)
 
 ```powershell
 Write-Host "Deploying Backend..." -ForegroundColor Cyan
 
-# Create web app
-az webapp create `
+az containerapp create `
+  --name ai-content-backend `
   --resource-group $RESOURCE_GROUP `
-  --plan $APP_SERVICE_PLAN `
-  --name $BACKEND_APP `
-  --deployment-container-image-name ${ACR_NAME}.azurecr.io/backend:latest
-
-# Configure container
-az webapp config container set `
-  --name $BACKEND_APP `
-  --resource-group $RESOURCE_GROUP `
-  --docker-custom-image-name ${ACR_NAME}.azurecr.io/backend:latest `
-  --docker-registry-server-url https://${ACR_NAME}.azurecr.io `
-  --docker-registry-server-user $ACR_USERNAME `
-  --docker-registry-server-password $ACR_PASSWORD
-
-# Set environment variables
-az webapp config appsettings set `
-  --resource-group $RESOURCE_GROUP `
-  --name $BACKEND_APP `
-  --settings `
+  --environment ai-content-env `
+  --image ${ACR_NAME}.azurecr.io/backend:latest `
+  --registry-server ${ACR_NAME}.azurecr.io `
+  --registry-username $ACR_USERNAME `
+  --registry-password $ACR_PASSWORD `
+  --target-port 8000 `
+  --ingress external `
+  --min-replicas 0 `
+  --max-replicas 2 `
+  --cpu 0.5 `
+  --memory 1.0Gi `
+  --env-vars `
     DATABASE_URL=$DATABASE_URL `
-    REDIS_URL=$REDIS_URL `
     OPENAI_API_KEY=$OPENAI_API_KEY `
-    VICSEE_API_KEY=$VICSEE_API_KEY `
     BUFFER_ACCESS_TOKEN=$BUFFER_ACCESS_TOKEN `
     STAN_STORE_API_KEY=$STAN_STORE_API_KEY `
     BEEHIIV_API_KEY=$BEEHIIV_API_KEY `
     JWT_SECRET=$JWT_SECRET `
-    AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION `
-    APPINSIGHTS_INSTRUMENTATIONKEY=$APPINSIGHTS_KEY `
-    WEBSITES_PORT=8000
+    AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION
 
-$BACKEND_URL = "https://${BACKEND_APP}.azurewebsites.net"
+$BACKEND_URL = "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
 Write-Host "✓ Backend deployed" -ForegroundColor Green
 Write-Host "  URL: $BACKEND_URL"
 ```
 
-### Step 11: Deploy Frontend (15 minutes)
+**LIVE URL:** https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io
+
+### Step 11: Deploy Frontend (10 minutes)
 
 ```powershell
 Write-Host "Deploying Frontend..." -ForegroundColor Cyan
 
-# Create web app
-az webapp create `
+az containerapp create `
+  --name ai-content-frontend `
   --resource-group $RESOURCE_GROUP `
-  --plan $APP_SERVICE_PLAN `
-  --name $FRONTEND_APP `
-  --deployment-container-image-name ${ACR_NAME}.azurecr.io/frontend:latest
+  --environment ai-content-env `
+  --image ${ACR_NAME}.azurecr.io/frontend:latest `
+  --registry-server ${ACR_NAME}.azurecr.io `
+  --registry-username $ACR_USERNAME `
+  --registry-password $ACR_PASSWORD `
+  --target-port 3000 `
+  --ingress external `
+  --min-replicas 0 `
+  --max-replicas 2 `
+  --cpu 0.25 `
+  --memory 0.5Gi
 
-# Configure container
-az webapp config container set `
-  --name $FRONTEND_APP `
-  --resource-group $RESOURCE_GROUP `
-  --docker-custom-image-name ${ACR_NAME}.azurecr.io/frontend:latest `
-  --docker-registry-server-url https://${ACR_NAME}.azurecr.io `
-  --docker-registry-server-user $ACR_USERNAME `
-  --docker-registry-server-password $ACR_PASSWORD
-
-# Set environment variables
-az webapp config appsettings set `
-  --resource-group $RESOURCE_GROUP `
-  --name $FRONTEND_APP `
-  --settings `
-    VITE_API_URL=$BACKEND_URL `
-    WEBSITES_PORT=3000
-
-$FRONTEND_URL = "https://${FRONTEND_APP}.azurewebsites.net"
+$FRONTEND_URL = "https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
 Write-Host "✓ Frontend deployed" -ForegroundColor Green
 Write-Host "  URL: $FRONTEND_URL"
 ```
 
-### Step 12: Deploy Celery Worker (15 minutes)
+**LIVE URL:** https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io
 
-```powershell
-Write-Host "Deploying Celery Worker..." -ForegroundColor Cyan
-
-# Create web app
-az webapp create `
-  --resource-group $RESOURCE_GROUP `
-  --plan $APP_SERVICE_PLAN `
-  --name $WORKER_APP `
-  --deployment-container-image-name ${ACR_NAME}.azurecr.io/backend:latest
-
-# Configure container
-az webapp config container set `
-  --name $WORKER_APP `
-  --resource-group $RESOURCE_GROUP `
-  --docker-custom-image-name ${ACR_NAME}.azurecr.io/backend:latest `
-  --docker-registry-server-url https://${ACR_NAME}.azurecr.io `
-  --docker-registry-server-user $ACR_USERNAME `
-  --docker-registry-server-password $ACR_PASSWORD
-
-# Set environment variables (same as backend)
-az webapp config appsettings set `
-  --resource-group $RESOURCE_GROUP `
-  --name $WORKER_APP `
-  --settings `
-    DATABASE_URL=$DATABASE_URL `
-    REDIS_URL=$REDIS_URL `
-    OPENAI_API_KEY=$OPENAI_API_KEY `
-    VICSEE_API_KEY=$VICSEE_API_KEY `
-    BUFFER_ACCESS_TOKEN=$BUFFER_ACCESS_TOKEN `
-    STAN_STORE_API_KEY=$STAN_STORE_API_KEY `
-    BEEHIIV_API_KEY=$BEEHIIV_API_KEY `
-    AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION `
-    APPINSIGHTS_INSTRUMENTATIONKEY=$APPINSIGHTS_KEY
-
-# Override startup command for Celery
-az webapp config set `
-  --resource-group $RESOURCE_GROUP `
-  --name $WORKER_APP `
-  --startup-file "celery -A app.tasks worker --loglevel=info"
-
-Write-Host "✓ Celery Worker deployed" -ForegroundColor Green
-```
-
-### Step 13: Deploy n8n (15 minutes)
-
-```powershell
-Write-Host "Deploying n8n..." -ForegroundColor Cyan
-
-# Create web app
-az webapp create `
-  --resource-group $RESOURCE_GROUP `
-  --plan $APP_SERVICE_PLAN `
-  --name $N8N_APP `
-  --deployment-container-image-name n8nio/n8n:latest
-
-# Set environment variables
-az webapp config appsettings set `
-  --resource-group $RESOURCE_GROUP `
-  --name $N8N_APP `
-  --settings `
-    N8N_BASIC_AUTH_ACTIVE=true `
-    N8N_BASIC_AUTH_USER=admin `
-    N8N_BASIC_AUTH_PASSWORD=$N8N_PASSWORD `
-    N8N_HOST="https://${N8N_APP}.azurewebsites.net" `
-    WEBHOOK_URL="https://${N8N_APP}.azurewebsites.net/" `
-    GENERIC_TIMEZONE="America/Chicago" `
-    EXECUTIONS_DATA_SAVE_ON_SUCCESS=all `
-    EXECUTIONS_DATA_SAVE_ON_ERROR=all `
-    WEBSITES_PORT=5678
-
-$N8N_URL = "https://${N8N_APP}.azurewebsites.net"
-Write-Host "✓ n8n deployed" -ForegroundColor Green
-Write-Host "  URL: $N8N_URL"
-Write-Host "  Username: admin"
-Write-Host "  Password: $N8N_PASSWORD"
-```
-
-### Step 14: Configure CORS (5 minutes)
+### Step 12: Configure CORS (2 minutes)
 
 ```powershell
 Write-Host "Configuring CORS..." -ForegroundColor Cyan
 
-az webapp cors add `
+az containerapp update `
+  --name ai-content-backend `
   --resource-group $RESOURCE_GROUP `
-  --name $BACKEND_APP `
-  --allowed-origins "https://${FRONTEND_APP}.azurewebsites.net"
+  --set-env-vars ALLOWED_ORIGINS="https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
 
 Write-Host "✓ CORS configured" -ForegroundColor Green
 ```
 
-### Step 15: Run Database Migrations (10 minutes)
+### Step 13: Run Database Migrations (5 minutes)
 
 ```powershell
 Write-Host "Running database migrations..." -ForegroundColor Cyan
 
-# SSH into backend and run migrations
-az webapp ssh --resource-group $RESOURCE_GROUP --name $BACKEND_APP
-
-# Inside the container, run:
-# cd /app
-# alembic upgrade head
-# python scripts/create_admin.py
-# exit
+# Execute alembic inside the running container
+az containerapp exec `
+  --name ai-content-backend `
+  --resource-group $RESOURCE_GROUP `
+  --command "alembic upgrade head"
 
 Write-Host "✓ Database migrations complete" -ForegroundColor Green
 ```
