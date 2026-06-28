@@ -45,7 +45,7 @@ def get_dashboard_metrics(db: Session = Depends(get_db)) -> dict:
     # Get revenue (last 30 days)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     revenue_30d = db.query(func.sum(Conversion.amount)).filter(
-        Conversion.converted_at >= thirty_days_ago
+        Conversion.created_at >= thirty_days_ago
     ).scalar() or 0
     
     # Get recent activity
@@ -100,12 +100,12 @@ def get_revenue_metrics(
     
     # Total revenue
     total_revenue = db.query(func.sum(Conversion.amount)).filter(
-        Conversion.converted_at >= start_date
+        Conversion.created_at >= start_date
     ).scalar() or 0
     
     # Number of conversions
     total_conversions = db.query(Conversion).filter(
-        Conversion.converted_at >= start_date
+        Conversion.created_at >= start_date
     ).count()
     
     # Average order value
@@ -117,7 +117,7 @@ def get_revenue_metrics(
         func.sum(Conversion.amount),
         func.count(Conversion.id)
     ).filter(
-        Conversion.converted_at >= start_date
+        Conversion.created_at >= start_date
     ).group_by(Conversion.product_id).all()
     
     return {
