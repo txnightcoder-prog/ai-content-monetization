@@ -1,0 +1,21 @@
+﻿# Dependencies
+frontend/node_modules/
+backend/venv/
+
+# Build output
+frontend/dist/
+**/__pycache__/
+*.pyc
+
+# Local databases
+*.db
+*.sqlite3
+
+# Secrets
+.env
+backend/.env
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
