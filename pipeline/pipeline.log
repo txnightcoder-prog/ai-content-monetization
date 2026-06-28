@@ -1,0 +1,242 @@
+2026-06-26 17:02:49,998 INFO Step 1: Generating 5 topics...
+2026-06-26 17:02:52,288 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:02:52,295 INFO   Topics: ['How an AI Tool Completely Transformed My Daily Routine in 30 Days', 'The 5 AI Secrets to Boosting Your Productivity Overnight', 'I Used AI to Delegate My Tasks—Here’s What Happened!', 'This One AI App Will Change the Way You Manage Your Time Forever', 'Watch Me Turn a Messy Day Into a Productivity Powerhouse with AI']
+2026-06-26 17:02:52,295 INFO Step 2: Generating scripts...
+2026-06-26 17:02:55,380 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:02:55,391 INFO   \u2713 Script 1/5: 'How an AI Tool Completely Transformed My Daily Routine in 30 Days'
+2026-06-26 17:03:00,981 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:03:00,983 INFO   \u2713 Script 2/5: 'The 5 AI Secrets to Boosting Your Productivity Overnight'
+2026-06-26 17:03:04,117 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:03:04,121 INFO   \u2713 Script 3/5: 'I Used AI to Delegate My Tasks—Here’s What Happened!'
+2026-06-26 17:03:05,977 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:03:05,987 INFO   \u2713 Script 4/5: 'This One AI App Will Change the Way You Manage Your Time Forever'
+2026-06-26 17:03:09,160 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-26 17:03:09,204 INFO   \u2713 Script 5/5: 'Watch Me Turn a Messy Day Into a Productivity Powerhouse with AI'
+2026-06-26 17:03:09,204 INFO Step 3: Creating faceless videos with JSON2Video...
+2026-06-26 17:03:09,204 INFO   Script 1 preview — HOOK: 'Ever felt like there aren’t enough hours in the day? What if' | BODY: 'I started using an AI productivity assistant called "TaskMas'
+2026-06-26 17:03:09,204 INFO   Script 2 preview — HOOK: 'Want to skyrocket your productivity overnight? Here are 5 AI' | BODY: ' 1. **Smart Scheduling:** Use AI tools like Clockwise to aut'
+2026-06-26 17:03:09,204 INFO   Script 3 preview — HOOK: 'Ever wonder if you could get more done in less time? What if' | BODY: 'I decided to put AI to the test by delegating my daily tasks'
+2026-06-26 17:03:09,204 INFO   Script 4 preview — HOOK: "Struggling to juggle your tasks? What if I told you there's " | BODY: 'Meet **TimeMaster AI**! This app analyzes your daily habits '
+2026-06-26 17:03:09,204 INFO   Script 5 preview — HOOK: '"Ever feel like your day is a whirlwind of chaos? Let\'s turn' | BODY: '"First, grab an AI tool like Notion or Todoist. Start by inp'
+2026-06-26 17:03:11,445 INFO HTTP Request: POST https://api.json2video.com/v2/movies "HTTP/1.1 200 OK"
+2026-06-26 17:03:22,204 INFO HTTP Request: GET https://api.json2video.com/v2/movies?project=kKxDRigEETOa0ZMN "HTTP/1.1 200 OK"
+2026-06-26 17:03:22,205 INFO     JSON2Video status: error
+2026-06-26 17:03:22,205 ERROR   \u2717 Video 1 failed: JSON2Video render failed: You exceeded the quota of time in your plan
+2026-06-26 17:03:24,127 INFO HTTP Request: POST https://api.json2video.com/v2/movies "HTTP/1.1 200 OK"
+2026-06-26 17:03:34,869 INFO HTTP Request: GET https://api.json2video.com/v2/movies?project=iNIbCEvF1kwdwbkd "HTTP/1.1 200 OK"
+2026-06-26 17:03:34,869 INFO     JSON2Video status: error
+2026-06-26 17:03:34,870 ERROR   \u2717 Video 2 failed: JSON2Video render failed: You exceeded the quota of time in your plan
+2026-06-26 17:03:38,838 INFO HTTP Request: POST https://api.json2video.com/v2/movies "HTTP/1.1 200 OK"
+2026-06-26 17:03:49,528 INFO HTTP Request: GET https://api.json2video.com/v2/movies?project=anb20QtYlv7kEObd "HTTP/1.1 200 OK"
+2026-06-26 17:03:49,529 INFO     JSON2Video status: error
+2026-06-26 17:03:49,529 ERROR   \u2717 Video 3 failed: JSON2Video render failed: You exceeded the quota of time in your plan
+2026-06-26 17:03:51,664 INFO HTTP Request: POST https://api.json2video.com/v2/movies "HTTP/1.1 200 OK"
+2026-06-26 17:04:02,431 INFO HTTP Request: GET https://api.json2video.com/v2/movies?project=Ua1CRpTHd9BFjfr1 "HTTP/1.1 200 OK"
+2026-06-26 17:04:02,431 INFO     JSON2Video status: error
+2026-06-26 17:04:02,431 ERROR   \u2717 Video 4 failed: JSON2Video render failed: You exceeded the quota of time in your plan
+2026-06-26 17:04:04,350 INFO HTTP Request: POST https://api.json2video.com/v2/movies "HTTP/1.1 200 OK"
+2026-06-26 17:04:15,173 INFO HTTP Request: GET https://api.json2video.com/v2/movies?project=J3gFME8dTZEJk7yb "HTTP/1.1 200 OK"
+2026-06-26 17:04:15,173 INFO     JSON2Video status: error
+2026-06-26 17:04:15,173 ERROR   \u2717 Video 5 failed: JSON2Video render failed: You exceeded the quota of time in your plan
+2026-06-26 17:04:15,173 INFO Step 4: Scheduling posts via Buffer...
+2026-06-26 17:04:15,173 WARNING   Skipping post 1: video generation failed
+2026-06-26 17:04:15,173 WARNING   Skipping post 2: video generation failed
+2026-06-26 17:04:15,173 WARNING   Skipping post 3: video generation failed
+2026-06-26 17:04:15,173 WARNING   Skipping post 4: video generation failed
+2026-06-26 17:04:15,173 WARNING   Skipping post 5: video generation failed
+2026-06-27 06:00:08,174 INFO Step 1: Generating 5 topics...
+2026-06-27 06:00:10,886 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:10,891 INFO   Topics: ['3 AI Tools That Will Transform Your Daily Workflow in Under 60 Seconds', 'The Secret to Doubling Your Productivity with Just One AI App', 'AI vs. Human: Who Writes Better Emails? A Fun Test!', "Unlock Hidden Features in Your Favorite AI Tools You Didn't Know Existed!", 'How I Use AI to Take My Morning Routine from Chaos to Calm']
+2026-06-27 06:00:10,891 INFO Step 2: Generating scripts...
+2026-06-27 06:00:13,773 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:13,780 INFO   \u2713 Script 1/5: '3 AI Tools That Will Transform Your Daily Workflow in Under 60 Seconds'
+2026-06-27 06:00:16,352 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:16,356 INFO   \u2713 Script 2/5: 'The Secret to Doubling Your Productivity with Just One AI App'
+2026-06-27 06:00:18,620 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:18,624 INFO   \u2713 Script 3/5: 'AI vs. Human: Who Writes Better Emails? A Fun Test!'
+2026-06-27 06:00:20,849 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:20,890 INFO   \u2713 Script 4/5: 'Unlock Hidden Features in Your Favorite AI Tools You Didn't Know Existed!'
+2026-06-27 06:00:23,639 INFO HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-27 06:00:23,641 INFO   \u2713 Script 5/5: 'How I Use AI to Take My Morning Routine from Chaos to Calm'
+2026-06-27 06:00:23,641 INFO Step 3: Creating faceless videos with JSON2Video...
+2026-06-27 06:00:23,641 INFO   Script 1 preview — HOOK: 'Tired of feeling overwhelmed by your daily tasks? \U0001f680' | BODY: 'Let’s supercharge your workflow with three AI tools that’ll '
+2026-06-27 06:00:23,641 INFO   Script 2 preview — HOOK: '\U0001f680 Want to double your productivity without working harder? L' | BODY: 'Meet your new best friend: an AI app called Notion AI. This '
+2026-06-27 06:00:23,641 INFO   Script 3 preview — HOOK: 'Ever wondered if AI can outwrite a human in emails? Let’s fi' | BODY: 'Here’s how it works: I’m going to give both an AI tool and m'
+2026-06-27 06:00:23,641 INFO   Script 4 preview — HOOK: "Ever wondered if you're getting the most out of your favorit" | BODY: "Let's unlock some hidden features you probably didn’t know e"
+2026-06-27 06:00:23,641 INFO   Script 5 preview — HOOK: ' \U0001f389 Tired of chaotic mornings? Let’s turn that chaos into cal' | BODY: ' \u2728 First, I start my day with an AI-powered planner like Not'
+2026-06-27 06:00:31,192 INFO     Voiceover generated: 3_ai_tools_that_will_transform_your_dail_1.mp3
+2026-06-27 06:00:35,880 INFO     Video rendered: 3_ai_tools_that_will_transform_your_dail_1.mp4 (1616 KB)
+2026-06-27 06:00:36,515 INFO Request URL: 'https://aivideopipelinevids.blob.core.windows.net/videos/3_ai_tools_that_will_transform_your_dail_1.mp4'
+Request method: 'PUT'
+Request headers:
+    'Content-Length': '1655376'
+    'x-ms-blob-type': 'REDACTED'
+    'x-ms-blob-content-type': 'REDACTED'
+    'x-ms-version': 'REDACTED'
+    'Content-Type': 'application/octet-stream'
+    'Accept': 'application/xml'
+    'User-Agent': 'azsdk-python-storage-blob/12.30.0 Python/3.14.5 (Windows-11-10.0.26200-SP0)'
+    'x-ms-date': 'REDACTED'
+    'x-ms-client-request-id': '6d15be74-7217-11f1-bc74-6cf6da7a9030'
+    'Authorization': 'REDACTED'
+A body is sent with the request
+2026-06-27 06:00:37,524 INFO Response status: 201
+Response headers:
+    'Content-Length': '0'
+    'Content-MD5': 'REDACTED'
+    'Last-Modified': 'Sat, 27 Jun 2026 11:00:36 GMT'
+    'ETag': '"0x8DED43B516462D1"'
+    'Server': 'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0'
+    'x-ms-request-id': 'a2f741a6-201e-0071-2f24-066b45000000'
+    'x-ms-client-request-id': '6d15be74-7217-11f1-bc74-6cf6da7a9030'
+    'x-ms-version': 'REDACTED'
+    'x-ms-content-crc64': 'REDACTED'
+    'x-ms-request-server-encrypted': 'REDACTED'
+    'Date': 'Sat, 27 Jun 2026 11:00:36 GMT'
+2026-06-27 06:00:37,526 INFO     Uploaded: https://aivideopipelinevids.blob.core.windows.net/videos/3_ai_tools_that_will_transform_your_dail_1.mp4
+2026-06-27 06:00:37,526 INFO   \u2713 Video 1/5 ready: C:\Users\JohnKirshy\Desktop\ai-content-monetization\pipeline\videos\3_ai_tools_that_will_transform_your_dail_1.mp4
+2026-06-27 06:00:43,140 INFO     Voiceover generated: the_secret_to_doubling_your_productivity_2.mp3
+2026-06-27 06:00:46,568 INFO     Video rendered: the_secret_to_doubling_your_productivity_2.mp4 (1226 KB)
+2026-06-27 06:00:46,571 INFO Request URL: 'https://aivideopipelinevids.blob.core.windows.net/videos/the_secret_to_doubling_your_productivity_2.mp4'
+Request method: 'PUT'
+Request headers:
+    'Content-Length': '1255704'
+    'x-ms-blob-type': 'REDACTED'
+    'x-ms-blob-content-type': 'REDACTED'
+    'x-ms-version': 'REDACTED'
+    'Content-Type': 'application/octet-stream'
+    'Accept': 'application/xml'
+    'User-Agent': 'azsdk-python-storage-blob/12.30.0 Python/3.14.5 (Windows-11-10.0.26200-SP0)'
+    'x-ms-date': 'REDACTED'
+    'x-ms-client-request-id': '73141cc8-7217-11f1-a124-6cf6da7a9030'
+    'Authorization': 'REDACTED'
+A body is sent with the request
+2026-06-27 06:00:47,569 INFO Response status: 201
+Response headers:
+    'Content-Length': '0'
+    'Content-MD5': 'REDACTED'
+    'Last-Modified': 'Sat, 27 Jun 2026 11:00:46 GMT'
+    'ETag': '"0x8DED43B57638B3E"'
+    'Server': 'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0'
+    'x-ms-request-id': 'b3726b2d-e01e-0089-1f24-06a058000000'
+    'x-ms-client-request-id': '73141cc8-7217-11f1-a124-6cf6da7a9030'
+    'x-ms-version': 'REDACTED'
+    'x-ms-content-crc64': 'REDACTED'
+    'x-ms-request-server-encrypted': 'REDACTED'
+    'Date': 'Sat, 27 Jun 2026 11:00:46 GMT'
+2026-06-27 06:00:47,570 INFO     Uploaded: https://aivideopipelinevids.blob.core.windows.net/videos/the_secret_to_doubling_your_productivity_2.mp4
+2026-06-27 06:00:47,570 INFO   \u2713 Video 2/5 ready: C:\Users\JohnKirshy\Desktop\ai-content-monetization\pipeline\videos\the_secret_to_doubling_your_productivity_2.mp4
+2026-06-27 06:00:53,151 INFO     Voiceover generated: ai_vs_human_who_writes_better_emails_a_f_3.mp3
+2026-06-27 06:00:56,467 INFO     Video rendered: ai_vs_human_who_writes_better_emails_a_f_3.mp4 (1171 KB)
+2026-06-27 06:00:56,468 INFO Request URL: 'https://aivideopipelinevids.blob.core.windows.net/videos/ai_vs_human_who_writes_better_emails_a_f_3.mp4'
+Request method: 'PUT'
+Request headers:
+    'Content-Length': '1199534'
+    'x-ms-blob-type': 'REDACTED'
+    'x-ms-blob-content-type': 'REDACTED'
+    'x-ms-version': 'REDACTED'
+    'Content-Type': 'application/octet-stream'
+    'Accept': 'application/xml'
+    'User-Agent': 'azsdk-python-storage-blob/12.30.0 Python/3.14.5 (Windows-11-10.0.26200-SP0)'
+    'x-ms-date': 'REDACTED'
+    'x-ms-client-request-id': '78fa678f-7217-11f1-824b-6cf6da7a9030'
+    'Authorization': 'REDACTED'
+A body is sent with the request
+2026-06-27 06:00:57,375 INFO Response status: 201
+Response headers:
+    'Content-Length': '0'
+    'Content-MD5': 'REDACTED'
+    'Last-Modified': 'Sat, 27 Jun 2026 11:00:56 GMT'
+    'ETag': '"0x8DED43B5D3C6A92"'
+    'Server': 'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0'
+    'x-ms-request-id': '0206255d-e01e-0045-1e24-06c4ed000000'
+    'x-ms-client-request-id': '78fa678f-7217-11f1-824b-6cf6da7a9030'
+    'x-ms-version': 'REDACTED'
+    'x-ms-content-crc64': 'REDACTED'
+    'x-ms-request-server-encrypted': 'REDACTED'
+    'Date': 'Sat, 27 Jun 2026 11:00:56 GMT'
+2026-06-27 06:00:57,376 INFO     Uploaded: https://aivideopipelinevids.blob.core.windows.net/videos/ai_vs_human_who_writes_better_emails_a_f_3.mp4
+2026-06-27 06:00:57,376 INFO   \u2713 Video 3/5 ready: C:\Users\JohnKirshy\Desktop\ai-content-monetization\pipeline\videos\ai_vs_human_who_writes_better_emails_a_f_3.mp4
+2026-06-27 06:01:01,904 INFO     Voiceover generated: unlock_hidden_features_in_your_favorite_4.mp3
+2026-06-27 06:01:05,527 INFO     Video rendered: unlock_hidden_features_in_your_favorite_4.mp4 (1240 KB)
+2026-06-27 06:01:05,529 INFO Request URL: 'https://aivideopipelinevids.blob.core.windows.net/videos/unlock_hidden_features_in_your_favorite_4.mp4'
+Request method: 'PUT'
+Request headers:
+    'Content-Length': '1270395'
+    'x-ms-blob-type': 'REDACTED'
+    'x-ms-blob-content-type': 'REDACTED'
+    'x-ms-version': 'REDACTED'
+    'Content-Type': 'application/octet-stream'
+    'Accept': 'application/xml'
+    'User-Agent': 'azsdk-python-storage-blob/12.30.0 Python/3.14.5 (Windows-11-10.0.26200-SP0)'
+    'x-ms-date': 'REDACTED'
+    'x-ms-client-request-id': '7e60eb3f-7217-11f1-9f62-6cf6da7a9030'
+    'Authorization': 'REDACTED'
+A body is sent with the request
+2026-06-27 06:01:06,493 INFO Response status: 201
+Response headers:
+    'Content-Length': '0'
+    'Content-MD5': 'REDACTED'
+    'Last-Modified': 'Sat, 27 Jun 2026 11:01:05 GMT'
+    'ETag': '"0x8DED43B62AB60C6"'
+    'Server': 'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0'
+    'x-ms-request-id': '18991caf-f01e-0078-6624-0671cb000000'
+    'x-ms-client-request-id': '7e60eb3f-7217-11f1-9f62-6cf6da7a9030'
+    'x-ms-version': 'REDACTED'
+    'x-ms-content-crc64': 'REDACTED'
+    'x-ms-request-server-encrypted': 'REDACTED'
+    'Date': 'Sat, 27 Jun 2026 11:01:05 GMT'
+2026-06-27 06:01:06,494 INFO     Uploaded: https://aivideopipelinevids.blob.core.windows.net/videos/unlock_hidden_features_in_your_favorite_4.mp4
+2026-06-27 06:01:06,494 INFO   \u2713 Video 4/5 ready: C:\Users\JohnKirshy\Desktop\ai-content-monetization\pipeline\videos\unlock_hidden_features_in_your_favorite_4.mp4
+2026-06-27 06:01:11,695 INFO     Voiceover generated: how_i_use_ai_to_take_my_morning_routine_5.mp3
+2026-06-27 06:01:15,754 INFO     Video rendered: how_i_use_ai_to_take_my_morning_routine_5.mp4 (1476 KB)
+2026-06-27 06:01:15,757 INFO Request URL: 'https://aivideopipelinevids.blob.core.windows.net/videos/how_i_use_ai_to_take_my_morning_routine_5.mp4'
+Request method: 'PUT'
+Request headers:
+    'Content-Length': '1512072'
+    'x-ms-blob-type': 'REDACTED'
+    'x-ms-blob-content-type': 'REDACTED'
+    'x-ms-version': 'REDACTED'
+    'Content-Type': 'application/octet-stream'
+    'Accept': 'application/xml'
+    'User-Agent': 'azsdk-python-storage-blob/12.30.0 Python/3.14.5 (Windows-11-10.0.26200-SP0)'
+    'x-ms-date': 'REDACTED'
+    'x-ms-client-request-id': '84798c19-7217-11f1-9a14-6cf6da7a9030'
+    'Authorization': 'REDACTED'
+A body is sent with the request
+2026-06-27 06:01:16,758 INFO Response status: 201
+Response headers:
+    'Content-Length': '0'
+    'Content-MD5': 'REDACTED'
+    'Last-Modified': 'Sat, 27 Jun 2026 11:01:15 GMT'
+    'ETag': '"0x8DED43B68C9376C"'
+    'Server': 'Windows-Azure-Blob/1.0 Microsoft-HTTPAPI/2.0'
+    'x-ms-request-id': '7d77b516-b01e-0012-1c24-062d60000000'
+    'x-ms-client-request-id': '84798c19-7217-11f1-9a14-6cf6da7a9030'
+    'x-ms-version': 'REDACTED'
+    'x-ms-content-crc64': 'REDACTED'
+    'x-ms-request-server-encrypted': 'REDACTED'
+    'Date': 'Sat, 27 Jun 2026 11:01:15 GMT'
+2026-06-27 06:01:16,759 INFO     Uploaded: https://aivideopipelinevids.blob.core.windows.net/videos/how_i_use_ai_to_take_my_morning_routine_5.mp4
+2026-06-27 06:01:16,759 INFO   \u2713 Video 5/5 ready: C:\Users\JohnKirshy\Desktop\ai-content-monetization\pipeline\videos\how_i_use_ai_to_take_my_morning_routine_5.mp4
+2026-06-27 06:01:16,759 INFO Step 4: Scheduling posts via Buffer...
+2026-06-27 06:01:17,751 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:18,230 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:18,717 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:18,718 INFO   \u2713 Post 1 scheduled for 08:00 UTC
+2026-06-27 06:01:19,376 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:20,317 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:20,755 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:20,756 INFO   \u2713 Post 2 scheduled for 11:00 UTC
+2026-06-27 06:01:21,486 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:22,016 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:22,470 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:22,471 INFO   \u2713 Post 3 scheduled for 14:00 UTC
+2026-06-27 06:01:23,172 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:23,697 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:24,103 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:24,104 INFO   \u2713 Post 4 scheduled for 17:00 UTC
+2026-06-27 06:01:25,085 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:25,704 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:26,189 INFO HTTP Request: POST https://api.buffer.com/graphql "HTTP/1.1 200 OK"
+2026-06-27 06:01:26,189 INFO   \u2713 Post 5 scheduled for 20:00 UTC

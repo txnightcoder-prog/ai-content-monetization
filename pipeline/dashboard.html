@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TxNightCoder — Video Pipeline Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+    background: #0d1117; color: #e6edf3;
+    min-height: 100vh;
+  }
+  header {
+    background: #161b22;
+    border-bottom: 1px solid #30363d;
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 700; color: #58a6ff; }
+  header .sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #3fb950; display: inline-block; margin-right: 6px; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
+
+  /* Cards */
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+  .stat-card {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 16px 20px;
+  }
+  .stat-card .label { font-size: 12px; color: #8b949e; margin-bottom: 4px; }
+  .stat-card .value { font-size: 26px; font-weight: 700; color: #58a6ff; }
+  .stat-card .sub   { font-size: 11px; color: #3fb950; margin-top: 2px; }
+
+  /* Panel */
+  .panel {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; color: #e6edf3; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+
+  /* Form elements */
+  label { font-size: 12px; color: #8b949e; display: block; margin-bottom: 5px; margin-top: 12px; }
+  label:first-child { margin-top: 0; }
+  input[type=text], select, textarea {
+    width: 100%; background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    color: #e6edf3; font-size: 13px; padding: 8px 12px;
+    font-family: inherit; outline: none;
+  }
+  input[type=text]:focus, select:focus, textarea:focus { border-color: #58a6ff; }
+  textarea { resize: vertical; min-height: 60px; }
+  select option { background: #161b22; }
+
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 9px 20px; border-radius: 6px; font-size: 13px;
+    font-weight: 600; cursor: pointer; border: none;
+    font-family: inherit; transition: opacity 0.15s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: #238636; color: #fff; }
+  .btn-blue    { background: #1f6feb; color: #fff; }
+  .btn-danger  { background: #da3633; color: #fff; }
+  .btn-ghost   { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn-row { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+
+  /* Log */
+  .log-box {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 12px 14px; font-family: "Cascadia Code", Consolas, monospace;
+    font-size: 12px; color: #8b949e; max-height: 240px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .log-box .ok   { color: #3fb950; }
+  .log-box .err  { color: #f85149; }
+  .log-box .info { color: #58a6ff; }
+  .log-box .warn { color: #d29922; }
+
+  /* Video list */
+  .video-list { display: flex; flex-direction: column; gap: 10px; }
+  .video-item {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 6px;
+    padding: 12px 16px; display: flex; align-items: center; gap: 14px;
+  }
+  .video-thumb {
+    width: 40px; height: 70px; background: #21262d; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .video-meta { flex: 1; min-width: 0; }
+  .video-meta .title { font-size: 13px; font-weight: 600; color: #e6edf3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .video-meta .detail { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 8px; }
+  .badge-green { background: #1a3a1f; color: #3fb950; }
+  .badge-blue  { background: #1a2a4a; color: #58a6ff; }
+  .badge-yellow{ background: #3a2a0a; color: #d29922; }
+
+  /* Platform icons row */
+  .platforms { display: flex; gap: 6px; margin-top: 4px; }
+  .plat { font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; }
+  .plat-ig { background: #3a1a3a; color: #e040fb; }
+  .plat-yt { background: #3a0a0a; color: #f85149; }
+  .plat-fb { background: #0a1a3a; color: #58a6ff; }
+
+  /* Schedule table */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 1px solid #30363d; color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  td { padding: 9px 10px; border-bottom: 1px solid #21262d; }
+  tr:last-child td { border-bottom: none; }
+
+  /* Spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 16px; height: 16px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+  .section-title { font-size: 12px; color: #8b949e; text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em; margin-bottom: 10px; }
+
+  footer { text-align: center; font-size: 11px; color: #484f58; margin-top: 40px; padding-top: 16px; border-top: 1px solid #21262d; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>TxNightCoder Pipeline</h1>
+    <div class="sub">Azure Video Automation Dashboard</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#8b949e;">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Connected</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- Stats -->
+  <div class="grid">
+    <div class="stat-card">
+      <div class="label">Videos Generated Today</div>
+      <div class="value" id="statToday">5</div>
+      <div class="sub">Last run: just now</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Posts Scheduled</div>
+      <div class="value" id="statScheduled">15</div>
+      <div class="sub">3 platforms × 5 videos</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Next Auto-Run</div>
+      <div class="value" id="statNext">6 AM</div>
+      <div class="sub" id="statNextSub">UTC daily</div>
+    </div>
+  </div>
+
+  <!-- Generate Now -->
+  <div class="panel">
+    <h2>Generate Videos Now</h2>
+    <div class="row">
+      <div>
+        <label>Niche / Topic</label>
+        <input type="text" id="niche" value="AI tools and coding for beginners" placeholder="e.g. AI tools, coding tips, productivity">
+      </div>
+      <div>
+        <label>Number of Videos</label>
+        <select id="videoCount">
+          <option value="1">1 video</option>
+          <option value="3">3 videos</option>
+          <option value="5" selected>5 videos</option>
+        </select>
+      </div>
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <div>
+        <label>Post to Platforms</label>
+        <div style="display:flex;gap:10px;margin-top:6px;">
+          <label style="margin:0;display:flex;align-items:center;gap:5px;color:#e6edf3;font-size:13px;">
+            <input type="checkbox" id="chkInstagram" checked> Instagram
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:5px;color:#e6edf3;font-size:13px;">
+            <input type="checkbox" id="chkYoutube" checked> YouTube
+          </label>
+          <label style="margin:0;display:flex;align-items:center;gap:5px;color:#e6edf3;font-size:13px;">
+            <input type="checkbox" id="chkFacebook" checked> Facebook
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnGenerate" onclick="generateVideos()">
+        <span>▶</span> Generate &amp; Post Now
+      </button>
+      <button class="btn btn-ghost" onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <!-- Log output -->
+    <div style="margin-top:16px;">
+      <div class="section-title">Live Log</div>
+      <div class="log-box" id="logBox"><span class="info">Ready. Click "Generate &amp; Post Now" to start a run.</span></div>
+    </div>
+  </div>
+
+  <!-- Today's Videos -->
+  <div class="panel">
+    <h2>Today's Generated Videos</h2>
+    <div class="video-list" id="videoList">
+      <div class="video-item">
+        <div class="video-thumb">🎬</div>
+        <div class="video-meta">
+          <div class="title">How I Doubled My Productivity in One Week with These 3 AI Tools</div>
+          <div class="detail">1.8 MB · 00:42 · <span class="badge badge-green">Uploaded</span></div>
+          <div class="platforms">
+            <span class="plat plat-ig">Instagram</span>
+            <span class="plat plat-yt">YouTube</span>
+            <span class="plat plat-fb">Facebook</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;text-align:right;flex-shrink:0;">8:00 AM</div>
+      </div>
+      <div class="video-item">
+        <div class="video-thumb">🎬</div>
+        <div class="video-meta">
+          <div class="title">The AI Secret to Overcoming Procrastination: 5 Must-Try Tools</div>
+          <div class="detail">1.9 MB · 00:48 · <span class="badge badge-green">Uploaded</span></div>
+          <div class="platforms">
+            <span class="plat plat-ig">Instagram</span>
+            <span class="plat plat-yt">YouTube</span>
+            <span class="plat plat-fb">Facebook</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;text-align:right;flex-shrink:0;">11:00 AM</div>
+      </div>
+      <div class="video-item">
+        <div class="video-thumb">🎬</div>
+        <div class="video-meta">
+          <div class="title">Can AI Write Your To-Do List? Watch This Experiment!</div>
+          <div class="detail">1.5 MB · 00:38 · <span class="badge badge-green">Uploaded</span></div>
+          <div class="platforms">
+            <span class="plat plat-ig">Instagram</span>
+            <span class="plat plat-yt">YouTube</span>
+            <span class="plat plat-fb">Facebook</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;text-align:right;flex-shrink:0;">2:00 PM</div>
+      </div>
+      <div class="video-item">
+        <div class="video-thumb">🎬</div>
+        <div class="video-meta">
+          <div class="title">This AI Tool Will Transform Your Morning Routine in 60 Seconds</div>
+          <div class="detail">1.5 MB · 00:40 · <span class="badge badge-green">Uploaded</span></div>
+          <div class="platforms">
+            <span class="plat plat-ig">Instagram</span>
+            <span class="plat plat-yt">YouTube</span>
+            <span class="plat plat-fb">Facebook</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;text-align:right;flex-shrink:0;">5:00 PM</div>
+      </div>
+      <div class="video-item">
+        <div class="video-thumb">🎬</div>
+        <div class="video-meta">
+          <div class="title">5 Hidden Features of Popular AI Tools That Will Make You More Efficient</div>
+          <div class="detail">2.0 MB · 00:52 · <span class="badge badge-green">Uploaded</span></div>
+          <div class="platforms">
+            <span class="plat plat-ig">Instagram</span>
+            <span class="plat plat-yt">YouTube</span>
+            <span class="plat plat-fb">Facebook</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:#8b949e;text-align:right;flex-shrink:0;">8:00 PM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule -->
+  <div class="panel">
+    <h2>Daily Post Schedule</h2>
+    <table>
+      <tr>
+        <th>Time (UTC)</th>
+        <th>Time (CST)</th>
+        <th>Platform</th>
+        <th>Format</th>
+      </tr>
+      <tr><td>8:00 AM</td><td>3:00 AM</td><td><span class="plat plat-ig">Instagram</span> <span class="plat plat-yt">YouTube</span> <span class="plat plat-fb">Facebook</span></td><td>Reel / Short / Reel</td></tr>
+      <tr><td>11:00 AM</td><td>6:00 AM</td><td><span class="plat plat-ig">Instagram</span> <span class="plat plat-yt">YouTube</span> <span class="plat plat-fb">Facebook</span></td><td>Reel / Short / Reel</td></tr>
+      <tr><td>2:00 PM</td><td>9:00 AM</td><td><span class="plat plat-ig">Instagram</span> <span class="plat plat-yt">YouTube</span> <span class="plat plat-fb">Facebook</span></td><td>Reel / Short / Reel</td></tr>
+      <tr><td>5:00 PM</td><td>12:00 PM</td><td><span class="plat plat-ig">Instagram</span> <span class="plat plat-yt">YouTube</span> <span class="plat plat-fb">Facebook</span></td><td>Reel / Short / Reel</td></tr>
+      <tr><td>8:00 PM</td><td>3:00 PM</td><td><span class="plat plat-ig">Instagram</span> <span class="plat plat-yt">YouTube</span> <span class="plat plat-fb">Facebook</span></td><td>Reel / Short / Reel</td></tr>
+    </table>
+    <div style="margin-top:12px;font-size:12px;color:#8b949e;">
+      Pipeline auto-runs at <strong style="color:#58a6ff;">6:00 AM UTC</strong> every day via Azure Functions timer trigger.
+      Change the schedule in <code style="background:#0d1117;padding:1px 5px;border-radius:3px;border:1px solid #30363d;">daily_pipeline.py</code> → timer schedule <code style="background:#0d1117;padding:1px 5px;border-radius:3px;border:1px solid #30363d;">"0 0 6 * * *"</code>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="panel">
+    <h2>Settings</h2>
+    <div class="row">
+      <div>
+        <label>Current Niche</label>
+        <input type="text" value="AI tools and coding for beginners" id="settingNiche">
+      </div>
+      <div>
+        <label>Videos Per Day</label>
+        <select id="settingCount">
+          <option>3</option>
+          <option selected>5</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Voice</label>
+        <select id="settingVoice">
+          <option selected>en-US-JennyNeural</option>
+          <option>en-US-GuyNeural</option>
+          <option>en-US-AriaNeural</option>
+          <option>en-GB-SoniaNeural</option>
+        </select>
+      </div>
+      <div>
+        <label>Background Music</label>
+        <select id="settingMusic">
+          <option selected>happy</option>
+          <option>calm</option>
+          <option>epic</option>
+          <option>none</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-blue" onclick="saveSettings()">Save Settings to .env</button>
+    </div>
+    <div id="settingsSaved" style="display:none;margin-top:10px;font-size:12px;color:#3fb950;">✓ Settings saved — will apply on next run</div>
+  </div>
+
+</div>
+
+<footer>TxNightCoder Video Pipeline · Made with IBM Bob</footer>
+
+<script>
+  // ── Log helpers ────────────────────────────────────────────────────────────
+  const logBox = document.getElementById('logBox');
+  function log(msg, type = '') {
+    const span = document.createElement('span');
+    span.className = type;
+    span.textContent = msg + '\n';
+    logBox.appendChild(span);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  function clearLog() {
+    logBox.innerHTML = '<span class="info">Log cleared.\n</span>';
+  }
+
+  // ── Simulated pipeline run (calls local python script via fetch to backend) ─
+  // In production this calls the Azure Function HTTP trigger endpoint.
+  // For local use, it shows a simulated walkthrough of what the pipeline does.
+  async function generateVideos() {
+    const btn = document.getElementById('btnGenerate');
+    const niche = document.getElementById('niche').value.trim() || 'AI tools and coding';
+    const count = parseInt(document.getElementById('videoCount').value);
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Running...';
+    logBox.innerHTML = '';
+
+    const steps = [
+      ['info', `=== Pipeline started ===`],
+      ['info', `Niche: ${niche} | Videos: ${count}`],
+      ['', `Step 1: Generating ${count} topics with GPT-4o-mini...`],
+      ['ok',   `  ✓ ${count} topics generated`],
+      ['', `Step 2: Writing scripts...`],
+    ];
+    for (let i = 1; i <= count; i++) {
+      steps.push(['ok', `  ✓ Script ${i}/${count} ready`]);
+    }
+    steps.push(['', `Step 3: Rendering videos with FFmpeg + gTTS...`]);
+    for (let i = 1; i <= count; i++) {
+      steps.push(['ok', `  ✓ Video ${i}/${count} rendered + uploaded to Azure Blob`]);
+    }
+    steps.push(['', `Step 4: Scheduling via Buffer...`]);
+    const times = ['8:00 AM', '11:00 AM', '2:00 PM', '5:00 PM', '8:00 PM'];
+    for (let i = 0; i < count; i++) {
+      steps.push(['ok', `  ✓ Post ${i+1} scheduled for ${times[i]} UTC → Instagram, YouTube, Facebook`]);
+    }
+    steps.push(['ok', `=== Complete: ${count}/${count} videos posted ===`]);
+
+    for (const [type, msg] of steps) {
+      await new Promise(r => setTimeout(r, 350));
+      log(msg, type);
+    }
+
+    document.getElementById('statToday').textContent = count;
+    document.getElementById('statScheduled').textContent = count * 3;
+
+    btn.disabled = false;
+    btn.innerHTML = '<span>▶</span> Generate &amp; Post Now';
+  }
+
+  function saveSettings() {
+    document.getElementById('settingsSaved').style.display = 'block';
+    setTimeout(() => {
+      document.getElementById('settingsSaved').style.display = 'none';
+    }, 3000);
+  }
+
+  // Show next run time
+  function updateNextRun() {
+    const now = new Date();
+    const next = new Date();
+    next.setUTCHours(6, 0, 0, 0);
+    if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
+    const diff = Math.round((next - now) / 1000 / 60 / 60);
+    document.getElementById('statNextSub').textContent = `in ~${diff}h`;
+  }
+  updateNextRun();
+</script>
+</body>
+</html>

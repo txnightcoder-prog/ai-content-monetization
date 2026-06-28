@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TxNightCoder — Video Pipeline Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #0d1117; color: #e6edf3; min-height: 100vh; }
+  header { background: #161b22; border-bottom: 1px solid #30363d; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 700; color: #58a6ff; }
+  header .sub { font-size: 12px; color: #8b949e; margin-top: 2px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #3fb950; display: inline-block; margin-right: 6px; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 24px 16px 60px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+  .stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px 20px; }
+  .stat .lbl { font-size: 12px; color: #8b949e; }
+  .stat .val { font-size: 26px; font-weight: 700; color: #58a6ff; }
+  .stat .sub { font-size: 11px; color: #3fb950; margin-top: 2px; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px; }
+  .panel h2 { font-size: 15px; font-weight: 700; margin-bottom: 16px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-green  { background: #238636; color: #fff; }
+  .btn-red    { background: #da3633; color: #fff; }
+  .btn-blue   { background: #1f6feb; color: #fff; }
+  .btn-ghost  { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  .btn-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+
+  /* ── Approval queue ── */
+  .queue-empty { text-align: center; padding: 40px 20px; color: #8b949e; font-size: 13px; }
+  .video-card {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .video-card.approved { border-color: #238636; }
+  .video-card.rejected { border-color: #da3633; opacity: 0.5; }
+  .card-top { display: flex; gap: 0; }
+
+  /* Video player side */
+  .video-side {
+    width: 290px; flex-shrink: 0; background: #000;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; cursor: pointer;
+    border-radius: 8px 0 0 8px; overflow: hidden;
+  }
+  .video-side video {
+    width: 290px; height: 516px; object-fit: cover; display: block;
+  }
+  .play-overlay {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 64px; height: 64px; background: rgba(0,0,0,0.70); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; pointer-events: none; transition: opacity 0.2s;
+    border: 2px solid rgba(255,255,255,0.5);
+  }
+  .video-side.playing .play-overlay { opacity: 0; }
+  .video-side video::-webkit-media-controls { display: flex; }
+
+  /* Info side */
+  .info-side { flex: 1; padding: 16px 20px; display: flex; flex-direction: column; justify-content: space-between; }
+  .info-side .title { font-size: 15px; font-weight: 700; color: #e6edf3; margin-bottom: 8px; }
+  .info-side .hook  { font-size: 13px; color: #8b949e; font-style: italic; margin-bottom: 12px; line-height: 1.5; }
+  .meta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .meta-badge { font-size: 11px; padding: 2px 8px; border-radius: 8px; font-weight: 600; }
+  .mb-size { background: #21262d; color: #8b949e; }
+  .mb-pend { background: #3a2a0a; color: #d29922; }
+  .mb-appr { background: #1a3a1f; color: #3fb950; }
+  .mb-reje { background: #3a1010; color: #f85149; }
+  .platforms { display: flex; gap: 6px; margin-bottom: 14px; }
+  .plat { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .pig { background: #3a1a3a; color: #e040fb; }
+  .pyt { background: #3a0a0a; color: #f85149; }
+  .pfb { background: #0a1a3a; color: #58a6ff; }
+  .action-row { display: flex; gap: 10px; }
+  .status-label { font-size: 12px; padding: 6px 0; font-weight: 600; }
+  .status-label.ok  { color: #3fb950; }
+  .status-label.bad { color: #f85149; }
+
+  /* Log */
+  .log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px 14px; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; color: #8b949e; max-height: 180px; overflow-y: auto; white-space: pre-wrap; }
+  .ok   { color: #3fb950; }
+  .err  { color: #f85149; }
+  .info { color: #58a6ff; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner { width: 15px; height: 15px; border: 2px solid #30363d; border-top-color: #58a6ff; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; border-bottom: 1px solid #30363d; color: #8b949e; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+  td { padding: 8px 10px; border-bottom: 1px solid #21262d; }
+  tr:last-child td { border-bottom: none; }
+  footer { text-align: center; font-size: 11px; color: #484f58; margin-top: 40px; padding-top: 14px; border-top: 1px solid #21262d; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>TxNightCoder Pipeline</h1>
+    <div class="sub">Azure Video Automation Dashboard</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#8b949e;">
+    <span class="dot"></span><span id="connStatus">Connected</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <!-- Stats -->
+  <div class="grid">
+    <div class="stat">
+      <div class="lbl">Pending Approval</div>
+      <div class="val" id="statPending">—</div>
+      <div class="sub">videos waiting for review</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Approved Today</div>
+      <div class="val" id="statApproved">—</div>
+      <div class="sub">scheduled to post</div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Next Auto-Run</div>
+      <div class="val">6 AM</div>
+      <div class="sub" id="statNext">UTC daily</div>
+    </div>
+  </div>
+
+  <!-- Approval Queue -->
+  <div class="panel">
+    <h2>Video Approval Queue</h2>
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn btn-blue" onclick="loadQueue()">↻ Refresh Queue</button>
+      <button class="btn btn-ghost" onclick="approveAll()">✓ Approve All Pending</button>
+    </div>
+    <div id="queueContainer">
+      <div class="queue-empty">Loading videos...</div>
+    </div>
+  </div>
+
+  <!-- Generate Now -->
+  <div class="panel">
+    <h2>Generate New Videos Now</h2>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <div style="flex:2;min-width:200px;">
+        <label style="font-size:12px;color:#8b949e;display:block;margin-bottom:5px;">Niche / Topic</label>
+        <input type="text" id="niche" value="AI tools and coding for beginners"
+          style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:13px;padding:8px 12px;font-family:inherit;outline:none;">
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <label style="font-size:12px;color:#8b949e;display:block;margin-bottom:5px;">Videos</label>
+        <select id="videoCount" style="width:100%;background:#0d1117;border:1px solid #30363d;border-radius:6px;color:#e6edf3;font-size:13px;padding:8px 12px;font-family:inherit;outline:none;">
+          <option value="1">1 video</option>
+          <option value="3">3 videos</option>
+          <option value="5" selected>5 videos</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-green" id="btnGenerate" onclick="generateVideos()">▶ Generate Videos (adds to queue)</button>
+    </div>
+    <div style="margin-top:14px;">
+      <div style="font-size:11px;color:#8b949e;text-transform:uppercase;font-weight:600;letter-spacing:.05em;margin-bottom:6px;">Log</div>
+      <div class="log-box" id="logBox"><span class="info">Ready.</span></div>
+    </div>
+  </div>
+
+  <!-- Schedule -->
+  <div class="panel">
+    <h2>Post Schedule (after approval)</h2>
+    <table>
+      <tr><th>Slot</th><th>Time UTC</th><th>Time CST</th><th>Platforms</th></tr>
+      <tr><td>Video 1</td><td>8:00 AM</td><td>3:00 AM</td><td><span class="plat pig">Instagram</span> <span class="plat pyt">YouTube</span> <span class="plat pfb">Facebook</span></td></tr>
+      <tr><td>Video 2</td><td>11:00 AM</td><td>6:00 AM</td><td><span class="plat pig">Instagram</span> <span class="plat pyt">YouTube</span> <span class="plat pfb">Facebook</span></td></tr>
+      <tr><td>Video 3</td><td>2:00 PM</td><td>9:00 AM</td><td><span class="plat pig">Instagram</span> <span class="plat pyt">YouTube</span> <span class="plat pfb">Facebook</span></td></tr>
+      <tr><td>Video 4</td><td>5:00 PM</td><td>12:00 PM</td><td><span class="plat pig">Instagram</span> <span class="plat pyt">YouTube</span> <span class="plat pfb">Facebook</span></td></tr>
+      <tr><td>Video 5</td><td>8:00 PM</td><td>3:00 PM</td><td><span class="plat pig">Instagram</span> <span class="plat pyt">YouTube</span> <span class="plat pfb">Facebook</span></td></tr>
+    </table>
+    <div style="margin-top:10px;font-size:12px;color:#8b949e;">
+      Pipeline auto-generates at <strong style="color:#58a6ff;">6:00 AM UTC</strong> daily. Videos land here for your review before anything posts.
+    </div>
+  </div>
+
+</div>
+
+<footer>TxNightCoder Video Pipeline · Made with IBM Bob</footer>
+
+<script>
+  // ── Config ─────────────────────────────────────────────────────────────────
+  // Your Azure Function App base URL
+  const API      = "https://ai-video-pipeline-func.azurewebsites.net/api";
+  const API_KEY  = "";  // Set your Azure Function key here - do not commit secrets
+
+  // ── Queue loading ───────────────────────────────────────────────────────────
+  async function loadQueue() {
+    const container = document.getElementById('queueContainer');
+    container.innerHTML = '<div class="queue-empty"><span class="spinner"></span> Loading...</div>';
+    try {
+      const resp = await fetch(`${API}/queue?code=${API_KEY}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const queue = await resp.json();
+      renderQueue(queue);
+      updateStats(queue);
+    } catch(e) {
+      // Fallback: show demo cards so the UI is still useful offline
+      renderQueue(getDemoQueue());
+      updateStats(getDemoQueue());
+      document.getElementById('connStatus').textContent = 'Demo mode';
+    }
+  }
+
+  function updateStats(queue) {
+    document.getElementById('statPending').textContent  = queue.filter(v=>v.status==='pending').length;
+    document.getElementById('statApproved').textContent = queue.filter(v=>v.status==='approved').length;
+  }
+
+  function renderQueue(queue) {
+    const container = document.getElementById('queueContainer');
+    if (!queue.length) {
+      container.innerHTML = '<div class="queue-empty">No videos in queue. Run the pipeline to generate new ones.</div>';
+      return;
+    }
+    container.innerHTML = '';
+    queue.forEach(v => container.appendChild(buildCard(v)));
+  }
+
+  function buildCard(v) {
+    const card = document.createElement('div');
+    card.className = `video-card ${v.status}`;
+    card.id = `card-${v.id}`;
+
+    const statusBadge = v.status === 'pending'
+      ? `<span class="meta-badge mb-pend">⏳ Pending Approval</span>`
+      : v.status === 'approved'
+      ? `<span class="meta-badge mb-appr">✓ Approved</span>`
+      : `<span class="meta-badge mb-reje">✗ Rejected</span>`;
+
+    const actionHTML = v.status === 'pending' ? `
+      <div class="action-row">
+        <button class="btn btn-green" onclick="doAction('${v.id}','approve')">✓ Approve &amp; Schedule</button>
+        <button class="btn btn-red"   onclick="doAction('${v.id}','reject')">✗ Reject</button>
+      </div>` : `<div class="status-label ${v.status==='approved'?'ok':'bad'}">
+        ${v.status==='approved' ? '✓ Scheduled to post' : '✗ Rejected — deleted'}
+      </div>`;
+
+    const sizeText = v.size_kb ? `${v.size_kb} KB` : '';
+    const dateText = v.created_at ? new Date(v.created_at).toLocaleString() : '';
+
+    card.innerHTML = `
+      <div class="card-top">
+        <div class="video-side" onclick="togglePlay(this)">
+          <video
+            src="${v.url}"
+            preload="auto"
+            playsinline
+            loop
+            controls
+            onerror="this.closest('.video-side').innerHTML='<div style=\\'color:#f85149;font-size:12px;padding:20px;text-align:center;\\'>⚠ Video failed to load.<br><a href=\\'${v.url}\\' target=\\'_blank\\' style=\\'color:#58a6ff;\\'>Open directly</a></div>'"
+          ></video>
+          <div class="play-overlay">▶</div>
+        </div>
+        <div class="info-side">
+          <div>
+            <div class="title">${v.title}</div>
+            <div class="hook">"${v.hook || ''}"</div>
+            <div class="meta-row">
+              ${statusBadge}
+              ${sizeText ? `<span class="meta-badge mb-size">${sizeText}</span>` : ''}
+              ${dateText ? `<span class="meta-badge mb-size">${dateText}</span>` : ''}
+            </div>
+            <div class="platforms">
+              <span class="plat pig">Instagram</span>
+              <span class="plat pyt">YouTube</span>
+              <span class="plat pfb">Facebook</span>
+            </div>
+          </div>
+          ${actionHTML}
+        </div>
+      </div>`;
+    return card;
+  }
+
+  function togglePlay(el) {
+    const vid = el.querySelector('video');
+    if (vid.paused) {
+      // Pause all other videos first
+      document.querySelectorAll('.video-side video').forEach(v => {
+        v.pause();
+        v.closest('.video-side').classList.remove('playing');
+      });
+      vid.play();
+      el.classList.add('playing');
+    } else {
+      vid.pause();
+      el.classList.remove('playing');
+    }
+  }
+
+  // ── Approve / Reject ────────────────────────────────────────────────────────
+  async function doAction(videoId, action) {
+    const card = document.getElementById(`card-${videoId}`);
+    const btns = card.querySelectorAll('button');
+    btns.forEach(b => b.disabled = true);
+    btns[0].innerHTML = action === 'approve'
+      ? '<span class="spinner"></span> Scheduling...'
+      : '<span class="spinner"></span> Deleting...';
+
+    try {
+      const resp = await fetch(`${API}/approve?code=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ video_id: videoId, action }),
+      });
+      const data = await resp.json();
+
+      if (data.ok) {
+        if (action === 'reject') {
+          // Remove card from DOM immediately — it's deleted from queue + blob
+          card.style.transition = 'opacity 0.3s';
+          card.style.opacity = '0';
+          setTimeout(() => { card.remove(); loadQueue(); }, 350);
+        } else {
+          // Approve — update card status in place
+          card.className = 'video-card approved';
+          const actionDiv = card.querySelector('.action-row');
+          if (actionDiv) actionDiv.outerHTML = `<div class="status-label ok">✓ Scheduled to post</div>`;
+          const badge = card.querySelector('.meta-badge.mb-pend');
+          if (badge) badge.outerHTML = `<span class="meta-badge mb-appr">✓ Approved</span>`;
+          await loadQueue();
+        }
+      } else {
+        // API returned an error message
+        btns.forEach(b => { b.disabled = false; });
+        btns[0].innerHTML = action === 'approve' ? '✓ Approve &amp; Schedule' : '✗ Reject';
+        alert('Error: ' + (data.error || JSON.stringify(data)));
+      }
+    } catch(e) {
+      btns.forEach(b => { b.disabled = false; });
+      btns[0].innerHTML = action === 'approve' ? '✓ Approve &amp; Schedule' : '✗ Reject';
+      alert('API error: ' + e.message + '\nCheck that the Azure Function is running.');
+    }
+  }
+
+  async function approveAll() {
+    const cards = document.querySelectorAll('.video-card:not(.approved):not(.rejected)');
+    for (const card of cards) {
+      const id = card.id.replace('card-','');
+      await doAction(id, 'approve');
+    }
+  }
+
+  // ── Generate videos ─────────────────────────────────────────────────────────
+  async function generateVideos() {
+    const btn   = document.getElementById('btnGenerate');
+    const niche = document.getElementById('niche').value.trim() || 'AI tools';
+    const count = parseInt(document.getElementById('videoCount').value);
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Starting...';
+    const log = document.getElementById('logBox');
+    log.innerHTML = '';
+
+    function addLog(msg, cls='') {
+      const s = document.createElement('span');
+      s.className = cls; s.textContent = msg + '\n';
+      log.appendChild(s); log.scrollTop = log.scrollHeight;
+    }
+
+    addLog(`Triggering pipeline on Azure — Niche: ${niche} | Videos: ${count}`, 'info');
+    try {
+      const resp = await fetch(`${API}/run?code=${API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche, count }),
+      });
+      const data = await resp.json();
+      if (data.ok) {
+        addLog('Pipeline container started on Azure!', 'ok');
+        addLog('  Installing FFmpeg + packages (~60s)', '');
+        addLog('  Generating ' + count + ' scripts with GPT-4o-mini', '');
+        addLog('  Rendering videos with FFmpeg + Pexels backgrounds', '');
+        addLog('  Uploading to Azure Blob Storage', '');
+        addLog('', '');
+        addLog('Videos appear in the queue above in ~5 minutes.', 'ok');
+        addLog('Click "Refresh Queue" to check.', 'info');
+        // Auto-refresh every 60s for 10 minutes
+        let checks = 0;
+        const iv = setInterval(async () => {
+          checks++;
+          addLog(`Checking queue... (${checks}/10)`, '');
+          await loadQueue();
+          if (checks >= 10) { clearInterval(iv); addLog('Auto-check complete.', 'info'); }
+        }, 60000);
+      } else {
+        addLog('Error: ' + (data.error || 'Unknown'), 'err');
+      }
+    } catch(e) {
+      addLog('Could not reach Azure API: ' + e.message, 'err');
+    }
+    btn.disabled = false;
+    btn.innerHTML = '▶ Generate Videos (adds to queue)';
+  }
+
+  // ── Demo queue (shown when API not reachable) ───────────────────────────────
+  function getDemoQueue() {
+    return [
+      { id:"demo1", title:"How I Doubled My Productivity with 3 AI Tools", hook:"Want to skyrocket your productivity? I doubled mine in just one week!", url:"https://aivideopipelinevids.blob.core.windows.net/videos/how_i_doubled_my_productivity_in_one_wee_1.mp4", size_kb:1777, status:"pending", created_at: new Date().toISOString() },
+      { id:"demo2", title:"The AI Secret to Overcoming Procrastination", hook:"Are you tired of procrastinating while your to-do list grows?", url:"https://aivideopipelinevids.blob.core.windows.net/videos/the_ai_secret_to_overcoming_procrastinat_2.mp4", size_kb:1994, status:"pending", created_at: new Date().toISOString() },
+      { id:"demo3", title:"Can AI Write Your To-Do List? Watch This!", hook:"Ever wondered if AI can boost your productivity by writing your to-do list?", url:"https://aivideopipelinevids.blob.core.windows.net/videos/can_ai_write_your_to-do_list_watch_this_3.mp4", size_kb:1579, status:"pending", created_at: new Date().toISOString() },
+      { id:"demo4", title:"This AI Tool Will Transform Your Morning Routine", hook:"Are you tired of chaotic mornings? What if I told you there's an AI fix?", url:"https://aivideopipelinevids.blob.core.windows.net/videos/this_ai_tool_will_transform_your_morning_4.mp4", size_kb:1598, status:"pending", created_at: new Date().toISOString() },
+      { id:"demo5", title:"5 Hidden Features of Popular AI Tools", hook:"Ever feel like you're only scratching the surface of your AI tools?", url:"https://aivideopipelinevids.blob.core.windows.net/videos/5_hidden_features_of_popular_ai_tools_th_5.mp4", size_kb:2036, status:"pending", created_at: new Date().toISOString() },
+    ];
+  }
+
+  // ── Init ────────────────────────────────────────────────────────────────────
+  function updateNextRun() {
+    const now = new Date(), next = new Date();
+    next.setUTCHours(6,0,0,0);
+    if(next<=now) next.setUTCDate(next.getUTCDate()+1);
+    document.getElementById('statNext').textContent = `in ~${Math.round((next-now)/3600000)}h`;
+  }
+  updateNextRun();
+  loadQueue();
+</script>
+</body>
+</html>

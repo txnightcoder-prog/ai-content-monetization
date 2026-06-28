@@ -1,0 +1,59 @@
+name: Build and Push Docker Images to ACR
+
+# Trigger on every push to main, or manually from the Actions tab
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  ACR_LOGIN_SERVER: txnightcoderregistry.azurecr.io
+  BACKEND_IMAGE:    txnightcoderregistry.azurecr.io/backend
+  FRONTEND_IMAGE:   txnightcoderregistry.azurecr.io/frontend
+  # Update this after Step 10 to your real backend App Service URL
+  VITE_API_URL:     https://txnightcoderregistry-backend.azurewebsites.net
+
+jobs:
+  build-and-push:
+    name: Build & Push to ACR
+    runs-on: ubuntu-latest   # Microsoft-hosted runner — Docker pre-installed
+
+    steps:
+      # ── 1. Checkout source ───────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Log in to ACR ────────────────────────────────────────────────────
+      # ACR_USERNAME and ACR_PASSWORD are repo secrets (admin credentials)
+      - name: Log in to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      # ── 3. Build & push backend ──────────────────────────────────────────────
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context:    ./backend
+          file:       ./backend/Dockerfile
+          push:       true
+          tags:       ${{ env.BACKEND_IMAGE }}:latest,${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      # ── 4. Build & push frontend ─────────────────────────────────────────────
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context:    ./frontend
+          file:       ./frontend/Dockerfile
+          push:       true
+          tags:       ${{ env.FRONTEND_IMAGE }}:latest,${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          build-args: VITE_API_URL=${{ env.VITE_API_URL }}
+
+      # ── 5. Summary ───────────────────────────────────────────────────────────
+      - name: Print image URLs
+        run: |
+          echo "Backend : ${{ env.BACKEND_IMAGE }}:latest"
+          echo "Frontend: ${{ env.FRONTEND_IMAGE }}:latest"
+          echo "Also tagged with commit SHA: ${{ github.sha }}"
