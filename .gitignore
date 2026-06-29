@@ -19,3 +19,9 @@ backend/.env
 .DS_Store
 Thumbs.db
 .vscode/
+
+pipeline/update_env.ps1
+pipeline/*.log
+pipeline/local.settings.json
+
+client_secret.json
