@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from datetime import datetime
+from uuid import UUID
 from app.models.integration import IntegrationType
 
 
@@ -34,7 +35,7 @@ class IntegrationUpdate(BaseModel):
 
 class IntegrationResponse(IntegrationBase):
     """Schema for integration response"""
-    id: str
+    id: UUID
     is_verified: bool
     last_verified_at: Optional[datetime]
     created_at: datetime

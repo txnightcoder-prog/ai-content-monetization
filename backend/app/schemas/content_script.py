@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
+from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.content_script import ScriptStatus
@@ -31,7 +32,7 @@ class ContentScriptUpdate(BaseModel):
 
 class ContentScriptResponse(ContentScriptBase):
     """Schema for content script responses"""
-    id: str
+    id: UUID
     status: ScriptStatus
     created_at: datetime
     updated_at: datetime
