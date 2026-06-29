@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Integer, ForeignKey, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
 
@@ -19,8 +20,8 @@ class Video(Base, TimestampMixin):
     
     __tablename__ = "videos"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    script_id = Column(String(36), ForeignKey("content_scripts.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    script_id = Column(UUID(as_uuid=True), ForeignKey("content_scripts.id"), nullable=False)
     heygen_video_id = Column(String(255), nullable=True)
     video_url = Column(String(500), nullable=True)
     thumbnail_url = Column(String(500), nullable=True)

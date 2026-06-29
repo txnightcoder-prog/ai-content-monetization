@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
 from app.models.base import Base, TimestampMixin
@@ -10,7 +11,7 @@ class Lead(Base, TimestampMixin):
     
     __tablename__ = "leads"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=True)
     source = Column(String(255), nullable=True)  # Where the lead came from

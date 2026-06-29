@@ -1,5 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Text, Enum as SQLEnum, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
 
@@ -18,7 +19,7 @@ class ContentScript(Base, TimestampMixin):
     
     __tablename__ = "content_scripts"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     topic = Column(Text, nullable=False)
     hook = Column(Text, nullable=False)
     body = Column(Text, nullable=False)
