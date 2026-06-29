@@ -118,6 +118,7 @@ def _parse_buffer_update(update: dict, platform: str) -> PlatformPost:
 def _fetch_buffer_profile(profile_id: str, platform: str, count: int = 20) -> list[PlatformPost]:
     """Fetch sent posts + statistics for one Buffer profile."""
     if not profile_id:
+        logger.info(f"Social analytics: no profile ID configured for {platform}, skipping")
         return []
     token = os.getenv("BUFFER_ACCESS_TOKEN", "")
     if not token:
@@ -128,6 +129,12 @@ def _fetch_buffer_profile(profile_id: str, platform: str, count: int = 20) -> li
             f"https://api.bufferapp.com/1/profiles/{profile_id}/updates/sent.json",
             params={"access_token": token, "count": count, "page": 1},
         )
+        if resp.status_code == 401:
+            raise ValueError(
+                f"Buffer token rejected for {platform} (401 Unauthorized). "
+                "The token may be expired or require a Buffer Analyze subscription. "
+                "Refresh it at: https://buffer.com/developers/api"
+            )
         resp.raise_for_status()
         data = resp.json()
 
