@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
 
@@ -26,8 +27,8 @@ class Post(Base, TimestampMixin):
     
     __tablename__ = "posts"
     
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    video_id = Column(String(36), ForeignKey("videos.id"), nullable=False)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    video_id = Column(UUID(as_uuid=True), ForeignKey("videos.id"), nullable=False)
     platform = Column(SQLEnum(Platform), nullable=False)
     post_url = Column(String(500), nullable=True)
     scheduled_at = Column(DateTime, nullable=True)
