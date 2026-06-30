@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import './App.css';
 
+const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+
 interface Script {
   id: number;
   topic: string;
@@ -57,7 +59,7 @@ function App() {
     setError('');
     
     try {
-      const response = await fetch('http://localhost:8020/api/v1/scripts/topic-ideas', {
+      const response = await fetch(`${API_BASE}/api/v1/scripts/topic-ideas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,7 +103,7 @@ function App() {
         niche: niche
       });
       
-      const response = await fetch(`http://localhost:8020/api/v1/scripts/generate?${params}`, {
+      const response = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -134,7 +136,7 @@ function App() {
     setGeneratedBlueprint(null);
 
     try {
-      const response = await fetch('http://localhost:8020/api/v1/scripts/blueprint', {
+      const response = await fetch(`${API_BASE}/api/v1/scripts/blueprint`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -580,7 +582,7 @@ Example:
         <h2>🔗 Quick Links</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
           <a
-            href="http://localhost:8020/docs"
+            href={`${API_BASE}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="help-link-card"
