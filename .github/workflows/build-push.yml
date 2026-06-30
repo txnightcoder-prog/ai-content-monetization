@@ -1,4 +1,4 @@
-name: Build and Push Docker Images to ACR
+name: Build, Push and Deploy to Azure
 
 # Trigger on every push to main, or manually from the Actions tab
 on:
@@ -7,16 +7,18 @@ on:
   workflow_dispatch:
 
 env:
-  ACR_LOGIN_SERVER: txnightcoderregistry.azurecr.io
-  BACKEND_IMAGE:    txnightcoderregistry.azurecr.io/backend
-  FRONTEND_IMAGE:   txnightcoderregistry.azurecr.io/frontend
-  # Update this after Step 10 to your real backend App Service URL
-  VITE_API_URL:     https://txnightcoderregistry-backend.azurewebsites.net
+  ACR_LOGIN_SERVER:    txnightcoderregistry.azurecr.io
+  BACKEND_IMAGE:       txnightcoderregistry.azurecr.io/backend
+  FRONTEND_IMAGE:      txnightcoderregistry.azurecr.io/frontend
+  VITE_API_URL:        https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io
+  RESOURCE_GROUP:      ai-video-pipeline
+  BACKEND_APP_NAME:    ai-content-backend
+  FRONTEND_APP_NAME:   ai-content-frontend
 
 jobs:
-  build-and-push:
-    name: Build & Push to ACR
-    runs-on: ubuntu-latest   # Microsoft-hosted runner — Docker pre-installed
+  build-and-deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
 
     steps:
       # ── 1. Checkout source ───────────────────────────────────────────────────
@@ -24,7 +26,6 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Log in to ACR ────────────────────────────────────────────────────
-      # ACR_USERNAME and ACR_PASSWORD are repo secrets (admin credentials)
       - name: Log in to Azure Container Registry
         uses: docker/login-action@v3
         with:
@@ -51,9 +52,31 @@ jobs:
           tags:       ${{ env.FRONTEND_IMAGE }}:latest,${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           build-args: VITE_API_URL=${{ env.VITE_API_URL }}
 
-      # ── 5. Summary ───────────────────────────────────────────────────────────
-      - name: Print image URLs
+      # ── 5. Log in to Azure (for container app updates) ───────────────────────
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # ── 6. Deploy backend Container App ──────────────────────────────────────
+      - name: Deploy backend
         run: |
-          echo "Backend : ${{ env.BACKEND_IMAGE }}:latest"
-          echo "Frontend: ${{ env.FRONTEND_IMAGE }}:latest"
-          echo "Also tagged with commit SHA: ${{ github.sha }}"
+          az containerapp update \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      # ── 7. Deploy frontend Container App ─────────────────────────────────────
+      - name: Deploy frontend
+        run: |
+          az containerapp update \
+            --name ${{ env.FRONTEND_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+
+      # ── 8. Summary ───────────────────────────────────────────────────────────
+      - name: Print deployed image URLs
+        run: |
+          echo "Backend : ${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          echo "Frontend: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          echo "Deployed to resource group: ${{ env.RESOURCE_GROUP }}"

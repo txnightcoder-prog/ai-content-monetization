@@ -86,7 +86,41 @@ def fetch_all() -> dict[str, list[PlatformPost]]:
     return results
 
 
-# ── Buffer fetcher (covers Instagram, Facebook, YouTube via sent posts) ────────
+# ── Buffer fetcher — uses the current publish.buffer.com GraphQL API ──────────
+#
+# Buffer v1 (api.bufferapp.com/1/) is fully deprecated.
+# The new API lives at https://publish.buffer.com and accepts a Bearer token
+# (the same access token, now called a "Buffer API key").
+#
+# GraphQL query: fetch the 20 most recent sent posts for a given channel ID,
+# returning the analytics fields that are available on the free/essentials tier.
+
+_BUFFER_GQL_URL = "https://publish.buffer.com/graphql"
+
+_SENT_POSTS_QUERY = """
+query SentPosts($channelId: String!, $count: Int!) {
+  channel(id: $channelId) {
+    sentPosts(first: $count) {
+      edges {
+        node {
+          id
+          text
+          statistics {
+            impressions
+            reach
+            likes
+            comments
+            shares
+            clicks
+          }
+          sentAt
+        }
+      }
+    }
+  }
+}
+"""
+
 
 def _safe_int(val) -> int:
     try:
@@ -95,71 +129,90 @@ def _safe_int(val) -> int:
         return 0
 
 
-def _parse_buffer_update(update: dict, platform: str) -> PlatformPost:
-    stats = update.get("statistics", {})
-    posted_ts = update.get("sent_at") or update.get("created_at")
-    posted_at = (
-        datetime.fromtimestamp(posted_ts, tz=timezone.utc)
-        if posted_ts else None
-    )
+def _parse_gql_node(node: dict, platform: str) -> PlatformPost:
+    stats = node.get("statistics") or {}
+    sent_at_str = node.get("sentAt")
+    posted_at: Optional[datetime] = None
+    if sent_at_str:
+        try:
+            posted_at = datetime.fromisoformat(sent_at_str.replace("Z", "+00:00"))
+        except ValueError:
+            pass
     return PlatformPost(
         platform=platform,
-        external_id=update.get("id", ""),
-        title=update.get("text", "")[:120] if update.get("text") else None,
+        external_id=node.get("id", ""),
+        title=(node.get("text") or "")[:120] or None,
         views=_safe_int(stats.get("reach") or stats.get("impressions")),
-        likes=_safe_int(stats.get("likes") or stats.get("reactions")),
+        likes=_safe_int(stats.get("likes")),
         comments=_safe_int(stats.get("comments")),
-        shares=_safe_int(stats.get("shares") or stats.get("retweets")),
-        clicks=_safe_int(stats.get("clicks") or stats.get("link_clicks")),
+        shares=_safe_int(stats.get("shares")),
+        clicks=_safe_int(stats.get("clicks")),
         posted_at=posted_at,
     )
 
 
-def _fetch_buffer_profile(profile_id: str, platform: str, count: int = 20) -> list[PlatformPost]:
-    """Fetch sent posts + statistics for one Buffer profile."""
-    if not profile_id:
-        logger.info(f"Social analytics: no profile ID configured for {platform}, skipping")
+def _fetch_buffer_channel(channel_id: str, platform: str, count: int = 20) -> list[PlatformPost]:
+    """Fetch sent posts for one Buffer channel via the GraphQL API."""
+    if not channel_id:
+        logger.info(f"Social analytics: no channel ID configured for {platform}, skipping")
         return []
     token = os.getenv("BUFFER_ACCESS_TOKEN", "")
     if not token:
         raise ValueError("BUFFER_ACCESS_TOKEN not set")
 
+    payload = {
+        "query": _SENT_POSTS_QUERY,
+        "variables": {"channelId": channel_id, "count": count},
+    }
     with httpx.Client(timeout=20.0) as client:
-        resp = client.get(
-            f"https://api.bufferapp.com/1/profiles/{profile_id}/updates/sent.json",
-            params={"access_token": token, "count": count, "page": 1},
+        resp = client.post(
+            _BUFFER_GQL_URL,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
         )
         if resp.status_code == 401:
             raise ValueError(
-                f"Buffer token rejected for {platform} (401 Unauthorized). "
-                "The token may be expired or require a Buffer Analyze subscription. "
-                "Refresh it at: https://buffer.com/developers/api"
+                f"Buffer token rejected for {platform} (401). "
+                "Regenerate the key at https://publish.buffer.com/settings/api"
             )
         resp.raise_for_status()
         data = resp.json()
 
-    updates = data.get("updates", []) if isinstance(data, dict) else []
-    return [_parse_buffer_update(u, platform) for u in updates]
+    if "errors" in data:
+        raise ValueError(f"Buffer GraphQL error for {platform}: {data['errors']}")
+
+    edges = (
+        data.get("data", {})
+            .get("channel", {})
+            .get("sentPosts", {})
+            .get("edges", [])
+    )
+    return [_parse_gql_node(e["node"], platform) for e in edges if "node" in e]
 
 
 # ── Register the three Buffer-connected platforms ─────────────────────────────
+# The env var names are unchanged — they now hold Buffer *channel* IDs
+# (same IDs that were called "profile IDs" in the v1 API).
 
 @register("instagram")
 def _fetch_instagram() -> list[PlatformPost]:
-    profile_id = os.getenv("BUFFER_INSTAGRAM_PROFILE_ID", "")
-    return _fetch_buffer_profile(profile_id, "instagram")
+    channel_id = os.getenv("BUFFER_INSTAGRAM_PROFILE_ID", "")
+    return _fetch_buffer_channel(channel_id, "instagram")
 
 
 @register("facebook")
 def _fetch_facebook() -> list[PlatformPost]:
-    profile_id = os.getenv("BUFFER_FACEBOOK_PROFILE_ID", "")
-    return _fetch_buffer_profile(profile_id, "facebook")
+    channel_id = os.getenv("BUFFER_FACEBOOK_PROFILE_ID", "")
+    return _fetch_buffer_channel(channel_id, "facebook")
 
 
 @register("youtube")
 def _fetch_youtube_buffer() -> list[PlatformPost]:
-    profile_id = os.getenv("BUFFER_YOUTUBE_PROFILE_ID", "")
-    return _fetch_buffer_profile(profile_id, "youtube")
+    channel_id = os.getenv("BUFFER_YOUTUBE_PROFILE_ID", "")
+    return _fetch_buffer_channel(channel_id, "youtube")
 
 
 # ── How to add a new platform in the future ───────────────────────────────────
