@@ -47,8 +47,41 @@ interface VideoBlueprint {
   created_at: string;
 }
 
+// ── Trending types ────────────────────────────────────────────────────────────
+interface TrendingItem {
+  rank: number;
+  title: string;
+  creator: string;
+  views: string;
+  tags: string[];
+  why_trending: string;
+  use_for_niche: string;
+  url?: string;
+}
+
+interface TrendingResult {
+  youtube: TrendingItem[];
+  tiktok: TrendingItem[];
+  instagram: TrendingItem[];
+}
+
+// ── Parrot types ──────────────────────────────────────────────────────────────
+interface ParrotResult {
+  id: string;
+  source_video: { url: string; title: string; channel: string; views: string; likes: string };
+  blueprint: {
+    source_analysis?: { hook_style: string; structure: string; tone: string; why_it_works: string };
+    title: string;
+    topic: string;
+    niche: string;
+    structure: { hook?: string; intro?: string; sections?: Array<{ title: string; content: string; tips?: string[] }>; outro?: string };
+    thumbnail_ideas?: string[];
+    metadata?: { target_audience?: string; estimated_length?: string; cpm_potential?: string };
+  };
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'help'>('home');
   const [topic, setTopic] = useState('');
   const [niche, setNiche] = useState('AI tools');
   const [loading, setLoading] = useState(false);
@@ -242,6 +275,208 @@ function App() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Parrot state ─────────────────────────────────────────────────────────
+  const [parrotUrl, setParrotUrl]           = useState('');
+  const [parrotTopic, setParrotTopic]       = useState('');
+  const [parrotNiche, setParrotNiche]       = useState('AI tools');
+  const [parrotLoading, setParrotLoading]   = useState(false);
+  const [parrotError, setParrotError]       = useState('');
+  const [parrotResult, setParrotResult]     = useState<ParrotResult | null>(null);
+
+  const runParrot = async () => {
+    if (!parrotUrl.trim()) { setParrotError('Paste a YouTube URL first'); return; }
+    setParrotLoading(true); setParrotError(''); setParrotResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/parrot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ youtube_url: parrotUrl.trim(), niche: parrotNiche, your_topic: parrotTopic || undefined }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setParrotResult(await res.json());
+    } catch (err) { setParrotError(err instanceof Error ? err.message : 'Parrot failed'); }
+    finally { setParrotLoading(false); }
+  };
+
+  const renderParrot = () => (
+    <div className="videos-page">
+      <h1>🦜 Parrot a Video</h1>
+      <p className="subtitle">Find a YouTube video you love → AI reverse-engineers its structure → creates a Blueprint in your niche</p>
+
+      <div className="generator-form">
+        <div className="form-group">
+          <label>YouTube URL *</label>
+          <input type="url" value={parrotUrl} onChange={e => setParrotUrl(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..." disabled={parrotLoading} />
+        </div>
+        <div className="form-group">
+          <label>Your Niche *</label>
+          <select value={parrotNiche} onChange={e => setParrotNiche(e.target.value)} disabled={parrotLoading}>
+            <option value="AI tools">💰 AI Tools / Online Business</option>
+            <option value="technology">💰 Technology / Gadget Reviews</option>
+            <option value="education">💰 Education (Skills, Tutorials)</option>
+            <option value="health">💰 Health &amp; Fitness</option>
+            <option value="side hustles">💰 Side Hustles / Productivity</option>
+            <option value="finance">💰 Finance / Investing</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Your Topic (optional)</label>
+          <input type="text" value={parrotTopic} onChange={e => setParrotTopic(e.target.value)}
+            placeholder="Leave blank and AI will choose the best topic for you" disabled={parrotLoading} />
+        </div>
+        {parrotError && <div className="error-message">{parrotError}</div>}
+        <button className="generate-button" onClick={runParrot} disabled={parrotLoading}>
+          {parrotLoading ? '🦜 Analysing…' : '🦜 Parrot This Video'}
+        </button>
+      </div>
+
+      {parrotResult && (() => {
+        const { source_video, blueprint } = parrotResult;
+        const sa = blueprint.source_analysis;
+        return (
+          <div>
+            {/* Source video card */}
+            <div className="video-status-card" style={{ borderColor: '#8b5cf6', marginTop: '1.5rem' }}>
+              <h3 style={{ color: '#a78bfa', marginBottom: '0.75rem' }}>📺 Source Video Analysed</h3>
+              <p style={{ color: '#e2e8f0', fontWeight: 600 }}>{source_video.title || '(title via AI)'}</p>
+              <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0.25rem 0' }}>by {source_video.channel || 'unknown'} · {source_video.views} views · {source_video.likes} likes</p>
+              {source_video.url && <a href={source_video.url} target="_blank" rel="noopener noreferrer" className="video-download-link" style={{ marginTop: '0.75rem', display: 'inline-block' }}>▶ Open on YouTube</a>}
+            </div>
+
+            {/* Analysis */}
+            {sa && (
+              <div className="video-status-card" style={{ borderColor: '#f59e0b', marginTop: '1rem' }}>
+                <h3 style={{ color: '#fbbf24', marginBottom: '1rem' }}>🔍 Why It Works</h3>
+                <div className="blueprint-section"><strong style={{ color: '#fbbf24' }}>Hook style:</strong> <span style={{ color: '#cbd5e1' }}>{sa.hook_style}</span></div>
+                <div className="blueprint-section"><strong style={{ color: '#fbbf24' }}>Structure:</strong> <span style={{ color: '#cbd5e1' }}>{sa.structure}</span></div>
+                <div className="blueprint-section"><strong style={{ color: '#fbbf24' }}>Tone:</strong> <span style={{ color: '#cbd5e1' }}>{sa.tone}</span></div>
+                <div className="blueprint-section"><strong style={{ color: '#fbbf24' }}>Why it works:</strong> <span style={{ color: '#cbd5e1' }}>{sa.why_it_works}</span></div>
+              </div>
+            )}
+
+            {/* Blueprint */}
+            <div className="generated-blueprint" style={{ marginTop: '1rem' }}>
+              <h2>📋 Your Blueprint: {blueprint.title}</h2>
+              <div className="blueprint-metadata">
+                <span>🎯 {blueprint.niche}</span>
+                {blueprint.metadata?.estimated_length && <span>⏱️ {blueprint.metadata.estimated_length}</span>}
+                {blueprint.metadata?.cpm_potential && <span>💰 {blueprint.metadata.cpm_potential}</span>}
+              </div>
+              <p className="script-id-copy">🆔 Saved as Script ID: <strong>{parrotResult.id}</strong> — use this in the Videos tab</p>
+              {blueprint.structure.hook && <div className="blueprint-section"><h3>🔥 Hook</h3><p>{blueprint.structure.hook}</p></div>}
+              {blueprint.structure.intro && <div className="blueprint-section"><h3>🧠 Intro</h3><p>{blueprint.structure.intro}</p></div>}
+              {blueprint.structure.sections?.map((s, i) => (
+                <div key={i} className="blueprint-section">
+                  <h4>{i + 1}. {s.title}</h4><p>{s.content}</p>
+                  {s.tips && s.tips.length > 0 && <ul className="section-tips">{s.tips.map((t, j) => <li key={j}>{t}</li>)}</ul>}
+                </div>
+              ))}
+              {blueprint.structure.outro && <div className="blueprint-section"><h3>💡 Outro / CTA</h3><p>{blueprint.structure.outro}</p></div>}
+              {blueprint.thumbnail_ideas && blueprint.thumbnail_ideas.length > 0 && (
+                <div className="blueprint-section"><h3>🧲 Thumbnail Ideas</h3><ul className="thumbnail-ideas">{blueprint.thumbnail_ideas.map((t, i) => <li key={i}>{t}</li>)}</ul></div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+
+  // ── Trending state ────────────────────────────────────────────────────────
+  const [trendNiche, setTrendNiche]           = useState('AI tools');
+  const [trendLoading, setTrendLoading]       = useState(false);
+  const [trendError, setTrendError]           = useState('');
+  const [trendResult, setTrendResult]         = useState<TrendingResult | null>(null);
+  const [trendTab, setTrendTab]               = useState<'youtube' | 'tiktok' | 'instagram'>('youtube');
+
+  const fetchTrending = async () => {
+    setTrendLoading(true); setTrendError(''); setTrendResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/trending`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: trendNiche, count: 8 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setTrendResult(await res.json());
+    } catch (err) { setTrendError(err instanceof Error ? err.message : 'Trending fetch failed'); }
+    finally { setTrendLoading(false); }
+  };
+
+  const platformColor = (p: string) => ({ youtube: '#ef4444', tiktok: '#a78bfa', instagram: '#f59e0b' }[p] ?? '#3b82f6');
+  const platformIcon  = (p: string) => ({ youtube: '▶️', tiktok: '🎵', instagram: '📸' }[p] ?? '📱');
+
+  const renderTrendingItems = (items: TrendingItem[], platform: string) => {
+    if (!items.length) return <p style={{ color: '#94a3b8' }}>No data available.</p>;
+    return (
+      <div className="scripts-list">
+        {items.map((item) => (
+          <div key={item.rank} className="script-card" style={{ borderLeft: `4px solid ${platformColor(platform)}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+              <span style={{ background: platformColor(platform), color: '#fff', borderRadius: '999px', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>#{item.rank}</span>
+              <span style={{ color: '#64748b', fontSize: '0.8125rem', flexShrink: 0 }}>{item.views}</span>
+            </div>
+            <h3 style={{ color: '#f1f5f9', margin: '0.6rem 0 0.25rem', lineHeight: 1.4 }}>{item.title}</h3>
+            {item.creator && <p style={{ color: '#94a3b8', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>by {item.creator}</p>}
+            <p style={{ color: '#cbd5e1', fontSize: '0.875rem', marginBottom: '0.5rem' }}><strong style={{ color: '#fbbf24' }}>Why trending:</strong> {item.why_trending}</p>
+            <p style={{ color: '#10b981', fontSize: '0.875rem', marginBottom: '0.5rem' }}><strong>Your angle:</strong> {item.use_for_niche}</p>
+            {item.tags.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.5rem' }}>
+                {item.tags.map((t, i) => <span key={i} style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>#{t}</span>)}
+              </div>
+            )}
+            {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" className="video-download-link" style={{ marginTop: '0.75rem', display: 'inline-block', fontSize: '0.875rem' }}>▶ Watch</a>}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderTrending = () => (
+    <div className="videos-page">
+      <h1>🔥 Trending Now</h1>
+      <p className="subtitle">See what's hot across YouTube, TikTok and Instagram — with a suggested angle for your niche</p>
+
+      <div className="generator-form">
+        <div className="form-group">
+          <label>Your Niche</label>
+          <select value={trendNiche} onChange={e => setTrendNiche(e.target.value)} disabled={trendLoading}>
+            <option value="AI tools">💰 AI Tools / Online Business</option>
+            <option value="technology">💰 Technology / Gadget Reviews</option>
+            <option value="education">💰 Education (Skills, Tutorials)</option>
+            <option value="health">💰 Health &amp; Fitness</option>
+            <option value="side hustles">💰 Side Hustles / Productivity</option>
+            <option value="finance">💰 Finance / Investing</option>
+          </select>
+        </div>
+        {trendError && <div className="error-message">{trendError}</div>}
+        <button className="generate-button" onClick={fetchTrending} disabled={trendLoading}>
+          {trendLoading ? '🔍 Fetching trends…' : '🔥 Fetch Trending Now'}
+        </button>
+      </div>
+
+      {trendResult && (
+        <div>
+          {/* Platform tabs */}
+          <div style={{ display: 'flex', gap: '0.5rem', margin: '1.5rem 0 1rem', flexWrap: 'wrap' }}>
+            {(['youtube', 'tiktok', 'instagram'] as const).map(p => (
+              <button key={p} onClick={() => setTrendTab(p)}
+                style={{ padding: '0.5rem 1.25rem', borderRadius: '999px', border: `2px solid ${platformColor(p)}`,
+                  background: trendTab === p ? platformColor(p) : 'transparent',
+                  color: trendTab === p ? '#fff' : platformColor(p),
+                  fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem', transition: 'all 0.2s' }}>
+                {platformIcon(p)} {p.charAt(0).toUpperCase() + p.slice(1)}
+                <span style={{ marginLeft: '0.4rem', opacity: 0.8 }}>({trendResult[p].length})</span>
+              </button>
+            ))}
+          </div>
+          {renderTrendingItems(trendResult[trendTab], trendTab)}
         </div>
       )}
     </div>
@@ -903,6 +1138,18 @@ Example:
             🎬 Videos
           </button>
           <button
+            className={currentPage === 'parrot' ? 'active' : ''}
+            onClick={() => setCurrentPage('parrot')}
+          >
+            🦜 Parrot
+          </button>
+          <button
+            className={currentPage === 'trending' ? 'active' : ''}
+            onClick={() => setCurrentPage('trending')}
+          >
+            🔥 Trending
+          </button>
+          <button
             className={currentPage === 'help' ? 'active' : ''}
             onClick={() => setCurrentPage('help')}
           >
@@ -916,6 +1163,8 @@ Example:
          currentPage === 'scripts' ? renderScripts() :
          currentPage === 'blueprint' ? renderBlueprint() :
          currentPage === 'videos' ? renderVideos() :
+         currentPage === 'parrot' ? renderParrot() :
+         currentPage === 'trending' ? renderTrending() :
          renderHelp()}
       </main>
 
