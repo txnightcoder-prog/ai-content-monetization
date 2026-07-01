@@ -1,15 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 
 interface Script {
-  id: number;
+  id: string;
   topic: string;
   hook: string;
   body: string;
   cta: string;
   script_metadata?: { niche?: string; [key: string]: unknown };
+  created_at: string;
+}
+
+interface VideoRecord {
+  id: string;
+  script_id: string;
+  status: 'generating' | 'ready' | 'posted' | 'failed';
+  video_url: string | null;
+  thumbnail_url: string | null;
+  duration: number | null;
   created_at: string;
 }
 
@@ -38,7 +48,7 @@ interface VideoBlueprint {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'help'>('home');
   const [topic, setTopic] = useState('');
   const [niche, setNiche] = useState('AI tools');
   const [loading, setLoading] = useState(false);
@@ -53,6 +63,189 @@ function App() {
   const [blueprintInput, setBlueprintInput] = useState('');
   const [generatedBlueprint, setGeneratedBlueprint] = useState<VideoBlueprint | null>(null);
   const [blueprints, setBlueprints] = useState<VideoBlueprint[]>([]);
+
+  // ── Video page state ──────────────────────────────────────────────────────
+  const [videoScriptId, setVideoScriptId]   = useState('');
+  const [videoLoading, setVideoLoading]     = useState(false);
+  const [videoError, setVideoError]         = useState('');
+  const [activeVideo, setActiveVideo]       = useState<VideoRecord | null>(null);
+  const [videoHistory, setVideoHistory]     = useState<VideoRecord[]>([]);
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishSuccess, setPublishSuccess] = useState('');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Stop polling when component unmounts or page changes away from videos
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  const startGenerate = async () => {
+    if (!videoScriptId.trim()) { setVideoError('Paste a Script ID first'); return; }
+    setVideoLoading(true); setVideoError(''); setActiveVideo(null); setPublishSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/videos/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script_id: videoScriptId.trim() }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const video: VideoRecord = await res.json();
+      setActiveVideo(video);
+      setVideoHistory(h => [video, ...h]);
+      // Start polling every 10 s
+      pollRef.current = setInterval(() => pollVideo(video.id), 10_000);
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'Failed to start generation');
+    } finally {
+      setVideoLoading(false);
+    }
+  };
+
+  const pollVideo = async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/videos/${id}`);
+      if (!res.ok) return;
+      const video: VideoRecord = await res.json();
+      setActiveVideo(video);
+      setVideoHistory(h => h.map(v => v.id === id ? video : v));
+      if (video.status === 'ready' || video.status === 'failed') {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      }
+    } catch { /* ignore transient errors */ }
+  };
+
+  const publishVideo = async (id: string) => {
+    setPublishLoading(true); setVideoError(''); setPublishSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/videos/${id}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platforms: ['tiktok', 'instagram', 'youtube', 'facebook'] }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const posts = await res.json();
+      setPublishSuccess(`✅ Scheduled on ${posts.length} platform${posts.length !== 1 ? 's' : ''}!`);
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'Failed to publish');
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const statusColor = (s: VideoRecord['status']) =>
+    ({ generating: '#f59e0b', ready: '#10b981', posted: '#3b82f6', failed: '#ef4444' })[s];
+
+  const statusLabel = (s: VideoRecord['status']) =>
+    ({ generating: '⏳ Generating…', ready: '✅ Ready', posted: '📤 Posted', failed: '❌ Failed' })[s];
+
+  const renderVideos = () => (
+    <div className="videos-page">
+      <h1>🎬 Video Generator</h1>
+      <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
+
+      {/* Step 1 — paste script ID */}
+      <div className="generator-form">
+        <p className="videos-tip">
+          💡 First generate a script on the <button className="inline-link" onClick={() => setCurrentPage('scripts')}>Scripts page</button>, then copy its ID and paste it below.
+        </p>
+        <div className="form-group" style={{ marginTop: '1rem' }}>
+          <label htmlFor="scriptId">Script ID</label>
+          <input
+            id="scriptId"
+            type="text"
+            value={videoScriptId}
+            onChange={e => setVideoScriptId(e.target.value)}
+            placeholder="e.g. cadb45d7-623f-4364-91e5-f3b017a1892c"
+            disabled={videoLoading}
+          />
+        </div>
+        {videoError && <div className="error-message">{videoError}</div>}
+        <button className="generate-button" onClick={startGenerate} disabled={videoLoading}>
+          {videoLoading ? '🚀 Starting…' : '🎬 Generate Video'}
+        </button>
+      </div>
+
+      {/* Active video status card */}
+      {activeVideo && (
+        <div className="video-status-card" style={{ borderColor: statusColor(activeVideo.status) }}>
+          <div className="video-status-header">
+            <span className="video-status-badge" style={{ background: statusColor(activeVideo.status) }}>
+              {statusLabel(activeVideo.status)}
+            </span>
+            <span className="video-id-label">ID: {activeVideo.id.slice(0, 8)}…</span>
+          </div>
+
+          {activeVideo.status === 'generating' && (
+            <div className="video-progress">
+              <div className="progress-bar">
+                <div className="progress-fill" />
+              </div>
+              <p>Video is being created by Vicsee — check back in 2–5 minutes. This page auto-refreshes every 10 s.</p>
+            </div>
+          )}
+
+          {activeVideo.status === 'ready' && (
+            <div className="video-ready">
+              {activeVideo.thumbnail_url && (
+                <img src={activeVideo.thumbnail_url} alt="thumbnail" className="video-thumbnail" />
+              )}
+              {activeVideo.video_url && (
+                <a href={activeVideo.video_url} target="_blank" rel="noopener noreferrer" className="video-download-link">
+                  ⬇️ Download / Preview Video
+                </a>
+              )}
+              {activeVideo.duration && (
+                <p className="video-duration">Duration: {activeVideo.duration}s</p>
+              )}
+              {publishSuccess
+                ? <div className="publish-success">{publishSuccess}</div>
+                : (
+                  <button
+                    className="publish-button"
+                    onClick={() => publishVideo(activeVideo.id)}
+                    disabled={publishLoading}
+                  >
+                    {publishLoading ? '📤 Scheduling…' : '📤 Publish to All Platforms'}
+                  </button>
+                )
+              }
+            </div>
+          )}
+
+          {activeVideo.status === 'failed' && (
+            <p style={{ color: '#fca5a5', marginTop: '1rem' }}>
+              Generation failed. Check that your VICSEE_API_KEY is valid, then try again.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* History */}
+      {videoHistory.length > 1 && (
+        <div className="scripts-history" style={{ marginTop: '2rem' }}>
+          <h2>Recent Videos ({videoHistory.length})</h2>
+          <div className="scripts-list">
+            {videoHistory.map(v => (
+              <div
+                key={v.id}
+                className="script-card"
+                onClick={() => setActiveVideo(v)}
+                style={{ borderColor: activeVideo?.id === v.id ? statusColor(v.status) : undefined }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="script-preview"><strong>ID:</strong> {v.id.slice(0, 16)}…</span>
+                  <span className="video-status-badge" style={{ background: statusColor(v.status), fontSize: '0.75rem' }}>
+                    {statusLabel(v.status)}
+                  </span>
+                </div>
+                <p className="script-niche" style={{ marginTop: '0.5rem' }}>{new Date(v.created_at).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const getTopicIdeas = async () => {
     setLoadingIdeas(true);
@@ -293,6 +486,9 @@ function App() {
             <span>Topic: {generatedScript.topic}</span>
             <span>Niche: {generatedScript.script_metadata?.niche ?? niche}</span>
           </div>
+          <p className="script-id-copy">
+            🆔 Script ID (copy for Videos page): <strong>{generatedScript.id}</strong>
+          </p>
 
           <div className="script-section">
             <h3>🎣 Hook (3-5 seconds)</h3>
@@ -701,6 +897,12 @@ Example:
             Blueprints
           </button>
           <button
+            className={currentPage === 'videos' ? 'active' : ''}
+            onClick={() => setCurrentPage('videos')}
+          >
+            🎬 Videos
+          </button>
+          <button
             className={currentPage === 'help' ? 'active' : ''}
             onClick={() => setCurrentPage('help')}
           >
@@ -713,6 +915,7 @@ Example:
         {currentPage === 'home' ? renderHome() :
          currentPage === 'scripts' ? renderScripts() :
          currentPage === 'blueprint' ? renderBlueprint() :
+         currentPage === 'videos' ? renderVideos() :
          renderHelp()}
       </main>
 
