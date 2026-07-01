@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -8,22 +8,49 @@ from app.models.video import VideoStatus
 
 class VideoBase(BaseModel):
     """Base schema for Video with common fields"""
-    heygen_video_id: Optional[str] = Field(None, description="HeyGen video ID")
+    vicsee_video_id: Optional[str] = Field(None, description="Vicsee video job ID", alias="heygen_video_id")
     video_url: Optional[HttpUrl] = Field(None, description="URL to the generated video")
     thumbnail_url: Optional[HttpUrl] = Field(None, description="URL to video thumbnail")
     duration: Optional[int] = Field(None, ge=0, description="Video duration in seconds")
 
+    class Config:
+        populate_by_name = True
+
 
 class VideoCreate(BaseModel):
-    """Schema for creating a new video"""
+    """Schema for creating a new video record (without triggering generation)."""
     script_id: UUID = Field(..., description="ID of the content script to use")
-    heygen_video_id: Optional[str] = None
     status: Optional[VideoStatus] = Field(default=VideoStatus.GENERATING)
+
+
+class GenerateVideoRequest(BaseModel):
+    """
+    Request body for POST /api/v1/videos/generate.
+    Creates a Video record and immediately fires off Vicsee generation in the background.
+    """
+    script_id: UUID = Field(..., description="ID of the approved content script to generate from")
+
+
+class PublishVideoRequest(BaseModel):
+    """
+    Request body for POST /api/v1/videos/{video_id}/publish.
+    Schedules the ready video on one or more social platforms via Buffer.
+    """
+    platforms: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Platforms to publish to: tiktok, instagram, facebook, youtube, twitter, linkedin. "
+            "Omit to post to all configured Buffer profiles."
+        ),
+    )
+    caption: Optional[str] = Field(
+        None,
+        description="Override caption. Defaults to hook + cta from the linked script.",
+    )
 
 
 class VideoUpdate(BaseModel):
     """Schema for updating an existing video"""
-    heygen_video_id: Optional[str] = None
     video_url: Optional[HttpUrl] = None
     thumbnail_url: Optional[HttpUrl] = None
     duration: Optional[int] = Field(None, ge=0)
@@ -40,6 +67,7 @@ class VideoResponse(VideoBase):
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 
 class VideoListResponse(BaseModel):
