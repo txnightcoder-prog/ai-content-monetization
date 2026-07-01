@@ -719,3 +719,169 @@ body {
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
 }
+
+/* ── Videos Page ─────────────────────────────────────────────────────────── */
+.videos-page {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.videos-page h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  color: #f1f5f9;
+}
+
+.videos-tip {
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.inline-link {
+  background: none;
+  border: none;
+  color: #60a5fa;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.video-status-card {
+  background: rgba(30, 41, 59, 0.5);
+  border-radius: 1rem;
+  padding: 2rem;
+  margin: 2rem 0;
+  border: 2px solid #10b981;
+  animation: slideIn 0.4s ease;
+}
+
+.video-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.video-status-badge {
+  display: inline-block;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.video-id-label {
+  color: #64748b;
+  font-size: 0.8125rem;
+  font-family: monospace;
+}
+
+.video-progress p {
+  color: #94a3b8;
+  font-size: 0.9375rem;
+  margin-top: 0.75rem;
+  line-height: 1.6;
+}
+
+.progress-bar {
+  height: 6px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 0.25rem;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 40%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 999px;
+  animation: pulse-bar 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.video-ready {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.video-thumbnail {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+}
+
+.video-download-link {
+  display: inline-block;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  padding: 0.75rem 1.25rem;
+  border-radius: 0.5rem;
+  text-decoration: none;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+
+.video-download-link:hover {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.video-duration {
+  color: #94a3b8;
+  font-size: 0.875rem;
+}
+
+.publish-button {
+  width: 100%;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: none;
+  padding: 1rem;
+  font-size: 1.125rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.publish-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+}
+
+.publish-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.publish-success {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: #34d399;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: center;
+}
+
+/* Also show the Scripts ID on the generated script card */
+.script-id-copy {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-family: monospace;
+  margin-top: 0.5rem;
+  word-break: break-all;
+}
