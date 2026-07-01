@@ -13,6 +13,8 @@ from app.schemas.content_script import (
 )
 from app.services.openai_service import OpenAIService
 from app.services.script_generator import ScriptGenerator
+from app.services.parrot_service import ParrotService
+from app.services.trending_service import TrendingService
 
 router = APIRouter(prefix="/api/v1/scripts", tags=["scripts"])
 
@@ -26,10 +28,31 @@ class BlueprintRequest(BaseModel):
     niche: str
 
 
+class ParrotRequest(BaseModel):
+    youtube_url: str
+    niche: str = "AI tools"
+    your_topic: Optional[str] = None
+
+
+class TrendingRequest(BaseModel):
+    niche: str = "AI tools"
+    count: int = 8
+
+
 def get_script_generator() -> ScriptGenerator:
     """Dependency to get script generator instance"""
     openai_service = OpenAIService()
     return ScriptGenerator(openai_service)
+
+
+def get_parrot_service() -> ParrotService:
+    openai_service = OpenAIService()
+    return ParrotService(openai_service)
+
+
+def get_trending_service() -> TrendingService:
+    openai_service = OpenAIService()
+    return TrendingService(openai_service)
 
 
 @router.post("/generate", response_model=ContentScriptResponse, status_code=201)
@@ -310,6 +333,82 @@ async def generate_blueprint(
         traceback.print_exc()
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to generate blueprint: {str(e)}")
+
+
+@router.post("/parrot")
+async def parrot_video(
+    request: ParrotRequest,
+    db: Session = Depends(get_db),
+    service: ParrotService = Depends(get_parrot_service),
+):
+    """
+    **Parrot a YouTube video.**
+
+    Paste any YouTube URL. The AI will:
+    1. Analyse the video's hook style, structure, tone and why it works.
+    2. Generate a full Blueprint that mirrors that structure in YOUR niche.
+
+    Returns source video info + a complete Blueprint ready to use.
+    """
+    try:
+        result = await service.parrot(
+            youtube_url=request.youtube_url,
+            niche=request.niche,
+            your_topic=request.your_topic,
+        )
+
+        # Persist the blueprint as a ContentScript for later use
+        blueprint = result.get("blueprint", {})
+        db_script = ContentScript(
+            topic=blueprint.get("title", "Parrot Blueprint"),
+            hook=blueprint.get("structure", {}).get("hook", ""),
+            body=str(blueprint.get("structure", {})),
+            cta=blueprint.get("structure", {}).get("outro", ""),
+            status=ScriptStatus.DRAFT,
+            script_metadata={
+                **blueprint,
+                "source_video": result.get("source_video", {}),
+                "parrot": True,
+            },
+        )
+        db.add(db_script)
+        db.commit()
+        db.refresh(db_script)
+
+        return {
+            "id": db_script.id,
+            "created_at": db_script.created_at.isoformat(),
+            **result,
+        }
+
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        import traceback; traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Parrot failed: {exc}")
+
+
+@router.post("/trending")
+async def get_trending(
+    request: TrendingRequest,
+    service: TrendingService = Depends(get_trending_service),
+):
+    """
+    **What's trending right now on YouTube, TikTok and Instagram.**
+
+    - YouTube: live Most Popular chart filtered by category (requires YOUTUBE_DATA_API_KEY,
+      falls back to AI analysis if key not set).
+    - TikTok & Instagram: AI-powered trend analysis (no unofficial APIs).
+
+    Returns up to `count` trending items per platform, each with a suggested
+    angle for how YOU can use that trend in your niche.
+    """
+    try:
+        return await service.get_trending(niche=request.niche, count=request.count)
+    except Exception as exc:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Trending failed: {exc}")
 
 
 # Made with Bob
