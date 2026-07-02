@@ -212,13 +212,18 @@ function App() {
       const res = await fetch(`${API_BASE}/api/v1/videos/${id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platforms: ['tiktok', 'instagram', 'youtube', 'facebook'] }),
+        body: JSON.stringify({ platforms: ['youtube'] }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const posts = await res.json();
-      setPublishSuccess(`✅ Scheduled on ${posts.length} platform${posts.length !== 1 ? 's' : ''}!`);
+      const post = posts[0];
+      setPublishSuccess(
+        post?.status === 'posted'
+          ? `✅ Uploaded to YouTube! Video ID: ${post.external_id ?? 'check YouTube Studio'}`
+          : `⚠️ Upload queued (status: ${post?.status ?? 'unknown'})`
+      );
     } catch (err) {
-      setVideoError(err instanceof Error ? err.message : 'Failed to publish');
+      setVideoError(err instanceof Error ? err.message : 'Failed to upload');
     } finally {
       setPublishLoading(false);
     }
@@ -305,7 +310,7 @@ function App() {
                   <button className="publish-button"
                     onClick={() => publishVideo(activeVideo.id)}
                     disabled={publishLoading}>
-                    {publishLoading ? '📤 Publishing…' : '📤 Publish Now to All Platforms'}
+                    {publishLoading ? '⏳ Uploading to YouTube…' : '▶ Upload to YouTube'}
                   </button>
                 )
               }
@@ -345,28 +350,24 @@ function App() {
         </div>
       )}
 
-      {/* Buffer quick-launch bar */}
-      <div style={{ background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '0.75rem', padding: '1.25rem', margin: '1.5rem 0' }}>
-        <h3 style={{ color: '#f1f5f9', marginBottom: '0.75rem', fontSize: '1rem' }}>🔗 Open Buffer</h3>
+      {/* YouTube Studio quick-launch */}
+      <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.75rem', padding: '1.25rem', margin: '1.5rem 0' }}>
+        <h3 style={{ color: '#fca5a5', marginBottom: '0.75rem', fontSize: '1rem' }}>▶ YouTube Studio</h3>
         <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '1rem' }}>
-          Buffer has its own AI video assistant and post composer. Use these shortcuts to jump straight there.
+          After uploading, manage your video in YouTube Studio — add chapters, cards, end screens and check analytics.
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <a href="https://publish.buffer.com/new-post" target="_blank" rel="noopener noreferrer"
-            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0 }}>
-            ✏️ Create New Post
+          <a href="https://studio.youtube.com" target="_blank" rel="noopener noreferrer"
+            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'rgba(239,68,68,0.15)' }}>
+            🎬 YouTube Studio
           </a>
-          <a href="https://publish.buffer.com/ai-assistant" target="_blank" rel="noopener noreferrer"
-            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'linear-gradient(135deg,#8b5cf6 0%,#6366f1 100%)' }}>
-            🤖 Buffer AI Assistant
+          <a href="https://studio.youtube.com/channel/UC/videos" target="_blank" rel="noopener noreferrer"
+            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'rgba(239,68,68,0.1)' }}>
+            📋 My Videos
           </a>
-          <a href="https://publish.buffer.com/calendar" target="_blank" rel="noopener noreferrer"
-            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)' }}>
-            📅 Buffer Calendar
-          </a>
-          <a href="https://publish.buffer.com/queue" target="_blank" rel="noopener noreferrer"
-            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)' }}>
-            📋 View Queue
+          <a href="https://studio.youtube.com/channel/UC/analytics" target="_blank" rel="noopener noreferrer"
+            className="idea-button" style={{ flex: '1 1 auto', textAlign: 'center', textDecoration: 'none', display: 'block', margin: 0, background: 'rgba(239,68,68,0.1)' }}>
+            📊 Analytics
           </a>
         </div>
       </div>

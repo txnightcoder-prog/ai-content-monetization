@@ -1,8 +1,21 @@
+"""
+Video Pipeline Service
+======================
+Orchestrates:
+  1. Vicsee video generation (background task)
+  2. YouTube direct upload via OAuth (publish / schedule)
+
+Publishing uses the YouTube Data API v3 resumable upload endpoint.
+Requires env vars: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
+"""
+
 import logging
 import os
+import tempfile
 from typing import List, Optional
 from uuid import UUID
 
+import httpx
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
@@ -11,50 +24,110 @@ from app.models.video import Video, VideoStatus
 from app.models.post import Post, Platform, PostStatus
 from app.models.content_script import ContentScript
 from app.services.vicsee_service import VicseeService
-from app.services.buffer_service import BufferService, get_profile_ids
 
 logger = logging.getLogger(__name__)
 
+YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+YOUTUBE_TOKEN_URL  = "https://oauth2.googleapis.com/token"
+
 
 def _build_caption(script: ContentScript) -> str:
-    """Combine hook + cta into a social-media caption (≤280 chars safe)."""
     parts = [script.hook, script.cta]
     return " ".join(p for p in parts if p).strip()
 
 
+def _get_yt_access_token() -> str:
+    """Exchange refresh token for a short-lived access token."""
+    client_id     = os.getenv("YOUTUBE_CLIENT_ID", "")
+    client_secret = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+    refresh_token = os.getenv("YOUTUBE_REFRESH_TOKEN", "")
+    if not all([client_id, client_secret, refresh_token]):
+        raise RuntimeError(
+            "YouTube OAuth credentials not set. "
+            "Need YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN."
+        )
+    r = httpx.post(YOUTUBE_TOKEN_URL, data={
+        "client_id":     client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+        "grant_type":    "refresh_token",
+    }, timeout=15)
+    r.raise_for_status()
+    return r.json()["access_token"]
+
+
+async def _upload_to_youtube(
+    video_url: str,
+    title: str,
+    description: str,
+    tags: Optional[List[str]] = None,
+    privacy: str = "public",
+) -> str:
+    """
+    Download the video from video_url and upload it to YouTube.
+    Returns the YouTube video ID.
+    """
+    access_token = _get_yt_access_token()
+
+    # Download the video into a temp file
+    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+        dl = await client.get(video_url)
+        dl.raise_for_status()
+        video_bytes = dl.content
+
+    if "#Shorts" not in description:
+        description += "\n\n#Shorts"
+    if tags is None:
+        tags = []
+
+    metadata = {
+        "snippet": {
+            "title": title[:100],
+            "description": description[:5000],
+            "tags": tags,
+            "categoryId": "22",  # People & Blogs
+        },
+        "status": {
+            "privacyStatus": privacy,
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+
+    # Multipart upload
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(
+            YOUTUBE_UPLOAD_URL,
+            params={"part": "snippet,status", "uploadType": "multipart"},
+            headers={"Authorization": f"Bearer {access_token}"},
+            files={
+                "metadata": (None, str(metadata).replace("'", '"'), "application/json"),
+                "media":    ("video.mp4", video_bytes, "video/mp4"),
+            },
+        )
+        r.raise_for_status()
+        yt_id = r.json().get("id", "")
+
+    logger.info("YouTube upload complete: video_id=%s", yt_id)
+    return yt_id
+
+
 class VideoPipelineService:
     """
-    Orchestrates the full video pipeline:
-      1. Submit script to Vicsee → get vicsee_video_id
-      2. Poll Vicsee until the video is ready
-      3. Write the video_url back to the Video DB row (status=READY)
-      4. (Optional) Schedule posts via Buffer for the requested platforms
-    
-    Designed to be called from a FastAPI BackgroundTask so the HTTP response
-    returns immediately and the heavy work runs in the background.
+    Background pipeline: Vicsee generation → YouTube upload.
+    All Buffer references removed; YouTube is the only publish target.
     """
 
     def __init__(
         self,
         db: Session,
         vicsee_service: Optional[VicseeService] = None,
-        buffer_service: Optional[BufferService] = None,
     ):
         self.db = db
-        # Services are optional so the pipeline degrades gracefully when
-        # API keys are not yet configured (e.g. during local dev).
         self._vicsee = vicsee_service
-        self._buffer = buffer_service
 
     # ------------------------------------------------------------------
-    # Public entry points
-    # ------------------------------------------------------------------
-
     async def generate(self, video_id: UUID) -> None:
-        """
-        Background task: submit generation to Vicsee and poll to completion.
-        Updates the Video row in-place; never raises (logs errors instead).
-        """
+        """Background task: submit to Vicsee and poll to completion."""
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             logger.error("VideoPipeline.generate: video %s not found", video_id)
@@ -64,157 +137,86 @@ class VideoPipelineService:
             ContentScript.id == video.script_id
         ).first()
         if not script:
-            logger.error(
-                "VideoPipeline.generate: script %s not found for video %s",
-                video.script_id, video_id,
-            )
+            logger.error("VideoPipeline.generate: script not found for video %s", video_id)
             self._set_failed(video)
             return
 
         if not self._vicsee:
-            logger.warning(
-                "VideoPipeline.generate: VicseeService not configured "
-                "(set VICSEE_API_KEY). Marking video %s as failed.", video_id
-            )
+            logger.warning("VicseeService not configured — marking video %s failed", video_id)
             self._set_failed(video)
             return
 
-        # Combine hook + body + cta into the full script text
-        script_text = "\n\n".join(
-            part for part in [script.hook, script.body, script.cta] if part
-        )
+        script_text = "\n\n".join(p for p in [script.hook, script.body, script.cta] if p)
 
         try:
-            logger.info("VideoPipeline: submitting script to Vicsee for video %s", video_id)
-            result = await self._vicsee.create_video(
-                script=script_text,
-                aspect_ratio="9:16",
-            )
+            result = await self._vicsee.create_video(script=script_text, aspect_ratio="9:16")
             vicsee_id = result.get("video_id")
             if not vicsee_id:
                 raise RuntimeError("Vicsee returned no video_id")
 
-            # Persist the Vicsee job ID immediately so we can poll/cancel later
-            video.heygen_video_id = vicsee_id  # column reused for vicsee id
+            video.heygen_video_id = vicsee_id
             self.db.commit()
 
-            logger.info(
-                "VideoPipeline: polling Vicsee for completion of video %s (vicsee_id=%s)",
-                video_id, vicsee_id,
-            )
             status_data = await self._vicsee.wait_for_completion(vicsee_id)
-
-            video.video_url = status_data.get("video_url")
+            video.video_url     = status_data.get("video_url")
             video.thumbnail_url = status_data.get("thumbnail_url")
-            video.duration = status_data.get("duration")
-            video.status = VideoStatus.READY
+            video.duration      = status_data.get("duration")
+            video.status        = VideoStatus.READY
             self.db.commit()
-            logger.info("VideoPipeline: video %s is READY (url=%s)", video_id, video.video_url)
+            logger.info("Video %s READY: %s", video_id, video.video_url)
 
         except Exception as exc:
-            logger.error(
-                "VideoPipeline.generate failed for video %s: %s", video_id, exc
-            )
+            logger.error("VideoPipeline.generate failed for %s: %s", video_id, exc)
             self._set_failed(video)
 
+    # ------------------------------------------------------------------
     async def publish(
         self,
         video_id: UUID,
         platforms: Optional[List[str]] = None,
         caption: Optional[str] = None,
     ) -> List[Post]:
-        """
-        Schedule the video on social platforms via Buffer.
-        Creates Post DB rows for each platform with status SCHEDULED or FAILED.
-
-        Args:
-            video_id:  DB UUID of the Video row.
-            platforms: e.g. ["tiktok", "instagram"]. None → all configured profiles.
-            caption:   Override caption. Defaults to hook + cta from the linked script.
-
-        Returns:
-            List of created Post rows.
-        """
+        """Upload video to YouTube and create a Post DB record."""
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             raise ValueError(f"Video {video_id} not found")
         if video.status != VideoStatus.READY:
-            raise ValueError(
-                f"Video {video_id} is not READY (status={video.status}). "
-                "Wait for generation to complete before publishing."
-            )
+            raise ValueError(f"Video {video_id} is not READY (status={video.status})")
         if not video.video_url:
-            raise ValueError(f"Video {video_id} has no video_url; cannot publish.")
+            raise ValueError(f"Video {video_id} has no video_url")
 
-        # Build caption from script if not supplied
         if caption is None:
             script = self.db.query(ContentScript).filter(
                 ContentScript.id == video.script_id
             ).first()
             caption = _build_caption(script) if script else ""
 
-        created_posts: List[Post] = []
-
-        if not self._buffer:
-            logger.warning(
-                "VideoPipeline.publish: BufferService not configured "
-                "(set BUFFER_ACCESS_TOKEN). Creating Post rows as FAILED."
-            )
-            for platform_name in (platforms or ["tiktok", "instagram", "youtube"]):
-                try:
-                    platform_enum = Platform(platform_name)
-                except ValueError:
-                    continue
-                post = Post(
-                    video_id=video_id,
-                    platform=platform_enum,
-                    status=PostStatus.FAILED,
-                )
-                self.db.add(post)
-            self.db.commit()
-            return created_posts
+        post = Post(
+            video_id=video_id,
+            platform=Platform.youtube,
+            status=PostStatus.SCHEDULED,
+        )
+        self.db.add(post)
 
         try:
-            self._buffer.post_to_all_platforms(
-                text=caption,
+            yt_id = await _upload_to_youtube(
                 video_url=str(video.video_url),
-                thumbnail_url=str(video.thumbnail_url) if video.thumbnail_url else None,
-                platforms=platforms,
+                title=caption[:100] or "AI Generated Video",
+                description=caption,
             )
-            logger.info("VideoPipeline: Buffer accepted post for video %s", video_id)
+            post.external_id = yt_id
+            post.status      = PostStatus.POSTED
+            video.status     = VideoStatus.POSTED
+            logger.info("Video %s posted to YouTube as %s", video_id, yt_id)
         except Exception as exc:
-            logger.error(
-                "VideoPipeline.publish: Buffer call failed for video %s: %s", video_id, exc
-            )
-
-        # Persist Post records for every requested/configured platform
-        profile_map = get_profile_ids()
-        target_platforms = platforms or list(profile_map.keys())
-        for platform_name in target_platforms:
-            if not profile_map.get(platform_name):
-                continue  # not configured
-            try:
-                platform_enum = Platform(platform_name)
-            except ValueError:
-                continue
-            post = Post(
-                video_id=video_id,
-                platform=platform_enum,
-                status=PostStatus.SCHEDULED,
-            )
-            self.db.add(post)
-            created_posts.append(post)
+            logger.error("YouTube upload failed for video %s: %s", video_id, exc)
+            post.status = PostStatus.FAILED
 
         self.db.commit()
-        for p in created_posts:
-            self.db.refresh(p)
-
-        return created_posts
+        self.db.refresh(post)
+        return [post]
 
     # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
     def _set_failed(self, video: Video) -> None:
         video.status = VideoStatus.FAILED
         try:
@@ -224,28 +226,13 @@ class VideoPipelineService:
 
 
 # ------------------------------------------------------------------
-# FastAPI dependency helpers
-# ------------------------------------------------------------------
-
 def get_vicsee_service() -> Optional[VicseeService]:
-    """Return a VicseeService if VICSEE_API_KEY is set, else None."""
     if os.getenv("VICSEE_API_KEY"):
         return VicseeService()
     return None
 
 
-def get_buffer_service() -> Optional[BufferService]:
-    """Return a BufferService if BUFFER_ACCESS_TOKEN is set, else None."""
-    if os.getenv("BUFFER_ACCESS_TOKEN"):
-        return BufferService()
-    return None
-
-
 def get_pipeline(db: Session = Depends(get_db)) -> VideoPipelineService:
-    return VideoPipelineService(
-        db=db,
-        vicsee_service=get_vicsee_service(),
-        buffer_service=get_buffer_service(),
-    )
+    return VideoPipelineService(db=db, vicsee_service=get_vicsee_service())
 
 # Made with Bob

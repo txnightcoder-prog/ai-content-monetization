@@ -251,12 +251,11 @@ async def schedule_video(
     video_id: UUID,
     request: ScheduleVideoRequest,
     db: Session = Depends(get_db),
-    pipeline: VideoPipelineService = Depends(get_pipeline),
 ):
     """
-    Schedule a ready video for future publishing via Buffer.
-    Pass `scheduled_at` in ISO-8601 UTC format and the platforms to post to.
-    Creates a Post DB record per platform in SCHEDULED status.
+    Record a scheduled YouTube upload.
+    Stores the scheduled_at time in the DB; the actual upload fires when
+    you call POST /{video_id}/publish (or a future cron job).
     """
     from app.models.content_script import ContentScript
 
@@ -269,45 +268,28 @@ async def schedule_video(
             detail=f"Video must be READY before scheduling (current status: {video.status})"
         )
     if not video.video_url:
-        raise HTTPException(status_code=400, detail="Video has no URL yet — wait for generation to complete")
+        raise HTTPException(status_code=400, detail="Video has no URL yet")
 
-    # Build caption
     caption = request.caption
     if not caption:
         script = db.query(ContentScript).filter(ContentScript.id == video.script_id).first()
         if script:
             caption = f"{script.hook} {script.cta}".strip()
 
-    # Call Buffer with scheduled_at
-    from app.services.buffer_service import BufferService, get_profile_ids
     created: List[Post] = []
-    try:
-        buf = BufferService()
-        profile_map = get_profile_ids()
-        for platform_name in request.platforms:
-            pid = profile_map.get(platform_name)
-            if not pid:
-                continue
-            try:
-                platform_enum = Platform(platform_name)
-            except ValueError:
-                continue
-            buf.create_post(
-                profile_ids=[pid],
-                text=caption or "",
-                media={"video": str(video.video_url)},
-                scheduled_at=request.scheduled_at,
-            )
-            post = Post(
-                video_id=video_id,
-                platform=platform_enum,
-                scheduled_at=request.scheduled_at,
-                status=PostStatus.SCHEDULED,
-            )
-            db.add(post)
-            created.append(post)
-    except Exception as exc:
-        logger.warning("Buffer schedule call failed: %s — saving DB records anyway", exc)
+    for platform_name in request.platforms:
+        try:
+            platform_enum = Platform(platform_name)
+        except ValueError:
+            continue
+        post = Post(
+            video_id=video_id,
+            platform=platform_enum,
+            scheduled_at=request.scheduled_at,
+            status=PostStatus.SCHEDULED,
+        )
+        db.add(post)
+        created.append(post)
 
     db.commit()
     for p in created:
