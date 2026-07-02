@@ -96,25 +96,37 @@ async def run_checks() -> Dict[str, Any]:
         _vicsee()
     ))
 
-    # ── 5. Buffer API token ──────────────────────────────────────────────────
-    async def _buffer():
-        token = os.getenv("BUFFER_ACCESS_TOKEN", "")
-        if not token:
-            raise ValueError("BUFFER_ACCESS_TOKEN is not set")
+    # ── 5. YouTube OAuth credentials ────────────────────────────────────────
+    async def _yt_oauth():
+        client_id     = os.getenv("YOUTUBE_CLIENT_ID", "")
+        client_secret = os.getenv("YOUTUBE_CLIENT_SECRET", "")
+        refresh_token = os.getenv("YOUTUBE_REFRESH_TOKEN", "")
+        missing = [n for n, v in [
+            ("YOUTUBE_CLIENT_ID", client_id),
+            ("YOUTUBE_CLIENT_SECRET", client_secret),
+            ("YOUTUBE_REFRESH_TOKEN", refresh_token),
+        ] if not v]
+        if missing:
+            raise ValueError(f"Missing env vars: {', '.join(missing)}")
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(
-                "https://api.bufferapp.com/1/user.json",
-                params={"access_token": token},
+            r = await c.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "client_id":     client_id,
+                    "client_secret": client_secret,
+                    "refresh_token": refresh_token,
+                    "grant_type":    "refresh_token",
+                },
             )
-            if r.status_code == 401:
-                raise ValueError("Invalid Buffer access token")
+            if r.status_code == 400:
+                raise ValueError(f"Token refresh failed: {r.json().get('error_description','bad request')}")
             r.raise_for_status()
-            data = r.json()
-        return f"Buffer connected as @{data.get('name', 'unknown')}"
+        return "YouTube OAuth credentials valid — upload ready"
     checks.append(await _check(
-        "Buffer Access Token",
-        "Set BUFFER_ACCESS_TOKEN env var. Get token at buffer.com → Settings → Apps",
-        _buffer()
+        "YouTube OAuth (upload)",
+        "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN. "
+        "Create OAuth credentials at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client ID",
+        _yt_oauth()
     ))
 
     # ── 6. YouTube Data API key ──────────────────────────────────────────────
@@ -145,19 +157,26 @@ async def run_checks() -> Dict[str, Any]:
         "hint": "",
     })
 
-    # ── 8. Buffer profile IDs ────────────────────────────────────────────────
-    configured = []
-    missing = []
-    for p in ["INSTAGRAM", "FACEBOOK", "TIKTOK", "YOUTUBE", "TWITTER", "LINKEDIN"]:
-        val = os.getenv(f"BUFFER_{p}_PROFILE_ID", "")
-        (configured if val else missing).append(p.lower())
-    status = "pass" if configured else "warn"
-    detail = f"Configured: {', '.join(configured) or 'none'} | Missing: {', '.join(missing) or 'none'}"
+    # ── 8. YouTube channel check ─────────────────────────────────────────────
+    yt_key = os.getenv("YOUTUBE_DATA_API_KEY", "")
+    yt_oauth_ok = all([
+        os.getenv("YOUTUBE_CLIENT_ID"),
+        os.getenv("YOUTUBE_CLIENT_SECRET"),
+        os.getenv("YOUTUBE_REFRESH_TOKEN"),
+    ])
     checks.append({
-        "name": "Buffer Profile IDs",
-        "status": status,
-        "detail": detail,
-        "hint": "Set BUFFER_<PLATFORM>_PROFILE_ID env vars to enable publishing to those platforms",
+        "name": "YouTube Publishing",
+        "status": "pass" if yt_oauth_ok else "warn",
+        "detail": (
+            "OAuth credentials set — direct upload enabled"
+            if yt_oauth_ok
+            else "OAuth credentials not set — upload will fail. Data API key is set for trending/parrot."
+        ),
+        "hint": (
+            ""
+            if yt_oauth_ok
+            else "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN for upload support."
+        ),
     })
 
     passed  = sum(1 for c in checks if c["status"] == "pass")
