@@ -1,12 +1,15 @@
 import logging
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.video import Video, VideoStatus
+from app.models.post import Post, Platform, PostStatus
 from app.schemas.video import (
     GenerateVideoRequest,
     PublishVideoRequest,
@@ -17,6 +20,12 @@ from app.schemas.video import (
 )
 from app.schemas.post import PostResponse
 from app.services.video_pipeline import VideoPipelineService, get_pipeline
+
+
+class ScheduleVideoRequest(BaseModel):
+    platforms: List[str]
+    scheduled_at: datetime          # ISO-8601 e.g. "2026-07-04T09:00:00Z"
+    caption: Optional[str] = None
 
 logger = logging.getLogger(__name__)
 
@@ -236,5 +245,74 @@ def mark_video_failed(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update video status: {str(e)}")
+
+@router.post("/{video_id}/schedule", response_model=list[PostResponse], status_code=201)
+async def schedule_video(
+    video_id: UUID,
+    request: ScheduleVideoRequest,
+    db: Session = Depends(get_db),
+    pipeline: VideoPipelineService = Depends(get_pipeline),
+):
+    """
+    Schedule a ready video for future publishing via Buffer.
+    Pass `scheduled_at` in ISO-8601 UTC format and the platforms to post to.
+    Creates a Post DB record per platform in SCHEDULED status.
+    """
+    from app.models.content_script import ContentScript
+
+    video = db.query(Video).filter(Video.id == video_id).first()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if video.status != VideoStatus.READY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Video must be READY before scheduling (current status: {video.status})"
+        )
+    if not video.video_url:
+        raise HTTPException(status_code=400, detail="Video has no URL yet — wait for generation to complete")
+
+    # Build caption
+    caption = request.caption
+    if not caption:
+        script = db.query(ContentScript).filter(ContentScript.id == video.script_id).first()
+        if script:
+            caption = f"{script.hook} {script.cta}".strip()
+
+    # Call Buffer with scheduled_at
+    from app.services.buffer_service import BufferService, get_profile_ids
+    created: List[Post] = []
+    try:
+        buf = BufferService()
+        profile_map = get_profile_ids()
+        for platform_name in request.platforms:
+            pid = profile_map.get(platform_name)
+            if not pid:
+                continue
+            try:
+                platform_enum = Platform(platform_name)
+            except ValueError:
+                continue
+            buf.create_post(
+                profile_ids=[pid],
+                text=caption or "",
+                media={"video": str(video.video_url)},
+                scheduled_at=request.scheduled_at,
+            )
+            post = Post(
+                video_id=video_id,
+                platform=platform_enum,
+                scheduled_at=request.scheduled_at,
+                status=PostStatus.SCHEDULED,
+            )
+            db.add(post)
+            created.append(post)
+    except Exception as exc:
+        logger.warning("Buffer schedule call failed: %s — saving DB records anyway", exc)
+
+    db.commit()
+    for p in created:
+        db.refresh(p)
+    return created
+
 
 # Made with Bob

@@ -25,6 +25,7 @@ from app.api.routes.products import router as products_router
 from app.api.routes.conversions import router as conversions_router
 from app.api.routes.integrations import router as integrations_router
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes.health_checks import router as health_router
 from app.core.database import init_db
 
 
@@ -107,6 +108,7 @@ app.include_router(products_router)
 app.include_router(conversions_router)
 app.include_router(integrations_router)
 app.include_router(analytics_router)
+app.include_router(health_router)
 
 
 @app.get("/health")

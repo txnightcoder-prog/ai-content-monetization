@@ -81,7 +81,7 @@ interface ParrotResult {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'help'>('home');
   const [topic, setTopic] = useState('');
   const [niche, setNiche] = useState('AI tools');
   const [loading, setLoading] = useState(false);
@@ -222,36 +222,72 @@ function App() {
               {activeVideo.thumbnail_url && (
                 <img src={activeVideo.thumbnail_url} alt="thumbnail" className="video-thumbnail" />
               )}
+              {/* Preview modal trigger */}
               {activeVideo.video_url && (
-                <a href={activeVideo.video_url} target="_blank" rel="noopener noreferrer" className="video-download-link">
-                  ⬇️ Download / Preview Video
-                </a>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button className="publish-button"
+                    style={{ background: 'rgba(59,130,246,0.8)', flex: 1 }}
+                    onClick={() => setPreviewUrl(activeVideo.video_url)}>
+                    ▶ Preview Video
+                  </button>
+                  <a href={activeVideo.video_url} target="_blank" rel="noopener noreferrer"
+                    className="video-download-link" style={{ flex: 1, textAlign: 'center' }}>
+                    ⬇️ Download
+                  </a>
+                </div>
               )}
               {activeVideo.duration && (
                 <p className="video-duration">Duration: {activeVideo.duration}s</p>
               )}
+              <p className="script-id-copy">🆔 Video ID: <strong>{activeVideo.id}</strong></p>
               {publishSuccess
                 ? <div className="publish-success">{publishSuccess}</div>
                 : (
-                  <button
-                    className="publish-button"
+                  <button className="publish-button"
                     onClick={() => publishVideo(activeVideo.id)}
-                    disabled={publishLoading}
-                  >
-                    {publishLoading ? '📤 Scheduling…' : '📤 Publish to All Platforms'}
+                    disabled={publishLoading}>
+                    {publishLoading ? '📤 Publishing…' : '📤 Publish Now to All Platforms'}
                   </button>
                 )
               }
+              <button className="idea-button" style={{ marginTop: '0.5rem' }}
+                onClick={() => { setScheduleVideoId(activeVideo.id); document.getElementById('scheduler')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                📅 Schedule for Later
+              </button>
             </div>
           )}
 
           {activeVideo.status === 'failed' && (
             <p style={{ color: '#fca5a5', marginTop: '1rem' }}>
-              Generation failed. Check that your VICSEE_API_KEY is valid, then try again.
+              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your Vicsee API key.
             </p>
           )}
         </div>
       )}
+
+      {/* Preview modal */}
+      {previewUrl && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={() => setPreviewUrl(null)}>
+          <div style={{ background: '#0f172a', borderRadius: '1rem', overflow: 'hidden', maxWidth: '400px', width: '100%' }}
+            onClick={e => e.stopPropagation()}>
+            <video src={previewUrl} controls autoPlay style={{ width: '100%', display: 'block' }} />
+            <div style={{ padding: '0.75rem', display: 'flex', gap: '0.5rem' }}>
+              <a href={previewUrl} download target="_blank" rel="noopener noreferrer"
+                className="video-download-link" style={{ flex: 1, textAlign: 'center', fontSize: '0.875rem' }}>
+                ⬇️ Download
+              </a>
+              <button onClick={() => setPreviewUrl(null)}
+                style={{ flex: 1, background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '0.5rem', padding: '0.6rem', cursor: 'pointer', fontWeight: 600 }}>
+                ✕ Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scheduler section */}
+      <div id="scheduler">{renderScheduler()}</div>
 
       {/* History */}
       {videoHistory.length > 1 && (
@@ -479,6 +515,279 @@ function App() {
           {renderTrendingItems(trendResult[trendTab], trendTab)}
         </div>
       )}
+    </div>
+  );
+
+  // ── Diagnostics state ────────────────────────────────────────────────────
+  const [diagLoading, setDiagLoading]   = useState(false);
+  const [diagResult, setDiagResult]     = useState<null | { summary: { total: number; passed: number; failed: number; warned: number }; checks: Array<{ name: string; status: 'pass'|'fail'|'warn'; detail: string; hint: string }> }>(null);
+
+  const runDiagnostics = async () => {
+    setDiagLoading(true); setDiagResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/health/checks`);
+      setDiagResult(await res.json());
+    } catch { setDiagResult(null); }
+    finally { setDiagLoading(false); }
+  };
+
+  const diagColor = (s: string) => ({ pass: '#10b981', fail: '#ef4444', warn: '#f59e0b' })[s] ?? '#94a3b8';
+  const diagIcon  = (s: string) => ({ pass: '✅', fail: '❌', warn: '⚠️' })[s] ?? '•';
+
+  const renderDiagnostics = () => (
+    <div className="videos-page">
+      <h1>🔧 System Diagnostics</h1>
+      <p className="subtitle">Run all checks to see exactly what's working and what needs fixing</p>
+
+      <div className="generator-form">
+        <button className="generate-button" onClick={runDiagnostics} disabled={diagLoading}>
+          {diagLoading ? '🔍 Running checks…' : '🔧 Run All Checks'}
+        </button>
+      </div>
+
+      {diagResult && (
+        <div>
+          {/* Summary bar */}
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', margin: '1rem 0' }}>
+            {[
+              { label: 'Passed', count: diagResult.summary.passed, color: '#10b981' },
+              { label: 'Failed', count: diagResult.summary.failed, color: '#ef4444' },
+              { label: 'Warnings', count: diagResult.summary.warned, color: '#f59e0b' },
+            ].map(b => (
+              <div key={b.label} style={{ background: `${b.color}22`, border: `1px solid ${b.color}`, borderRadius: '0.5rem', padding: '0.6rem 1rem', textAlign: 'center', minWidth: '80px' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: b.color }}>{b.count}</div>
+                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{b.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Check list */}
+          <div className="scripts-list">
+            {diagResult.checks.map((c, i) => (
+              <div key={i} className="script-card" style={{ borderLeft: `4px solid ${diagColor(c.status)}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '1rem' }}>{diagIcon(c.status)} {c.name}</span>
+                  <span style={{ background: diagColor(c.status), color: '#fff', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}>{c.status.toUpperCase()}</span>
+                </div>
+                <p style={{ color: '#cbd5e1', fontSize: '0.875rem', margin: '0.5rem 0 0' }}>{c.detail}</p>
+                {c.hint && (
+                  <div style={{ marginTop: '0.5rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem' }}>
+                    <p style={{ color: '#fca5a5', fontSize: '0.8125rem' }}>💡 Fix: {c.hint}</p>
+                    {c.name === 'Vicsee API Key' && (
+                      <a href="https://vicsee.com/?via=john" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Get Vicsee API key (affiliate link)
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── Schedule state (used inside Videos page) ──────────────────────────────
+  const [scheduleVideoId, setScheduleVideoId]     = useState('');
+  const [schedPlatforms, setSchedPlatforms]       = useState<string[]>(['tiktok', 'instagram', 'youtube']);
+  const [schedDate, setSchedDate]                 = useState('');
+  const [schedTime, setSchedTime]                 = useState('09:00');
+  const [schedCaption, setSchedCaption]           = useState('');
+  const [schedLoading, setSchedLoading]           = useState(false);
+  const [schedResult, setSchedResult]             = useState('');
+  const [schedError, setSchedError]               = useState('');
+  const [previewUrl, setPreviewUrl]               = useState<string | null>(null);
+
+  const togglePlatform = (p: string) =>
+    setSchedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
+
+  const submitSchedule = async () => {
+    if (!scheduleVideoId.trim()) { setSchedError('Enter a Video ID'); return; }
+    if (!schedDate) { setSchedError('Pick a date'); return; }
+    if (!schedPlatforms.length) { setSchedError('Select at least one platform'); return; }
+    setSchedLoading(true); setSchedError(''); setSchedResult('');
+    try {
+      const iso = new Date(`${schedDate}T${schedTime}:00Z`).toISOString();
+      const res = await fetch(`${API_BASE}/api/v1/videos/${scheduleVideoId.trim()}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ platforms: schedPlatforms, scheduled_at: iso, caption: schedCaption || undefined }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const posts = await res.json();
+      setSchedResult(`✅ Scheduled on ${posts.length} platform${posts.length !== 1 ? 's' : ''} for ${new Date(iso).toLocaleString()}`);
+    } catch (err) { setSchedError(err instanceof Error ? err.message : 'Schedule failed'); }
+    finally { setSchedLoading(false); }
+  };
+
+  const renderScheduler = () => (
+    <div style={{ marginTop: '2rem' }}>
+      <div className="generator-form">
+        <h2 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>📅 Schedule a Video</h2>
+        <div className="form-group">
+          <label>Video ID (must be status: ready)</label>
+          <input type="text" value={scheduleVideoId} onChange={e => setScheduleVideoId(e.target.value)}
+            placeholder="Paste video ID from above" disabled={schedLoading} />
+        </div>
+        <div className="form-group">
+          <label>Date</label>
+          <input type="date" value={schedDate} onChange={e => setSchedDate(e.target.value)}
+            min={new Date().toISOString().split('T')[0]} disabled={schedLoading}
+            style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.75rem', width: '100%', fontSize: '1rem' }} />
+        </div>
+        <div className="form-group">
+          <label>Time (UTC)</label>
+          <input type="time" value={schedTime} onChange={e => setSchedTime(e.target.value)}
+            disabled={schedLoading}
+            style={{ background: 'rgba(15,23,42,0.5)', border: '1px solid rgba(148,163,184,0.2)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.75rem', width: '100%', fontSize: '1rem' }} />
+        </div>
+        <div className="form-group">
+          <label>Platforms</label>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {['tiktok','instagram','youtube','facebook','twitter','linkedin'].map(p => (
+              <button key={p} type="button" onClick={() => togglePlatform(p)}
+                style={{ padding: '0.4rem 0.9rem', borderRadius: '999px', border: `2px solid ${platformColor(p)}`,
+                  background: schedPlatforms.includes(p) ? platformColor(p) : 'transparent',
+                  color: schedPlatforms.includes(p) ? '#fff' : platformColor(p),
+                  fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem', transition: 'all 0.2s' }}>
+                {platformIcon(p)} {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="form-group">
+          <label>Caption (optional — defaults to hook + CTA)</label>
+          <input type="text" value={schedCaption} onChange={e => setSchedCaption(e.target.value)}
+            placeholder="Custom caption for this post" disabled={schedLoading} />
+        </div>
+        {schedError && <div className="error-message">{schedError}</div>}
+        {schedResult && <div className="publish-success">{schedResult}</div>}
+        <button className="publish-button" onClick={submitSchedule} disabled={schedLoading}>
+          {schedLoading ? '📅 Scheduling…' : '📅 Schedule Post'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Monetize page ─────────────────────────────────────────────────────────
+  const renderMonetize = () => (
+    <div className="videos-page">
+      <h1>💰 Monetization Hub</h1>
+      <p className="subtitle">Ways to make money with this platform — from day one</p>
+
+      {/* Affiliate banner */}
+      <div style={{ background: 'linear-gradient(135deg,rgba(139,92,246,0.15),rgba(59,130,246,0.15))', border: '1px solid rgba(139,92,246,0.4)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+        <h2 style={{ color: '#a78bfa', marginBottom: '0.5rem' }}>🦜 Earn with Vicsee Affiliate</h2>
+        <p style={{ color: '#cbd5e1', marginBottom: '1rem' }}>Share Vicsee with other creators and earn a commission on every signup. You're already using it — just share your link.</p>
+        <a href="https://vicsee.com/?via=john" target="_blank" rel="noopener noreferrer"
+          className="publish-button" style={{ display: 'inline-block', textDecoration: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontSize: '1rem', textAlign: 'center' }}>
+          🔗 Your Vicsee Affiliate Link →
+        </a>
+        <p style={{ color: '#64748b', fontSize: '0.8125rem', marginTop: '0.75rem' }}>vicsee.com/?via=john</p>
+      </div>
+
+      {/* Revenue streams grid */}
+      {[
+        {
+          icon: '📺', title: 'YouTube Ad Revenue', est: '$3–25 CPM',
+          color: '#ef4444',
+          steps: [
+            'Hit 1,000 subscribers + 4,000 watch hours to unlock monetization',
+            'Target Finance/AI/Tech niches for highest CPM ($8–25)',
+            'Use blueprints to create 8–15 min videos (longer = more ad breaks)',
+            'Post 3–5 videos/week using the Generate + Publish flow',
+          ],
+        },
+        {
+          icon: '🤝', title: 'Affiliate Marketing', est: '$50–500/sale',
+          color: '#10b981',
+          steps: [
+            'Promote Vicsee in every video description with your affiliate link',
+            'Join ClickBank, Impact, or PartnerStack for AI tool offers',
+            'Add affiliate links in video descriptions and pinned comments',
+            'Create "Best AI Tools" videos — highest-converting affiliate content',
+          ],
+          link: { label: '🔗 Vicsee Affiliate Link', url: 'https://vicsee.com/?via=john' },
+        },
+        {
+          icon: '📱', title: 'TikTok Creator Fund / Series', est: '$0.02–0.04/view',
+          color: '#a78bfa',
+          steps: [
+            'Use the Generate + Publish flow to post 3 videos/day on TikTok',
+            'Enable TikTok Creator Fund at 10K followers',
+            'Sell TikTok Series (paid content) once you have an engaged audience',
+            'Add a link-in-bio to your affiliate offers or digital products',
+          ],
+        },
+        {
+          icon: '💼', title: 'Sell Digital Products', est: '$27–297/sale',
+          color: '#f59e0b',
+          steps: [
+            'Package your video blueprints as a "Content Creation Course"',
+            'Sell an AI tools guide as an ebook ($27–97)',
+            'Offer a "Done-For-You" video script service to other creators',
+            'Use Gumroad, Stan Store, or Teachable — zero upfront cost',
+          ],
+        },
+        {
+          icon: '🏢', title: 'Brand Sponsorships', est: '$200–5000/video',
+          color: '#3b82f6',
+          steps: [
+            'At 10K followers, start reaching out to AI/SaaS companies',
+            'Use your view stats from the Analytics tab to pitch sponsors',
+            'Charge $200–500/video at 10K, $1000–5000 at 100K',
+            'Platforms: AspireIQ, Grapevine, direct email outreach',
+          ],
+        },
+        {
+          icon: '🔁', title: 'Repurpose + License Content', est: 'Passive income',
+          color: '#06b6d4',
+          steps: [
+            'License your viral video scripts to other creators for $50–200/script',
+            'Turn blueprints into newsletter issues (Beehiiv, Substack)',
+            'Repurpose every long video into 5 Shorts automatically',
+            'Sell access to your blueprint library as a monthly membership',
+          ],
+        },
+      ].map((stream, i) => (
+        <div key={i} className="script-card" style={{ borderLeft: `4px solid ${stream.color}`, marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <h3 style={{ color: '#f1f5f9', fontSize: '1.1rem' }}>{stream.icon} {stream.title}</h3>
+            <span style={{ background: `${stream.color}22`, color: stream.color, borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.8125rem', fontWeight: 700 }}>{stream.est}</span>
+          </div>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {stream.steps.map((s, j) => (
+              <li key={j} style={{ color: '#cbd5e1', fontSize: '0.875rem', padding: '0.25rem 0 0.25rem 1.25rem', position: 'relative', lineHeight: 1.5 }}>
+                <span style={{ position: 'absolute', left: 0, color: stream.color }}>▸</span>{s}
+              </li>
+            ))}
+          </ul>
+          {stream.link && (
+            <a href={stream.link.url} target="_blank" rel="noopener noreferrer"
+              className="video-download-link" style={{ display: 'inline-block', marginTop: '0.75rem', fontSize: '0.875rem' }}>
+              {stream.link.label}
+            </a>
+          )}
+        </div>
+      ))}
+
+      <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.75rem', padding: '1.25rem', marginTop: '1rem' }}>
+        <h3 style={{ color: '#10b981', marginBottom: '0.5rem' }}>📊 Realistic Income Timeline</h3>
+        {[
+          { month: 'Month 1–2', income: '$0–50', action: 'Setup, post daily, build audience. Focus on affiliate links.' },
+          { month: 'Month 3–4', income: '$50–300', action: 'First affiliate commissions + YouTube unlocks. Scale to 5 videos/day.' },
+          { month: 'Month 5–6', income: '$300–1,000', action: 'Brand deals start. Sell first digital product. TikTok fund active.' },
+          { month: 'Month 7–12', income: '$1,000–5,000', action: 'Sponsorships + course income + YouTube ads. Fully automated.' },
+        ].map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: '1rem', padding: '0.6rem 0', borderBottom: i < 3 ? '1px solid rgba(148,163,184,0.1)' : 'none', flexWrap: 'wrap' }}>
+            <span style={{ color: '#10b981', fontWeight: 700, minWidth: '110px', fontSize: '0.875rem' }}>{row.month}</span>
+            <span style={{ color: '#34d399', fontWeight: 700, minWidth: '90px', fontSize: '0.875rem' }}>{row.income}</span>
+            <span style={{ color: '#94a3b8', fontSize: '0.875rem', flex: 1 }}>{row.action}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 
@@ -1150,6 +1459,18 @@ Example:
             🔥 Trending
           </button>
           <button
+            className={currentPage === 'diagnostics' ? 'active' : ''}
+            onClick={() => setCurrentPage('diagnostics')}
+          >
+            🔧 Diagnostics
+          </button>
+          <button
+            className={currentPage === 'monetize' ? 'active' : ''}
+            onClick={() => setCurrentPage('monetize')}
+          >
+            💰 Monetize
+          </button>
+          <button
             className={currentPage === 'help' ? 'active' : ''}
             onClick={() => setCurrentPage('help')}
           >
@@ -1165,6 +1486,8 @@ Example:
          currentPage === 'videos' ? renderVideos() :
          currentPage === 'parrot' ? renderParrot() :
          currentPage === 'trending' ? renderTrending() :
+         currentPage === 'diagnostics' ? renderDiagnostics() :
+         currentPage === 'monetize' ? renderMonetize() :
          renderHelp()}
       </main>
 
