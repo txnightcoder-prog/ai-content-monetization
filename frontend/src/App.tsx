@@ -277,7 +277,7 @@ function App() {
               <div className="progress-bar">
                 <div className="progress-fill" />
               </div>
-              <p>Video is being created by Vicsee — check back in 2–5 minutes. This page auto-refreshes every 10 s.</p>
+              <p>Video is being assembled — voiceover + stock footage + captions. Check back in 3–8 minutes. This page auto-refreshes every 10 s.</p>
             </div>
           )}
 
@@ -323,7 +323,7 @@ function App() {
 
           {activeVideo.status === 'failed' && (
             <p style={{ color: '#fca5a5', marginTop: '1rem' }}>
-              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your Vicsee API key.
+              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your ElevenLabs and Pexels keys.
             </p>
           )}
         </div>
@@ -659,10 +659,16 @@ function App() {
                 {c.hint && (
                   <div style={{ marginTop: '0.5rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem' }}>
                     <p style={{ color: '#fca5a5', fontSize: '0.8125rem' }}>💡 Fix: {c.hint}</p>
-                    {c.name === 'Vicsee API Key' && (
-                      <a href="https://vicsee.com/?via=john" target="_blank" rel="noopener noreferrer"
+                    {c.name === 'ElevenLabs API Key' && (
+                      <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
-                        👉 Get Vicsee API key (affiliate link)
+                        👉 Get free ElevenLabs key →
+                      </a>
+                    )}
+                    {c.name === 'Pexels API Key' && (
+                      <a href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Get free Pexels API key →
                       </a>
                     )}
                   </div>
@@ -960,13 +966,13 @@ function App() {
 
       {/* Affiliate banner */}
       <div style={{ background: 'linear-gradient(135deg,rgba(139,92,246,0.15),rgba(59,130,246,0.15))', border: '1px solid rgba(139,92,246,0.4)', borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ color: '#a78bfa', marginBottom: '0.5rem' }}>🦜 Earn with Vicsee Affiliate</h2>
-        <p style={{ color: '#cbd5e1', marginBottom: '1rem' }}>Share Vicsee with other creators and earn a commission on every signup. You're already using it — just share your link.</p>
-        <a href="https://vicsee.com/?via=john" target="_blank" rel="noopener noreferrer"
+        <h2 style={{ color: '#a78bfa', marginBottom: '0.5rem' }}>🎙️ Earn with ElevenLabs Affiliate</h2>
+        <p style={{ color: '#cbd5e1', marginBottom: '1rem' }}>Share ElevenLabs with other creators and earn commission on every signup. It powers the voiceovers in every video you publish.</p>
+        <a href="https://elevenlabs.io/affiliate" target="_blank" rel="noopener noreferrer"
           className="publish-button" style={{ display: 'inline-block', textDecoration: 'none', padding: '0.75rem 1.5rem', borderRadius: '0.5rem', fontSize: '1rem', textAlign: 'center' }}>
-          🔗 Your Vicsee Affiliate Link →
+          🔗 ElevenLabs Affiliate Link →
         </a>
-        <p style={{ color: '#64748b', fontSize: '0.8125rem', marginTop: '0.75rem' }}>vicsee.com/?via=john</p>
+        <p style={{ color: '#64748b', fontSize: '0.8125rem', marginTop: '0.75rem' }}>elevenlabs.io/affiliate</p>
       </div>
 
       {/* Revenue streams grid */}
@@ -985,12 +991,12 @@ function App() {
           icon: '🤝', title: 'Affiliate Marketing', est: '$50–500/sale',
           color: '#10b981',
           steps: [
-            'Promote Vicsee in every video description with your affiliate link',
+            'Promote ElevenLabs in every video description with your affiliate link',
             'Join ClickBank, Impact, or PartnerStack for AI tool offers',
             'Add affiliate links in video descriptions and pinned comments',
             'Create "Best AI Tools" videos — highest-converting affiliate content',
           ],
-          link: { label: '🔗 Vicsee Affiliate Link', url: 'https://vicsee.com/?via=john' },
+          link: { label: '🔗 ElevenLabs Affiliate Link', url: 'https://elevenlabs.io/affiliate' },
         },
         {
           icon: '📱', title: 'TikTok Creator Fund / Series', est: '$0.02–0.04/view',

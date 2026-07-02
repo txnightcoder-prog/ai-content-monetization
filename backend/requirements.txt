@@ -30,3 +30,6 @@ openai==1.57.4
 # Additional utilities
 python-multipart==0.0.20
 python-dateutil==2.9.0.post0
+
+# Video assembly
+httpx[http2]==0.28.1

@@ -8,7 +8,7 @@ from app.models.video import VideoStatus
 
 class VideoBase(BaseModel):
     """Base schema for Video with common fields"""
-    vicsee_video_id: Optional[str] = Field(None, description="Vicsee video job ID", alias="heygen_video_id")
+    render_id: Optional[str] = Field(None, description="Video generation job ID", alias="heygen_video_id")
     video_url: Optional[HttpUrl] = Field(None, description="URL to the generated video")
     thumbnail_url: Optional[HttpUrl] = Field(None, description="URL to video thumbnail")
     duration: Optional[int] = Field(None, ge=0, description="Video duration in seconds")
@@ -26,7 +26,7 @@ class VideoCreate(BaseModel):
 class GenerateVideoRequest(BaseModel):
     """
     Request body for POST /api/v1/videos/generate.
-    Creates a Video record and immediately fires off Vicsee generation in the background.
+    Creates a Video record and immediately fires off local video generation in the background.
     """
     script_id: UUID = Field(..., description="ID of the approved content script to generate from")
 

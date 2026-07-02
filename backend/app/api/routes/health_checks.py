@@ -75,25 +75,47 @@ async def run_checks() -> Dict[str, Any]:
         _openai()
     ))
 
-    # ── 4. Vicsee API key ────────────────────────────────────────────────────
-    async def _vicsee():
-        key = os.getenv("VICSEE_API_KEY", "")
+    # ── 4. ElevenLabs API key ────────────────────────────────────────────────
+    async def _elevenlabs():
+        key = os.getenv("ELEVENLABS_API_KEY", "")
         if not key:
-            raise ValueError("VICSEE_API_KEY is not set")
-        base = os.getenv("VICSEE_BASE_URL", "https://api.vicsee.com/v1")
+            raise ValueError("ELEVENLABS_API_KEY is not set")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
-                f"{base}/account",
-                headers={"Authorization": f"Bearer {key}"},
+                "https://api.elevenlabs.io/v1/user/subscription",
+                headers={"xi-api-key": key},
             )
             if r.status_code == 401:
-                raise ValueError("Invalid Vicsee API key (401)")
+                raise ValueError("Invalid ElevenLabs API key (401)")
             r.raise_for_status()
-        return "Vicsee key is valid"
+            data = r.json()
+        chars_left = data.get("character_limit", 0) - data.get("character_count", 0)
+        return f"ElevenLabs key valid — {chars_left:,} characters remaining"
     checks.append(await _check(
-        "Vicsee API Key",
-        "Set VICSEE_API_KEY env var. Get key at vicsee.com → Settings → API",
-        _vicsee()
+        "ElevenLabs API Key",
+        "Set ELEVENLABS_API_KEY. Get a free key at elevenlabs.io (10,000 chars/mo free).",
+        _elevenlabs()
+    ))
+
+    # ── 4b. Pexels API key ───────────────────────────────────────────────────
+    async def _pexels():
+        key = os.getenv("PEXELS_API_KEY", "")
+        if not key:
+            raise ValueError("PEXELS_API_KEY is not set")
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://api.pexels.com/videos/search",
+                params={"query": "nature", "per_page": "1"},
+                headers={"Authorization": key},
+            )
+            if r.status_code == 401:
+                raise ValueError("Invalid Pexels API key (401)")
+            r.raise_for_status()
+        return "Pexels API key is valid"
+    checks.append(await _check(
+        "Pexels API Key",
+        "Set PEXELS_API_KEY. Get a free key at pexels.com/api (free, unlimited).",
+        _pexels()
     ))
 
     # ── 5. YouTube OAuth credentials ────────────────────────────────────────

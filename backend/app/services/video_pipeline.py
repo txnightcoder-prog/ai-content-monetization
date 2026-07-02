@@ -2,7 +2,7 @@
 Video Pipeline Service
 ======================
 Orchestrates:
-  1. Vicsee video generation (background task)
+  1. Local video generation — ElevenLabs TTS + Pexels clips + FFmpeg (background task)
   2. YouTube direct upload via OAuth (publish / schedule)
 
 Publishing uses the YouTube Data API v3 resumable upload endpoint.
@@ -23,7 +23,7 @@ from app.core.database import get_db
 from app.models.video import Video, VideoStatus
 from app.models.post import Post, Platform, PostStatus
 from app.models.content_script import ContentScript
-from app.services.vicsee_service import VicseeService
+from app.services.local_video_service import LocalVideoService
 
 logger = logging.getLogger(__name__)
 
@@ -113,21 +113,20 @@ async def _upload_to_youtube(
 
 class VideoPipelineService:
     """
-    Background pipeline: Vicsee generation → YouTube upload.
-    All Buffer references removed; YouTube is the only publish target.
+    Background pipeline: local video generation (ElevenLabs+Pexels+FFmpeg) → YouTube upload.
     """
 
     def __init__(
         self,
         db: Session,
-        vicsee_service: Optional[VicseeService] = None,
+        video_service: Optional[LocalVideoService] = None,
     ):
         self.db = db
-        self._vicsee = vicsee_service
+        self._video = video_service
 
     # ------------------------------------------------------------------
     async def generate(self, video_id: UUID) -> None:
-        """Background task: submit to Vicsee and poll to completion."""
+        """Background task: generate video locally and poll to completion."""
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             logger.error("VideoPipeline.generate: video %s not found", video_id)
@@ -141,23 +140,26 @@ class VideoPipelineService:
             self._set_failed(video)
             return
 
-        if not self._vicsee:
-            logger.warning("VicseeService not configured — marking video %s failed", video_id)
+        if not self._video:
+            logger.warning("LocalVideoService not configured — marking video %s failed", video_id)
             self._set_failed(video)
             return
 
         script_text = "\n\n".join(p for p in [script.hook, script.body, script.cta] if p)
+        caption = script.hook or script_text[:100]
 
         try:
-            result = await self._vicsee.create_video(script=script_text, aspect_ratio="9:16")
-            vicsee_id = result.get("video_id")
-            if not vicsee_id:
-                raise RuntimeError("Vicsee returned no video_id")
+            result = await self._video.create_video(script=script_text, aspect_ratio="9:16")
+            job_id = result.get("video_id")
+            if not job_id:
+                raise RuntimeError("LocalVideoService returned no job id")
 
-            video.heygen_video_id = vicsee_id
+            video.heygen_video_id = job_id
             self.db.commit()
 
-            status_data = await self._vicsee.wait_for_completion(vicsee_id)
+            status_data = await self._video.wait_for_completion(
+                job_id, script=script_text, caption_text=caption
+            )
             video.video_url     = status_data.get("video_url")
             video.thumbnail_url = status_data.get("thumbnail_url")
             video.duration      = status_data.get("duration")
@@ -166,7 +168,7 @@ class VideoPipelineService:
             logger.info("Video %s READY: %s", video_id, video.video_url)
 
         except Exception as exc:
-            logger.error("VideoPipeline.generate failed for %s: %s", video_id, exc)
+            logger.error("Local video pipeline failed for %s: %s", video_id, exc)
             self._set_failed(video)
 
     # ------------------------------------------------------------------
@@ -226,13 +228,14 @@ class VideoPipelineService:
 
 
 # ------------------------------------------------------------------
-def get_vicsee_service() -> Optional[VicseeService]:
-    if os.getenv("VICSEE_API_KEY"):
-        return VicseeService()
+def get_video_service() -> Optional[LocalVideoService]:
+    """Return a LocalVideoService if both ElevenLabs and Pexels keys are set."""
+    if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
+        return LocalVideoService()
     return None
 
 
 def get_pipeline(db: Session = Depends(get_db)) -> VideoPipelineService:
-    return VideoPipelineService(db=db, vicsee_service=get_vicsee_service())
+    return VideoPipelineService(db=db, video_service=get_video_service())
 
 # Made with Bob
