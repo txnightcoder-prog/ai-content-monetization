@@ -179,12 +179,11 @@ async def run_checks() -> Dict[str, Any]:
             raise ValueError(
                 "DID_API_KEY is not set — video generation uses local pipeline (ElevenLabs+Pexels+FFmpeg)"
             )
-        import base64
-        token = base64.b64encode(f"{key}:".encode()).decode()
+        # D-ID keys are already base64(email:secret) — use directly
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://api.d-id.com/credits",
-                headers={"Authorization": f"Basic {token}", "Accept": "application/json"},
+                headers={"Authorization": f"Basic {key}", "Accept": "application/json"},
             )
             if r.status_code == 401:
                 raise ValueError("Invalid D-ID API key (401). Check DID_API_KEY env var.")
