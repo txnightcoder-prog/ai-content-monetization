@@ -27,8 +27,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 DID_BASE         = "https://api.d-id.com"
-# Default neutral female presenter included in every D-ID account
-DEFAULT_PRESENTER = "https://create-images-results.d-id.com/DefaultPresenters/Noelle_f/image.jpeg"
+# D-ID's own public sample image — works on all plans without restrictions
+DEFAULT_PRESENTER = "https://d-id-public-bucket.s3.amazonaws.com/alice.jpg"
 DEFAULT_VOICE     = "en-US-JennyNeural"
 
 
@@ -57,11 +57,9 @@ class DIDService:
     # ── Auth helper ────────────────────────────────────────────────────────────
 
     def _headers(self) -> Dict[str, str]:
-        import base64
-        # D-ID uses HTTP Basic auth: base64(api_key:)
-        token = base64.b64encode(f"{self.api_key}:".encode()).decode()
+        # D-ID provides the API key already as base64(email:secret) — use it directly
         return {
-            "Authorization": f"Basic {token}",
+            "Authorization": f"Basic {self.api_key}",
             "Content-Type":  "application/json",
             "Accept":        "application/json",
         }
@@ -76,17 +74,16 @@ class DIDService:
         payload = {
             "source_url": self.presenter_url,
             "script": {
-                "type":          "text",
-                "input":         script[:2000],   # D-ID max per talk
+                "type":     "text",
+                "input":    script[:2000],   # D-ID max per talk
                 "provider": {
-                    "type":      "microsoft",
-                    "voice_id":  self.voice_id,
+                    "type":     "microsoft",
+                    "voice_id": self.voice_id,
                 },
             },
             "config": {
-                "fluent":        True,
-                "pad_audio":     0.0,
-                "stitch":        True,
+                "fluent":    True,
+                "pad_audio": 0.0,
             },
         }
 
