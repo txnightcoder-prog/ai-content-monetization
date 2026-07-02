@@ -157,6 +157,7 @@ function App() {
 
 
   // ── Video page state ──────────────────────────────────────────────────────
+  const [videoProvider, setVideoProvider]       = useState<{provider:string;label:string;detail:string;color:string}|null>(null);
   const [videoScriptId, setVideoScriptId]       = useState('');
   const [videoLoading, setVideoLoading]         = useState(false);
   const [videoError, setVideoError]             = useState('');
@@ -178,6 +179,14 @@ function App() {
   // Stop polling when component unmounts or page changes away from videos
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Fetch video provider once on mount
+  useEffect(() => {
+    fetch(`${API_BASE}/api/v1/health/video-provider`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setVideoProvider(d); })
+      .catch(() => {});
   }, []);
 
   const startGenerate = async () => {
@@ -283,6 +292,27 @@ function App() {
     <div className="videos-page">
       <h1>🎬 Video Generator</h1>
       <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
+
+      {/* ── Active provider banner ── */}
+      {videoProvider && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: `${videoProvider.color}14`, border: `1px solid ${videoProvider.color}40`, borderRadius: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+          <span style={{ background: videoProvider.color, color: '#fff', borderRadius: '999px', padding: '0.2rem 0.75rem', fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+            {videoProvider.provider === 'did' ? '🎭' : videoProvider.provider === 'local' ? '🎞️' : '⚠️'} {videoProvider.label}
+          </span>
+          <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{videoProvider.detail}</span>
+          {videoProvider.provider === 'none' && (
+            <button className="inline-link" onClick={() => setCurrentPage('diagnostics')} style={{ marginLeft: 'auto' }}>
+              Fix in Diagnostics →
+            </button>
+          )}
+          {videoProvider.provider === 'local' && (
+            <a href="https://studio.d-id.com" target="_blank" rel="noopener noreferrer"
+              style={{ marginLeft: 'auto', color: '#a78bfa', fontSize: '0.8125rem', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+              Upgrade to D-ID talking avatar →
+            </a>
+          )}
+        </div>
+      )}
 
       {/* Step 1 — paste script ID */}
       <div className="generator-form">

@@ -172,7 +172,39 @@ async def run_checks() -> Dict[str, Any]:
         _yt()
     ))
 
-    # ── 7. CORS ──────────────────────────────────────────────────────────────
+    # ── 7. D-ID API key ──────────────────────────────────────────────────────
+    async def _did():
+        key = os.getenv("DID_API_KEY", "")
+        if not key:
+            raise ValueError(
+                "DID_API_KEY is not set — video generation uses local pipeline (ElevenLabs+Pexels+FFmpeg)"
+            )
+        import base64
+        token = base64.b64encode(f"{key}:".encode()).decode()
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://api.d-id.com/credits",
+                headers={"Authorization": f"Basic {token}", "Accept": "application/json"},
+            )
+            if r.status_code == 401:
+                raise ValueError("Invalid D-ID API key (401). Check DID_API_KEY env var.")
+            r.raise_for_status()
+            data = r.json()
+        remaining = data.get("remaining", "?")
+        total     = data.get("total", "?")
+        return f"D-ID key valid — {remaining}/{total} credits remaining (talking-avatar mode active)"
+    did_check = await _check(
+        "D-ID API Key",
+        "Set DID_API_KEY to enable talking-avatar videos. Get key at studio.d-id.com → Settings → API. "
+        "Starter plan ~$5.90/month. Without this key, local faceless video pipeline is used instead.",
+        _did()
+    )
+    # Downgrade to warn (not fail) when key is simply absent — local pipeline is a valid fallback
+    if did_check["status"] == "fail" and "not set" in did_check["detail"]:
+        did_check["status"] = "warn"
+    checks.append(did_check)
+
+    # ── 8. CORS ───────────────────────────────────────────────────────────────
     checks.append({
         "name": "CORS Configuration",
         "status": "pass",
@@ -180,7 +212,7 @@ async def run_checks() -> Dict[str, Any]:
         "hint": "",
     })
 
-    # ── 8. YouTube channel check ─────────────────────────────────────────────
+    # ── 9. YouTube channel check ─────────────────────────────────────────────
     yt_key = os.getenv("YOUTUBE_DATA_API_KEY", "")
     yt_oauth_ok = all([
         os.getenv("YOUTUBE_CLIENT_ID"),
@@ -209,6 +241,34 @@ async def run_checks() -> Dict[str, Any]:
     return {
         "summary": {"total": len(checks), "passed": passed, "failed": failed, "warned": warned},
         "checks": checks,
+    }
+
+
+@router.get("/video-provider")
+async def get_video_provider() -> Dict[str, str]:
+    """
+    Returns which video generation provider is currently active.
+    Frontend uses this to show the correct badge on the Videos page.
+    """
+    if os.getenv("DID_API_KEY"):
+        return {
+            "provider": "did",
+            "label":    "D-ID Talking Avatar",
+            "detail":   "AI presenter reads your script on camera",
+            "color":    "#8b5cf6",
+        }
+    if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
+        return {
+            "provider": "local",
+            "label":    "Local Faceless Video",
+            "detail":   "ElevenLabs voiceover + Pexels stock footage + FFmpeg",
+            "color":    "#3b82f6",
+        }
+    return {
+        "provider": "none",
+        "label":    "No video provider configured",
+        "detail":   "Set DID_API_KEY or both ELEVENLABS_API_KEY and PEXELS_API_KEY",
+        "color":    "#ef4444",
     }
 
 
