@@ -157,14 +157,23 @@ function App() {
 
 
   // ── Video page state ──────────────────────────────────────────────────────
-  const [videoScriptId, setVideoScriptId]   = useState('');
-  const [videoLoading, setVideoLoading]     = useState(false);
-  const [videoError, setVideoError]         = useState('');
-  const [activeVideo, setActiveVideo]       = useState<VideoRecord | null>(null);
-  const [videoHistory, setVideoHistory]     = useState<VideoRecord[]>([]);
-  const [publishLoading, setPublishLoading] = useState(false);
-  const [publishSuccess, setPublishSuccess] = useState('');
+  const [videoScriptId, setVideoScriptId]       = useState('');
+  const [videoLoading, setVideoLoading]         = useState(false);
+  const [videoError, setVideoError]             = useState('');
+  const [activeVideo, setActiveVideo]           = useState<VideoRecord | null>(null);
+  const [videoHistory, setVideoHistory]         = useState<VideoRecord[]>([]);
+  const [publishLoading, setPublishLoading]     = useState(false);
+  const [publishSuccess, setPublishSuccess]     = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Script preview + edit
+  const [previewScript, setPreviewScript]       = useState<Script | null>(null);
+  const [scriptPreviewLoading, setScriptPreviewLoading] = useState(false);
+  const [editingScript, setEditingScript]       = useState(false);
+  const [editHook, setEditHook]                 = useState('');
+  const [editBody, setEditBody]                 = useState('');
+  const [editCta, setEditCta]                   = useState('');
+  const [editSaving, setEditSaving]             = useState(false);
+  const [editSaved, setEditSaved]               = useState(false);
 
   // Stop polling when component unmounts or page changes away from videos
   useEffect(() => {
@@ -191,6 +200,41 @@ function App() {
     } finally {
       setVideoLoading(false);
     }
+  };
+
+  const loadScript = async (id: string) => {
+    if (!id.trim()) { setPreviewScript(null); return; }
+    setScriptPreviewLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/${id.trim()}`);
+      if (!res.ok) { setPreviewScript(null); return; }
+      const s: Script = await res.json();
+      setPreviewScript(s);
+      setEditHook(s.hook ?? '');
+      setEditBody(s.body ?? '');
+      setEditCta(s.cta ?? '');
+      setEditingScript(false);
+      setEditSaved(false);
+    } catch { setPreviewScript(null); }
+    finally { setScriptPreviewLoading(false); }
+  };
+
+  const saveScriptEdits = async () => {
+    if (!previewScript) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/${previewScript.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hook: editHook, body: editBody, cta: editCta }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      const updated: Script = await res.json();
+      setPreviewScript(updated);
+      setEditingScript(false);
+      setEditSaved(true);
+    } catch { /* show nothing, user can retry */ }
+    finally { setEditSaving(false); }
   };
 
   const pollVideo = async (id: string) => {
@@ -252,13 +296,94 @@ function App() {
             type="text"
             value={videoScriptId}
             onChange={e => setVideoScriptId(e.target.value)}
+            onBlur={e => loadScript(e.target.value)}
             placeholder="e.g. cadb45d7-623f-4364-91e5-f3b017a1892c"
             disabled={videoLoading}
           />
         </div>
+
+        {/* ── Script preview card ── */}
+        {scriptPreviewLoading && (
+          <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0.5rem 0' }}>Loading script…</p>
+        )}
+        {previewScript && !scriptPreviewLoading && (
+          <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1.25rem', margin: '1rem 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <p style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.9375rem', margin: 0 }}>
+                📄 {previewScript.topic}
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {editSaved && !editingScript && (
+                  <span style={{ color: '#34d399', fontSize: '0.8125rem', alignSelf: 'center' }}>✓ Saved</span>
+                )}
+                <button
+                  onClick={() => { setEditingScript(e => !e); setEditSaved(false); }}
+                  style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', borderRadius: '0.5rem', padding: '0.35rem 0.75rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600 }}>
+                  {editingScript ? '✕ Cancel' : '✏️ Edit Script'}
+                </button>
+              </div>
+            </div>
+
+            {editingScript ? (
+              /* ── Edit mode ── */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.3rem' }}>Hook</label>
+                  <textarea
+                    value={editHook}
+                    onChange={e => setEditHook(e.target.value)}
+                    rows={2}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '0.5rem', color: '#f1f5f9', padding: '0.6rem 0.75rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.3rem' }}>Body</label>
+                  <textarea
+                    value={editBody}
+                    onChange={e => setEditBody(e.target.value)}
+                    rows={5}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '0.5rem', color: '#f1f5f9', padding: '0.6rem 0.75rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.3rem' }}>Call to Action</label>
+                  <textarea
+                    value={editCta}
+                    onChange={e => setEditCta(e.target.value)}
+                    rows={2}
+                    style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '0.5rem', color: '#f1f5f9', padding: '0.6rem 0.75rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </div>
+                <button
+                  onClick={saveScriptEdits}
+                  disabled={editSaving}
+                  style={{ background: 'rgba(52,211,153,0.15)', border: '1px solid rgba(52,211,153,0.35)', color: '#34d399', borderRadius: '0.5rem', padding: '0.6rem 1rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
+                  {editSaving ? '💾 Saving…' : '💾 Save Changes'}
+                </button>
+              </div>
+            ) : (
+              /* ── Read mode ── */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div>
+                  <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hook</span>
+                  <p style={{ color: '#e2e8f0', fontSize: '0.875rem', margin: '0.2rem 0 0' }}>{previewScript.hook}</p>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Body</span>
+                  <p style={{ color: '#cbd5e1', fontSize: '0.875rem', margin: '0.2rem 0 0', whiteSpace: 'pre-wrap' }}>{previewScript.body}</p>
+                </div>
+                <div>
+                  <span style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CTA</span>
+                  <p style={{ color: '#e2e8f0', fontSize: '0.875rem', margin: '0.2rem 0 0' }}>{previewScript.cta}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {videoError && <div className="error-message">{videoError}</div>}
-        <button className="generate-button" onClick={startGenerate} disabled={videoLoading}>
-          {videoLoading ? '🚀 Starting…' : '🎬 Generate Video'}
+        <button className="generate-button" onClick={startGenerate} disabled={videoLoading || editingScript}>
+          {videoLoading ? '🚀 Starting…' : editingScript ? '💾 Save edits before generating' : '🎬 Generate Video'}
         </button>
       </div>
 
