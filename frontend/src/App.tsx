@@ -1538,11 +1538,40 @@ function App() {
             <p className="script-id-copy" style={{ margin: 0 }}>
               🆔 Script ID: <strong>{generatedScript.id}</strong>
             </p>
-            <button
-              onClick={() => { setVideoScriptId(generatedScript.id); setCurrentPage('videos'); }}
-              style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.1rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-              🎬 Use in Videos →
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => {
+                  const text = [
+                    `TOPIC: ${generatedScript.topic}`,
+                    `NICHE: ${generatedScript.script_metadata?.niche ?? niche}`,
+                    `ID: ${generatedScript.id}`,
+                    ``,
+                    `HOOK (3-5 seconds)`,
+                    generatedScript.hook,
+                    ``,
+                    `BODY (20-30 seconds)`,
+                    generatedScript.body,
+                    ``,
+                    `CALL TO ACTION (3-5 seconds)`,
+                    generatedScript.cta,
+                  ].join('\n');
+                  const blob = new Blob([text], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `script-${generatedScript.topic.replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 40)}.txt`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', color: '#60a5fa', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                💾 Save as .txt
+              </button>
+              <button
+                onClick={() => { setVideoScriptId(generatedScript.id); setCurrentPage('videos'); }}
+                style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.1rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                🎬 Use in Videos →
+              </button>
+            </div>
           </div>
 
           <div className="script-section">
