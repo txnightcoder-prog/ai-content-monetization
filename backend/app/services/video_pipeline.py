@@ -64,16 +64,25 @@ async def _upload_to_youtube(
     privacy: str = "public",
 ) -> str:
     """
-    Download the video from video_url and upload it to YouTube.
+    Upload a video to YouTube.
+    video_url can be either a local file path (/tmp/videos/…) or an HTTP URL.
     Returns the YouTube video ID.
     """
+    import os as _os
     access_token = _get_yt_access_token()
 
-    # Download the video into a temp file
-    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-        dl = await client.get(video_url)
-        dl.raise_for_status()
-        video_bytes = dl.content
+    # Read video bytes — local file or remote URL
+    if video_url.startswith("/") or (len(video_url) > 1 and video_url[1] == ":"):
+        # Local file path (Linux: /tmp/… or Windows: C:\…)
+        if not _os.path.exists(video_url):
+            raise FileNotFoundError(f"Video file not found on disk: {video_url}")
+        with open(video_url, "rb") as f:
+            video_bytes = f.read()
+    else:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            dl = await client.get(video_url)
+            dl.raise_for_status()
+            video_bytes = dl.content
 
     if "#Shorts" not in description:
         description += "\n\n#Shorts"
