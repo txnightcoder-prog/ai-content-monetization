@@ -478,7 +478,9 @@ function App() {
 
           {activeVideo.status === 'failed' && (
             <p style={{ color: '#fca5a5', marginTop: '1rem' }}>
-              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your ElevenLabs and Pexels keys.
+              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your API keys
+              {videoProvider?.provider === 'did' ? ' (D-ID key and credits)' : ' (ElevenLabs and Pexels)'}.
+              Then generate a new script and try again.
             </p>
           )}
         </div>
