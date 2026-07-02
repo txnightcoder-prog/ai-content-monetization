@@ -732,6 +732,9 @@ function App() {
   // ── Diagnostics state ────────────────────────────────────────────────────
   const [diagLoading, setDiagLoading]   = useState(false);
   const [diagResult, setDiagResult]     = useState<null | { summary: { total: number; passed: number; failed: number; warned: number }; checks: Array<{ name: string; status: 'pass'|'fail'|'warn'; detail: string; hint: string }> }>(null);
+  const [restartBackendState, setRestartBackendState] = useState<'idle'|'loading'|'ok'|'error'>('idle');
+  const [restartFrontendState, setRestartFrontendState] = useState<'idle'|'loading'|'ok'|'error'>('idle');
+  const [restartMsg, setRestartMsg] = useState('');
 
   const runDiagnostics = async () => {
     setDiagLoading(true); setDiagResult(null);
@@ -740,6 +743,21 @@ function App() {
       setDiagResult(await res.json());
     } catch { setDiagResult(null); }
     finally { setDiagLoading(false); }
+  };
+
+  const restartService = async (service: 'backend' | 'frontend') => {
+    const set = service === 'backend' ? setRestartBackendState : setRestartFrontendState;
+    set('loading'); setRestartMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/health/restart/${service}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? res.statusText);
+      set('ok');
+      setRestartMsg(`✅ ${data.message}`);
+    } catch (err) {
+      set('error');
+      setRestartMsg(`❌ ${err instanceof Error ? err.message : 'Restart failed'}`);
+    }
   };
 
   const diagColor = (s: string) => ({ pass: '#10b981', fail: '#ef4444', warn: '#f59e0b' })[s] ?? '#94a3b8';
@@ -754,6 +772,50 @@ function App() {
         <button className="generate-button" onClick={runDiagnostics} disabled={diagLoading}>
           {diagLoading ? '🔍 Running checks…' : '🔧 Run All Checks'}
         </button>
+      </div>
+
+      {/* ── Restart controls ── */}
+      <div style={{ background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(148,163,184,0.1)', borderRadius: '1rem', padding: '1.5rem', margin: '1.5rem 0' }}>
+        <h2 style={{ color: '#f1f5f9', marginBottom: '0.4rem', fontSize: '1.25rem' }}>🔄 Restart Services</h2>
+        <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>
+          Restarts the Azure Container App. The service will be back online within ~30 seconds.
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => restartService('backend')}
+            disabled={restartBackendState === 'loading'}
+            style={{
+              flex: '1 1 200px', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontWeight: 700,
+              fontSize: '0.9375rem', cursor: restartBackendState === 'loading' ? 'not-allowed' : 'pointer',
+              opacity: restartBackendState === 'loading' ? 0.6 : 1,
+              background: restartBackendState === 'ok' ? 'rgba(16,185,129,0.15)' : restartBackendState === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.15)',
+              border: `1px solid ${restartBackendState === 'ok' ? 'rgba(16,185,129,0.4)' : restartBackendState === 'error' ? 'rgba(239,68,68,0.35)' : 'rgba(59,130,246,0.35)'}`,
+              color: restartBackendState === 'ok' ? '#34d399' : restartBackendState === 'error' ? '#fca5a5' : '#60a5fa',
+            }}>
+            {restartBackendState === 'loading' ? '⏳ Restarting…' : '🔵 Restart Backend'}
+          </button>
+          <button
+            onClick={() => restartService('frontend')}
+            disabled={restartFrontendState === 'loading'}
+            style={{
+              flex: '1 1 200px', padding: '0.75rem 1rem', borderRadius: '0.5rem', fontWeight: 700,
+              fontSize: '0.9375rem', cursor: restartFrontendState === 'loading' ? 'not-allowed' : 'pointer',
+              opacity: restartFrontendState === 'loading' ? 0.6 : 1,
+              background: restartFrontendState === 'ok' ? 'rgba(16,185,129,0.15)' : restartFrontendState === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(139,92,246,0.15)',
+              border: `1px solid ${restartFrontendState === 'ok' ? 'rgba(16,185,129,0.4)' : restartFrontendState === 'error' ? 'rgba(239,68,68,0.35)' : 'rgba(139,92,246,0.35)'}`,
+              color: restartFrontendState === 'ok' ? '#34d399' : restartFrontendState === 'error' ? '#fca5a5' : '#a78bfa',
+            }}>
+            {restartFrontendState === 'loading' ? '⏳ Restarting…' : '🟣 Restart Frontend'}
+          </button>
+        </div>
+        {restartMsg && (
+          <p style={{ marginTop: '0.75rem', fontSize: '0.875rem', color: restartMsg.startsWith('✅') ? '#34d399' : '#fca5a5' }}>
+            {restartMsg}
+          </p>
+        )}
+        <p style={{ marginTop: '0.75rem', color: '#475569', fontSize: '0.8125rem' }}>
+          ⚠️ Restarting the backend will interrupt any in-progress video generations.
+        </p>
       </div>
 
       {diagResult && (

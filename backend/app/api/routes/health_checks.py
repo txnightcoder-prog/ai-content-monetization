@@ -4,12 +4,13 @@ Health / Diagnostics endpoint.
 Returns a structured list of checks the frontend Diagnostics page runs.
 Each check hits a real dependency and reports pass/fail/warning + a fix hint.
 """
+import asyncio
 import logging
 import os
 from typing import Any, Dict, List
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/health", tags=["health"])
@@ -209,6 +210,76 @@ async def run_checks() -> Dict[str, Any]:
         "summary": {"total": len(checks), "passed": passed, "failed": failed, "warned": warned},
         "checks": checks,
     }
+
+
+# ── Restart endpoints ─────────────────────────────────────────────────────────
+
+_SUBSCRIPTION = "0624b0c7-bc20-40a1-8156-b33b8f52e951"
+_RESOURCE_GROUP = "ai-video-pipeline"
+_MGMT_BASE = "https://management.azure.com"
+
+
+async def _get_mgmt_token() -> str:
+    """Obtain an access token for the Azure Management API via Managed Identity."""
+    async with httpx.AsyncClient(timeout=10) as c:
+        r = await c.get(
+            "http://169.254.169.254/metadata/identity/oauth2/token",
+            params={
+                "api-version": "2018-02-01",
+                "resource": "https://management.azure.com/",
+            },
+            headers={"Metadata": "true"},
+        )
+        r.raise_for_status()
+        return r.json()["access_token"]
+
+
+async def _restart_container_app(app_name: str) -> str:
+    """
+    Restart an Azure Container App by cycling to a new revision-less restart.
+    We trigger a restart by patching the container app with the Azure Management API,
+    forcing a new revision which restarts all replicas.
+    """
+    token = await _get_mgmt_token()
+    url = (
+        f"{_MGMT_BASE}/subscriptions/{_SUBSCRIPTION}"
+        f"/resourceGroups/{_RESOURCE_GROUP}"
+        f"/providers/Microsoft.App/containerApps/{app_name}"
+        f"/restart?api-version=2024-03-01"
+    )
+    async with httpx.AsyncClient(timeout=30) as c:
+        r = await c.post(url, headers={"Authorization": f"Bearer {token}"})
+        if r.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"Container App '{app_name}' not found")
+        if r.status_code not in (200, 202, 204):
+            raise HTTPException(status_code=502, detail=f"Azure restart failed: {r.status_code} {r.text[:200]}")
+    return f"{app_name} restart triggered (status {r.status_code})"
+
+
+@router.post("/restart/backend")
+async def restart_backend() -> Dict[str, str]:
+    """Restart the backend Container App via Azure Management API."""
+    try:
+        msg = await _restart_container_app("ai-content-backend")
+        return {"status": "ok", "message": msg}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Backend restart failed")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/restart/frontend")
+async def restart_frontend() -> Dict[str, str]:
+    """Restart the frontend Container App via Azure Management API."""
+    try:
+        msg = await _restart_container_app("ai-content-frontend")
+        return {"status": "ok", "message": msg}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Frontend restart failed")
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/run-daily")
