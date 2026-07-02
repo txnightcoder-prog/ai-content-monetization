@@ -14,9 +14,9 @@ $RESOURCE_GROUP = "ai-video-pipeline"
 $CONTAINER_APP  = "ai-content-backend"
 
 # ── Paste your actual keys here ───────────────────────────────────────────────
-$ELEVENLABS_API_KEY  = "***ELEVENLABS_API_KEY_REMOVED***"
-$ELEVENLABS_VOICE_ID = ""   # Leave blank for default Rachel voice (recommended)
-$PEXELS_API_KEY      = "***PEXELS_API_KEY_REMOVED***"
+$ELEVENLABS_API_KEY  = $env:ELEVENLABS_API_KEY   # set in shell: $env:ELEVENLABS_API_KEY="sk_..."
+$ELEVENLABS_VOICE_ID = ""                         # leave blank for default Rachel voice
+$PEXELS_API_KEY      = $env:PEXELS_API_KEY        # set in shell: $env:PEXELS_API_KEY="..."
 
 # =============================================================================
 

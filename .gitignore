@@ -25,3 +25,6 @@ pipeline/*.log
 pipeline/local.settings.json
 
 client_secret.json
+
+SET_AZURE_ENV_VARS.ps1
+youtube_credentials.txt

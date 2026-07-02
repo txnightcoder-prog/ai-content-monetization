@@ -73,10 +73,15 @@ async def _upload_to_youtube(
 
     # Read video bytes — local file or remote URL
     if video_url.startswith("/") or (len(video_url) > 1 and video_url[1] == ":"):
-        # Local file path (Linux: /tmp/… or Windows: C:\…)
-        if not _os.path.exists(video_url):
+        # Local file path — restrict to VIDEO_OUTPUT_DIR to prevent path traversal
+        from pathlib import Path
+        safe_dir = Path(_os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos")).resolve()
+        video_path = Path(video_url).resolve()
+        if not str(video_path).startswith(str(safe_dir)):
+            raise ValueError(f"Video path is outside allowed directory: {video_url}")
+        if not video_path.exists():
             raise FileNotFoundError(f"Video file not found on disk: {video_url}")
-        with open(video_url, "rb") as f:
+        with open(video_path, "rb") as f:
             video_bytes = f.read()
     else:
         async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
