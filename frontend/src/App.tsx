@@ -65,6 +65,54 @@ interface TrendingResult {
   instagram: TrendingItem[];
 }
 
+// ── Analytics types ───────────────────────────────────────────────────────────
+interface AnalyticsTotals {
+  total_posts: number;
+  total_views: number;
+  total_likes: number;
+  total_comments: number;
+  total_shares: number;
+  total_clicks: number;
+  avg_engagement_rate: number;
+}
+interface AnalyticsByPlatform {
+  platform: string;
+  posts: number;
+  total_views: number;
+  total_likes: number;
+  total_comments: number;
+  total_shares: number;
+  total_clicks: number;
+}
+interface AnalyticsSummary {
+  totals: AnalyticsTotals;
+  by_platform: AnalyticsByPlatform[];
+  last_synced: string | null;
+}
+interface TopPost {
+  id: string;
+  platform: string;
+  title: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  clicks: number;
+  posted_at: string | null;
+}
+interface DashboardMetrics {
+  overview: {
+    total_scripts: number;
+    total_videos: number;
+    total_posts: number;
+    total_leads: number;
+    revenue_30d: number;
+  };
+  videos_by_status: Record<string, number>;
+  scripts_by_status: Record<string, number>;
+  posts_by_status: Record<string, number>;
+}
+
 // ── Parrot types ──────────────────────────────────────────────────────────────
 interface ParrotResult {
   id: string;
@@ -81,7 +129,7 @@ interface ParrotResult {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help'>('home');
   const [topic, setTopic] = useState('');
   const [niche, setNiche] = useState('AI tools');
   const [loading, setLoading] = useState(false);
@@ -96,6 +144,17 @@ function App() {
   const [blueprintInput, setBlueprintInput] = useState('');
   const [generatedBlueprint, setGeneratedBlueprint] = useState<VideoBlueprint | null>(null);
   const [blueprints, setBlueprints] = useState<VideoBlueprint[]>([]);
+
+  // ── Analytics state ───────────────────────────────────────────────────────
+  const [analyticsSummary, setAnalyticsSummary]     = useState<AnalyticsSummary | null>(null);
+  const [analyticsTopPosts, setAnalyticsTopPosts]   = useState<TopPost[]>([]);
+  const [dashboardMetrics, setDashboardMetrics]     = useState<DashboardMetrics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading]     = useState(false);
+  const [analyticsError, setAnalyticsError]         = useState('');
+  const [analyticsSyncing, setAnalyticsSyncing]     = useState(false);
+  const [analyticsSyncMsg, setAnalyticsSyncMsg]     = useState('');
+  const [analyticsTopMetric, setAnalyticsTopMetric] = useState<'views'|'likes'|'comments'|'shares'>('views');
+
 
   // ── Video page state ──────────────────────────────────────────────────────
   const [videoScriptId, setVideoScriptId]   = useState('');
@@ -696,6 +755,201 @@ function App() {
       </div>
     </div>
   );
+
+
+  // ── Analytics page ────────────────────────────────────────────────────────
+  const fetchAnalytics = async (metric: 'views'|'likes'|'comments'|'shares' = analyticsTopMetric) => {
+    setAnalyticsLoading(true); setAnalyticsError('');
+    try {
+      const [summaryRes, topRes, dashRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/analytics/summary`),
+        fetch(`${API_BASE}/api/v1/analytics/top-posts?limit=10&metric=${metric}`),
+        fetch(`${API_BASE}/api/v1/dashboard/metrics`),
+      ]);
+      if (summaryRes.ok) setAnalyticsSummary(await summaryRes.json());
+      if (topRes.ok) { const d = await topRes.json(); setAnalyticsTopPosts(d.posts ?? []); }
+      if (dashRes.ok) setDashboardMetrics(await dashRes.json());
+    } catch (err) { setAnalyticsError(err instanceof Error ? err.message : 'Failed to load analytics'); }
+    finally { setAnalyticsLoading(false); }
+  };
+
+  const syncAnalytics = async () => {
+    setAnalyticsSyncing(true); setAnalyticsSyncMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const d = await res.json();
+      setAnalyticsSyncMsg(`✅ Synced ${d.total_records} records at ${new Date(d.synced_at).toLocaleTimeString()}`);
+      await fetchAnalytics();
+    } catch (err) { setAnalyticsSyncMsg(`❌ ${err instanceof Error ? err.message : 'Sync failed'}`); }
+    finally { setAnalyticsSyncing(false); }
+  };
+
+  const fmt = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(1)}K` : String(n);
+
+  const renderAnalytics = () => (
+    <div className="videos-page">
+      <h1>📊 Analytics Dashboard</h1>
+      <p className="subtitle">Performance across all connected social platforms</p>
+
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem', alignItems: 'center' }}>
+        <button className="generate-button" style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}
+          onClick={() => fetchAnalytics()} disabled={analyticsLoading}>
+          {analyticsLoading ? '⏳ Loading…' : '🔄 Refresh'}
+        </button>
+        <button className="publish-button" style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}
+          onClick={syncAnalytics} disabled={analyticsSyncing}>
+          {analyticsSyncing ? '⏳ Syncing…' : '☁️ Sync from Platforms'}
+        </button>
+        {analyticsSyncMsg && <span style={{ color: analyticsSyncMsg.startsWith('✅') ? '#10b981' : '#ef4444', fontSize: '0.875rem' }}>{analyticsSyncMsg}</span>}
+        {analyticsSummary?.last_synced && (
+          <span style={{ color: '#64748b', fontSize: '0.8125rem', marginLeft: 'auto' }}>
+            Last synced: {new Date(analyticsSummary.last_synced).toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      {analyticsError && <div className="error-message">{analyticsError}</div>}
+
+      {!analyticsSummary && !dashboardMetrics && !analyticsLoading && (
+        <div style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '0.75rem', padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
+          <p style={{ fontSize: '1.1rem', marginBottom: '1rem' }}>No analytics data yet.</p>
+          <p style={{ fontSize: '0.875rem' }}>Click <strong>Sync from Platforms</strong> to pull live stats, or <strong>Refresh</strong> to load any stored records.</p>
+        </div>
+      )}
+
+      {/* Pipeline overview — from dashboard/metrics */}
+      {dashboardMetrics && (
+        <>
+          <h2 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>📋 Pipeline Overview</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            {[
+              { label: 'Scripts', value: dashboardMetrics.overview.total_scripts, color: '#a78bfa' },
+              { label: 'Videos', value: dashboardMetrics.overview.total_videos, color: '#3b82f6' },
+              { label: 'Posts', value: dashboardMetrics.overview.total_posts, color: '#10b981' },
+              { label: 'Revenue 30d', value: `$${dashboardMetrics.overview.revenue_30d.toFixed(2)}`, color: '#f59e0b' },
+            ].map(c => (
+              <div key={c.label} style={{ background: `${c.color}12`, border: `1px solid ${c.color}40`, borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.6rem', fontWeight: 800, color: c.color }}>{c.value}</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.8125rem', marginTop: '0.25rem' }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Video status breakdown */}
+          {Object.keys(dashboardMetrics.videos_by_status).length > 0 && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+              {Object.entries(dashboardMetrics.videos_by_status).map(([status, count]) => {
+                const color = ({ generating: '#f59e0b', ready: '#10b981', posted: '#3b82f6', failed: '#ef4444' } as Record<string,string>)[status] ?? '#94a3b8';
+                return (
+                  <span key={status} style={{ background: `${color}20`, color, border: `1px solid ${color}50`, borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600 }}>
+                    {status}: {count}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Aggregated totals */}
+      {analyticsSummary && (
+        <>
+          <h2 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>📈 Social Performance</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            {[
+              { label: 'Total Posts', value: fmt(analyticsSummary.totals.total_posts), color: '#3b82f6' },
+              { label: 'Views', value: fmt(analyticsSummary.totals.total_views), color: '#10b981' },
+              { label: 'Likes', value: fmt(analyticsSummary.totals.total_likes), color: '#f59e0b' },
+              { label: 'Comments', value: fmt(analyticsSummary.totals.total_comments), color: '#a78bfa' },
+              { label: 'Shares', value: fmt(analyticsSummary.totals.total_shares), color: '#06b6d4' },
+              { label: 'Engagement', value: `${analyticsSummary.totals.avg_engagement_rate}%`, color: '#ef4444' },
+            ].map(c => (
+              <div key={c.label} style={{ background: `${c.color}12`, border: `1px solid ${c.color}40`, borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: c.color }}>{c.value}</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.8125rem', marginTop: '0.25rem' }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-platform breakdown */}
+          {analyticsSummary.by_platform.length > 0 && (
+            <>
+              <h2 style={{ color: '#f1f5f9', marginBottom: '1rem' }}>🌐 By Platform</h2>
+              <div className="scripts-list" style={{ marginBottom: '1.5rem' }}>
+                {analyticsSummary.by_platform.map(p => (
+                  <div key={p.platform} className="script-card" style={{ borderLeft: `4px solid ${platformColor(p.platform)}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                      <h3 style={{ color: '#f1f5f9', fontSize: '1rem' }}>{platformIcon(p.platform)} {p.platform.charAt(0).toUpperCase() + p.platform.slice(1)}</h3>
+                      <span style={{ background: `${platformColor(p.platform)}22`, color: platformColor(p.platform), borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.8125rem', fontWeight: 700 }}>{p.posts} posts</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))', gap: '0.5rem' }}>
+                      {[
+                        ['👁 Views', fmt(p.total_views)],
+                        ['❤️ Likes', fmt(p.total_likes)],
+                        ['💬 Comments', fmt(p.total_comments)],
+                        ['🔁 Shares', fmt(p.total_shares)],
+                      ].map(([label, val]) => (
+                        <div key={label} style={{ textAlign: 'center', background: 'rgba(148,163,184,0.06)', borderRadius: '0.5rem', padding: '0.5rem' }}>
+                          <div style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.9rem' }}>{val}</div>
+                          <div style={{ color: '#64748b', fontSize: '0.75rem' }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Top posts */}
+      {analyticsSummary && (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <h2 style={{ color: '#f1f5f9' }}>🏆 Top Posts</h2>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {(['views','likes','comments','shares'] as const).map(m => (
+                <button key={m} type="button"
+                  style={{ padding: '0.25rem 0.65rem', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.3)',
+                    background: analyticsTopMetric === m ? '#3b82f6' : 'transparent',
+                    color: analyticsTopMetric === m ? '#fff' : '#94a3b8', cursor: 'pointer', fontSize: '0.8rem' }}
+                  onClick={() => { setAnalyticsTopMetric(m); fetchAnalytics(m); }}>
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+          {analyticsTopPosts.length === 0
+            ? <p style={{ color: '#64748b', fontSize: '0.875rem' }}>No posts synced yet — hit Sync from Platforms to pull data.</p>
+            : (
+              <div className="scripts-list">
+                {analyticsTopPosts.map((post, i) => (
+                  <div key={post.id} className="script-card" style={{ borderLeft: `4px solid ${platformColor(post.platform)}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                      <span style={{ background: platformColor(post.platform), color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>#{i+1}</span>
+                      <span style={{ background: `${platformColor(post.platform)}22`, color: platformColor(post.platform), borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.75rem', fontWeight: 600, flexShrink: 0 }}>{platformIcon(post.platform)} {post.platform}</span>
+                    </div>
+                    <p style={{ color: '#e2e8f0', margin: '0.6rem 0 0.5rem', fontWeight: 600, lineHeight: 1.4 }}>{post.title || '(untitled)'}</p>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.8125rem' }}>
+                      <span style={{ color: '#10b981' }}>👁 {fmt(post.views)}</span>
+                      <span style={{ color: '#f59e0b' }}>❤️ {fmt(post.likes)}</span>
+                      <span style={{ color: '#a78bfa' }}>💬 {fmt(post.comments)}</span>
+                      <span style={{ color: '#06b6d4' }}>🔁 {fmt(post.shares)}</span>
+                    </div>
+                    {post.posted_at && <p style={{ color: '#64748b', fontSize: '0.75rem', marginTop: '0.4rem' }}>Posted {new Date(post.posted_at).toLocaleDateString()}</p>}
+                  </div>
+                ))}
+              </div>
+            )
+          }
+        </>
+      )}
+    </div>
+  );
+
 
   // ── Monetize page ─────────────────────────────────────────────────────────
   const renderMonetize = () => (
@@ -1491,6 +1745,12 @@ Example:
             🔧 Diagnostics
           </button>
           <button
+            className={currentPage === 'analytics' ? 'active' : ''}
+            onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }}
+          >
+            📊 Analytics
+          </button>
+          <button
             className={currentPage === 'monetize' ? 'active' : ''}
             onClick={() => setCurrentPage('monetize')}
           >
@@ -1513,6 +1773,7 @@ Example:
          currentPage === 'parrot' ? renderParrot() :
          currentPage === 'trending' ? renderTrending() :
          currentPage === 'diagnostics' ? renderDiagnostics() :
+         currentPage === 'analytics' ? renderAnalytics() :
          currentPage === 'monetize' ? renderMonetize() :
          renderHelp()}
       </main>
