@@ -81,9 +81,18 @@ async def log_requests(request: Request, call_next):
         logger.error(f"[{request_id}] ✗ ERROR ({duration:.2f}s): {request.method} {request.url.path} - {str(e)}")
         raise
 
+import os as _os
+
+_raw_origins = _os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5173,http://localhost:3000"
+)
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https://.*\.azurecontainerapps\.io",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
