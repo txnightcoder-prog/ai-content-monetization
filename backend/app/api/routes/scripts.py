@@ -1,7 +1,12 @@
+import logging
+from urllib.parse import urlparse
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
+
+logger = logging.getLogger(__name__)
 
 from app.core.database import get_db
 from app.models.content_script import ContentScript, ScriptStatus
@@ -32,6 +37,16 @@ class ParrotRequest(BaseModel):
     youtube_url: str
     niche: str = "AI tools"
     your_topic: Optional[str] = None
+
+    @field_validator("youtube_url")
+    @classmethod
+    def validate_youtube_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.netloc not in {"youtube.com", "www.youtube.com", "youtu.be"}:
+            raise ValueError("Must be a valid YouTube URL")
+        if len(v) > 2048:
+            raise ValueError("URL too long")
+        return v
 
 
 class TrendingRequest(BaseModel):
@@ -69,13 +84,9 @@ async def generate_script(
     The generated script is automatically saved to the database.
     """
     try:
-        print(f"Generating script for topic: {topic}, niche: {niche}")
-        
-        # Generate script using AI (now async)
+        logger.info("Generating script for topic: %s, niche: %s", topic, niche)
         script_data = await generator.generate_script(topic=topic, niche=niche)
-        print(f"Script generated successfully: {script_data}")
-        
-        # Create database record
+
         db_script = ContentScript(
             topic=topic,
             hook=script_data["hook"],
@@ -84,23 +95,19 @@ async def generate_script(
             status=ScriptStatus.DRAFT,
             script_metadata=script_data.get("metadata", {})
         )
-        
+
         db.add(db_script)
         db.commit()
         db.refresh(db_script)
-        
-        print(f"Script saved to database with ID: {db_script.id}")
+        logger.info("Script saved: %s", db_script.id)
         return db_script
-        
+
     except ValueError as e:
-        print(f"ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Exception: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to generate script")
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to generate script: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate script")
 
 
 @router.post("/", response_model=ContentScriptResponse, status_code=201)
@@ -270,10 +277,8 @@ async def get_topic_ideas(
         ideas = await generator.generate_topic_ideas(niche=request.niche)
         return {"ideas": ideas}
     except Exception as e:
-        print(f"Exception generating topic ideas: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate topic ideas: {str(e)}")
+        logger.exception("Failed to generate topic ideas")
+        raise HTTPException(status_code=500, detail="Failed to generate topic ideas")
 
 
 @router.post("/blueprint")
@@ -289,18 +294,12 @@ async def generate_blueprint(
     blueprint with sections, hooks, thumbnails, and monetization strategies.
     """
     try:
-        print(f"Generating blueprint for niche: {request.niche}")
-        print(f"Instructions length: {len(request.instructions)} characters")
-        
-        # Generate blueprint using AI
+        logger.info("Generating blueprint for niche: %s", request.niche)
         blueprint_data = await generator.generate_blueprint(
             instructions=request.instructions,
             niche=request.niche
         )
-        
-        print(f"Blueprint generated successfully")
-        
-        # Create a simplified database record (using existing ContentScript model)
+
         db_script = ContentScript(
             topic=blueprint_data.get("title", "Video Blueprint"),
             hook=blueprint_data.get("structure", {}).get("hook", ""),
@@ -309,30 +308,25 @@ async def generate_blueprint(
             status=ScriptStatus.DRAFT,
             script_metadata=blueprint_data
         )
-        
+
         db.add(db_script)
         db.commit()
         db.refresh(db_script)
-        
-        # Return the full blueprint data with the database ID
+
         response_data = {
             "id": db_script.id,
             "created_at": db_script.created_at.isoformat(),
             **blueprint_data
         }
-        
-        print(f"Blueprint saved to database with ID: {db_script.id}")
+        logger.info("Blueprint saved: %s", db_script.id)
         return response_data
-        
+
     except ValueError as e:
-        print(f"ValueError: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Exception: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Failed to generate blueprint")
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to generate blueprint: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate blueprint")
 
 
 @router.post("/parrot")
@@ -384,9 +378,9 @@ async def parrot_video(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
-        import traceback; traceback.print_exc()
+        logger.exception("Parrot failed")
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Parrot failed: {exc}")
+        raise HTTPException(status_code=500, detail="Parrot failed")
 
 
 @router.post("/trending")

@@ -36,14 +36,13 @@ async def lifespan(app: FastAPI):
     Initializes database on startup.
     """
     # Startup: Initialize database
-    print("Initializing database...")
+    logger.info("Initializing database...")
     init_db()
-    print("Database initialized successfully!")
-    
+    logger.info("Database initialized successfully!")
+
     yield
-    
-    # Shutdown: cleanup if needed
-    print("Shutting down...")
+
+    logger.info("Shutting down...")
 
 
 app = FastAPI(
@@ -93,11 +92,20 @@ _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"https://.*\.azurecontainerapps\.io",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origin_regex=r"https://[a-z0-9\-]+\.azurecontainerapps\.io$",
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 
 app.include_router(dashboard_router)
 app.include_router(scripts_router)
