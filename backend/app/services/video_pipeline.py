@@ -70,15 +70,15 @@ async def _upload_to_youtube(
 ) -> str:
     """
     Upload a video to YouTube.
-    video_url can be either a local file path (/tmp/videos/…) or an HTTP URL.
+    video_url can be a local file path (/tmp/videos/…) or an HTTP/HTTPS URL (e.g. D-ID S3 link).
     Returns the YouTube video ID.
     """
+    import json
     import os as _os
     access_token = _get_yt_access_token()
 
-    # Read video bytes — local file or remote URL
+    # ── Read video bytes — local file or remote URL ──────────────────────────
     if video_url.startswith("/") or (len(video_url) > 1 and video_url[1] == ":"):
-        # Local file path — restrict to VIDEO_OUTPUT_DIR to prevent path traversal
         from pathlib import Path
         safe_dir = Path(_os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos")).resolve()
         video_path = Path(video_url).resolve()
@@ -89,42 +89,55 @@ async def _upload_to_youtube(
         with open(video_path, "rb") as f:
             video_bytes = f.read()
     else:
-        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+        # Remote URL (D-ID S3 pre-signed URL, etc.)
+        logger.info("Downloading video for YouTube upload: %s", video_url[:80])
+        async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
             dl = await client.get(video_url)
             dl.raise_for_status()
             video_bytes = dl.content
+        logger.info("Downloaded %d bytes for YouTube upload", len(video_bytes))
+
+    if not video_bytes:
+        raise ValueError("Video file is empty — cannot upload to YouTube")
 
     if "#Shorts" not in description:
         description += "\n\n#Shorts"
     if tags is None:
         tags = []
 
-    metadata = {
+    # ── Build metadata as proper JSON ────────────────────────────────────────
+    metadata_json = json.dumps({
         "snippet": {
-            "title": title[:100],
+            "title":       title[:100],
             "description": description[:5000],
-            "tags": tags,
-            "categoryId": "22",  # People & Blogs
+            "tags":        tags,
+            "categoryId":  "22",   # People & Blogs
         },
         "status": {
-            "privacyStatus": privacy,
+            "privacyStatus":          privacy,
             "selfDeclaredMadeForKids": False,
         },
-    }
+    })
 
-    # Multipart upload
+    # ── Multipart upload ─────────────────────────────────────────────────────
+    logger.info("Uploading %d bytes to YouTube (title: %s)", len(video_bytes), title[:60])
     async with httpx.AsyncClient(timeout=300) as client:
         r = await client.post(
             YOUTUBE_UPLOAD_URL,
             params={"part": "snippet,status", "uploadType": "multipart"},
             headers={"Authorization": f"Bearer {access_token}"},
             files={
-                "metadata": (None, str(metadata).replace("'", '"'), "application/json"),
+                "metadata": (None, metadata_json, "application/json"),
                 "media":    ("video.mp4", video_bytes, "video/mp4"),
             },
         )
-        r.raise_for_status()
+        if not r.is_success:
+            logger.error("YouTube upload failed: %s %s", r.status_code, r.text[:500])
+            r.raise_for_status()
         yt_id = r.json().get("id", "")
+
+    if not yt_id:
+        raise RuntimeError(f"YouTube returned no video ID. Response: {r.text[:300]}")
 
     logger.info("YouTube upload complete: video_id=%s", yt_id)
     return yt_id
