@@ -227,6 +227,16 @@ function App() {
     }
   };
 
+  const retryVideo = (v: VideoRecord) => {
+    // Pre-fill the script ID field and load the script preview, then scroll to the form
+    setVideoScriptId(v.script_id);
+    loadScript(v.script_id);
+    setActiveVideo(null);
+    setPublishSuccess('');
+    setVideoError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const loadScript = async (id: string) => {
     if (!id.trim()) { setPreviewScript(null); return; }
     setScriptPreviewLoading(true);
@@ -494,11 +504,17 @@ function App() {
           )}
 
           {activeVideo.status === 'failed' && (
-            <p style={{ color: '#fca5a5', marginTop: '1rem' }}>
-              Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your API keys
-              {videoProvider?.provider === 'did' ? ' (D-ID key and credits)' : ' (ElevenLabs and Pexels)'}.
-              Then generate a new script and try again.
-            </p>
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ color: '#fca5a5', marginBottom: '0.75rem' }}>
+                Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your API keys
+                {videoProvider?.provider === 'did' ? ' (D-ID key and credits)' : ' (ElevenLabs and Pexels)'}.
+              </p>
+              <button
+                onClick={() => retryVideo(activeVideo)}
+                style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
+                🔁 Edit Script & Retry
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -589,22 +605,29 @@ function App() {
                 <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: '0.4rem 0 0' }}>
                   {new Date(v.created_at).toLocaleString()}
                 </p>
-                {v.video_url && (
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                  {v.video_url && (
                     <a href={v.video_url} target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       className="video-download-link" style={{ fontSize: '0.8125rem', padding: '0.3rem 0.75rem' }}>
                       ▶ Preview / Download
                     </a>
-                    {v.status === 'ready' && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setActiveVideo(v); setPublishSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                        style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
-                        ▶ Upload to YouTube
-                      </button>
-                    )}
-                  </div>
-                )}
+                  )}
+                  {v.status === 'ready' && (
+                    <button
+                      onClick={e => { e.stopPropagation(); setActiveVideo(v); setPublishSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                      ▶ Upload to YouTube
+                    </button>
+                  )}
+                  {v.status === 'failed' && (
+                    <button
+                      onClick={e => { e.stopPropagation(); retryVideo(v); }}
+                      style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                      🔁 Edit & Retry
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
