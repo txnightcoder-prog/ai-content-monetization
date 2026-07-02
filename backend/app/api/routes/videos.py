@@ -47,8 +47,8 @@ async def generate_video(
     **Full pipeline endpoint.**
 
     1. Creates a Video DB record in status `generating`.
-    2. Fires off Vicsee video generation as a background task (returns immediately).
-    3. When Vicsee completes, the video row is updated to `ready` with the video URL.
+    2. Fires off local video generation (ElevenLabs + Pexels + FFmpeg) as a background task.
+    3. When generation completes, the video row is updated to `ready` with the video path.
 
     Poll `GET /api/v1/videos/{video_id}` to track progress.
     Once `status == ready`, call `POST /api/v1/videos/{video_id}/publish`.
@@ -69,7 +69,7 @@ async def generate_video(
 
     # Kick off generation in the background so the response is instant
     background_tasks.add_task(pipeline.generate, db_video.id)
-    logger.info("Queued Vicsee generation for video %s (script %s)", db_video.id, request.script_id)
+    logger.info("Queued local video generation for video %s (script %s)", db_video.id, request.script_id)
 
     return db_video
 

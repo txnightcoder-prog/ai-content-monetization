@@ -157,12 +157,14 @@ $N8N_APP = "app-n8n-content-mon-$(Get-Random -Maximum 9999)"
 $N8N_PASSWORD = "SecureN8nPass123!@#"  # CHANGE THIS!
 
 # API Keys (replace with your actual keys)
-$OPENAI_API_KEY = "sk-your-openai-key"
-$VICSEE_API_KEY = "your-vicsee-key"
-$BUFFER_ACCESS_TOKEN = "your-buffer-token"
-$STAN_STORE_API_KEY = "your-stanstore-key"
-$BEEHIIV_API_KEY = "your-beehiiv-key"
-$JWT_SECRET = "your-jwt-secret-$(Get-Random)"
+$OPENAI_API_KEY        = "sk-your-openai-key"
+$ELEVENLABS_API_KEY    = "your-elevenlabs-api-key"      # elevenlabs.io → Profile → API Keys (free tier available)
+$ELEVENLABS_VOICE_ID   = ""                              # optional — leave blank for default Rachel voice
+$PEXELS_API_KEY        = "your-pexels-api-key"          # pexels.com/api (free, unlimited)
+$BUFFER_ACCESS_TOKEN   = "your-buffer-token"
+$STAN_STORE_API_KEY    = "your-stanstore-key"
+$BEEHIIV_API_KEY       = "your-beehiiv-key"
+$JWT_SECRET            = "your-jwt-secret-$(Get-Random)"
 
 Write-Host "Variables set successfully!" -ForegroundColor Green
 ```
@@ -384,11 +386,15 @@ az containerapp create `
   --env-vars `
     DATABASE_URL=$DATABASE_URL `
     OPENAI_API_KEY=$OPENAI_API_KEY `
+    ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY `
+    ELEVENLABS_VOICE_ID=$ELEVENLABS_VOICE_ID `
+    PEXELS_API_KEY=$PEXELS_API_KEY `
     BUFFER_ACCESS_TOKEN=$BUFFER_ACCESS_TOKEN `
     STAN_STORE_API_KEY=$STAN_STORE_API_KEY `
     BEEHIIV_API_KEY=$BEEHIIV_API_KEY `
     JWT_SECRET=$JWT_SECRET `
-    AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION
+    AZURE_STORAGE_CONNECTION_STRING=$STORAGE_CONNECTION `
+    VIDEO_OUTPUT_DIR=/tmp/videos
 
 $BACKEND_URL = "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
 Write-Host "✓ Backend deployed" -ForegroundColor Green
