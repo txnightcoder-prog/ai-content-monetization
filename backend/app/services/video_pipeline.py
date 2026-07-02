@@ -2,8 +2,13 @@
 Video Pipeline Service
 ======================
 Orchestrates:
-  1. Local video generation — ElevenLabs TTS + Pexels clips + FFmpeg (background task)
+  1. Video generation — D-ID talking avatar (if DID_API_KEY set)
+                      — Local ElevenLabs+Pexels+FFmpeg (fallback)
   2. YouTube direct upload via OAuth (publish / schedule)
+
+Provider selection:
+  DID_API_KEY set   → D-ID talking-avatar video (~$5.90/month, no FFmpeg needed)
+  Otherwise         → Local faceless video (ElevenLabs + Pexels + FFmpeg)
 
 Publishing uses the YouTube Data API v3 resumable upload endpoint.
 Requires env vars: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
@@ -127,7 +132,11 @@ async def _upload_to_youtube(
 
 class VideoPipelineService:
     """
-    Background pipeline: local video generation (ElevenLabs+Pexels+FFmpeg) → YouTube upload.
+    Background pipeline: D-ID or local video generation → YouTube upload.
+
+    Provider precedence:
+      1. D-ID  — if DID_API_KEY env var is set (talking avatar, highest quality)
+      2. Local — ElevenLabs + Pexels + FFmpeg faceless video (free tier friendly)
     """
 
     def __init__(
@@ -140,7 +149,7 @@ class VideoPipelineService:
 
     # ------------------------------------------------------------------
     async def generate(self, video_id: UUID) -> None:
-        """Background task: generate video locally and poll to completion."""
+        """Background task: generate video via D-ID or locally, then update DB."""
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             logger.error("VideoPipeline.generate: video %s not found", video_id)
@@ -154,14 +163,43 @@ class VideoPipelineService:
             self._set_failed(video)
             return
 
-        if not self._video:
-            logger.warning("LocalVideoService not configured — marking video %s failed", video_id)
-            self._set_failed(video)
-            return
-
         script_text = "\n\n".join(p for p in [script.hook, script.body, script.cta] if p)
         caption = script.hook or script_text[:100]
 
+        # ── Route to D-ID if key is available ──────────────────────────
+        if os.getenv("DID_API_KEY"):
+            await self._generate_did(video, script_text)
+        elif self._video:
+            await self._generate_local(video, script_text, caption)
+        else:
+            logger.warning("No video provider configured — marking video %s failed", video_id)
+            self._set_failed(video)
+
+    async def _generate_did(self, video: Video, script_text: str) -> None:
+        """Generate via D-ID talking-avatar pipeline."""
+        from app.services.did_service import DIDService
+        try:
+            did = DIDService()
+            talk_id = await did.create_talk(script_text)
+
+            video.heygen_video_id = talk_id
+            self.db.commit()
+            logger.info("D-ID talk submitted: %s for video %s", talk_id, video.id)
+
+            status_data = await did.wait_for_completion(talk_id)
+            video.video_url     = status_data.get("video_url")
+            video.thumbnail_url = status_data.get("thumbnail_url")
+            video.duration      = status_data.get("duration")
+            video.status        = VideoStatus.READY
+            self.db.commit()
+            logger.info("Video %s READY via D-ID: %s", video.id, video.video_url)
+
+        except Exception as exc:
+            logger.error("D-ID pipeline failed for video %s: %s", video.id, exc)
+            self._set_failed(video)
+
+    async def _generate_local(self, video: Video, script_text: str, caption: str) -> None:
+        """Generate via local ElevenLabs + Pexels + FFmpeg pipeline."""
         try:
             result = await self._video.create_video(script=script_text, aspect_ratio="9:16")
             job_id = result.get("video_id")
@@ -179,10 +217,10 @@ class VideoPipelineService:
             video.duration      = status_data.get("duration")
             video.status        = VideoStatus.READY
             self.db.commit()
-            logger.info("Video %s READY: %s", video_id, video.video_url)
+            logger.info("Video %s READY via local pipeline: %s", video.id, video.video_url)
 
         except Exception as exc:
-            logger.error("Local video pipeline failed for %s: %s", video_id, exc)
+            logger.error("Local video pipeline failed for %s: %s", video.id, exc)
             self._set_failed(video)
 
     # ------------------------------------------------------------------
@@ -243,7 +281,12 @@ class VideoPipelineService:
 
 # ------------------------------------------------------------------
 def get_video_service() -> Optional[LocalVideoService]:
-    """Return a LocalVideoService if both ElevenLabs and Pexels keys are set."""
+    """
+    Return a LocalVideoService if ElevenLabs + Pexels keys are set.
+    Not needed when DID_API_KEY is set (D-ID handles TTS internally).
+    """
+    if os.getenv("DID_API_KEY"):
+        return None  # D-ID path — no local service needed
     if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
         return LocalVideoService()
     return None
