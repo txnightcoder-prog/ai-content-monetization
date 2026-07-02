@@ -9,7 +9,7 @@ import os
 from typing import Any, Dict, List
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/health", tags=["health"])
@@ -209,5 +209,30 @@ async def run_checks() -> Dict[str, Any]:
         "summary": {"total": len(checks), "passed": passed, "failed": failed, "warned": warned},
         "checks": checks,
     }
+
+
+@router.post("/run-daily")
+async def run_daily_check(background_tasks: BackgroundTasks) -> Dict[str, Any]:
+    """
+    Run all health checks and send an alert email to txnightcoder@gmail.com
+    if any check fails or warns.
+
+    Called automatically every day at 08:00 UTC by the GitHub Actions
+    scheduled workflow (.github/workflows/daily-diagnostics.yml).
+    Can also be triggered manually from this endpoint.
+
+    Requires env var:
+      SENDGRID_API_KEY  — free at sendgrid.com (100 emails/day free tier)
+    """
+    from app.services.daily_diagnostic_service import run_daily_diagnostic
+    result = await run_daily_diagnostic()
+    logger.info(
+        "Daily diagnostic complete — passed=%s failed=%s warned=%s alert_sent=%s",
+        result["summary"]["passed"],
+        result["summary"]["failed"],
+        result["summary"]["warned"],
+        result.get("alert_sent"),
+    )
+    return result
 
 # Made with Bob
