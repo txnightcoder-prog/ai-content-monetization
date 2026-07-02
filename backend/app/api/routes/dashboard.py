@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.models.content_script import ContentScript, ScriptStatus
@@ -43,7 +43,7 @@ def get_dashboard_metrics(db: Session = Depends(get_db)) -> dict:
     ).group_by(Post.status).all()
     
     # Get revenue (last 30 days)
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     revenue_30d = db.query(func.sum(Conversion.amount)).filter(
         Conversion.created_at >= thirty_days_ago
     ).scalar() or 0
@@ -88,6 +88,12 @@ def get_dashboard_metrics(db: Session = Depends(get_db)) -> dict:
     }
 
 
+@router.get("/overview")
+def get_dashboard_overview(db: Session = Depends(get_db)) -> dict:
+    """Alias for /metrics — kept for backwards compatibility."""
+    return get_dashboard_metrics(db=db)
+
+
 @router.get("/revenue")
 def get_revenue_metrics(
     days: int = 30,
@@ -96,7 +102,7 @@ def get_revenue_metrics(
     """
     Get revenue metrics for the specified time period.
     """
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    start_date = datetime.utcnow() - timedelta(days=days)
     
     # Total revenue
     total_revenue = db.query(func.sum(Conversion.amount)).filter(
