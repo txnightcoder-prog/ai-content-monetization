@@ -141,21 +141,25 @@ def list_scripts(
     """
     List all scripts with pagination and optional filtering.
     """
-    query = db.query(ContentScript)
-    
-    if status:
-        query = query.filter(ContentScript.status == status)
-    
-    total = query.count()
-    scripts = query.offset(skip).limit(limit).all()
-    
-    return {
-        "items": scripts,
-        "total": total,
-        "page": skip // limit + 1,
-        "page_size": limit,
-        "pages": (total + limit - 1) // limit
-    }
+    try:
+        query = db.query(ContentScript)
+
+        if status:
+            query = query.filter(ContentScript.status == status)
+
+        total = query.count()
+        scripts = query.offset(skip).limit(limit).all()
+
+        return {
+            "items": scripts,
+            "total": total,
+            "page": skip // limit + 1,
+            "page_size": limit,
+            "pages": (total + limit - 1) // limit
+        }
+    except Exception:
+        logger.exception("Failed to list scripts")
+        raise HTTPException(status_code=500, detail="Failed to list scripts")
 
 
 @router.get("/{script_id}", response_model=ContentScriptResponse)
