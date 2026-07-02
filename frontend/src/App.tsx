@@ -1504,9 +1504,16 @@ function App() {
             <span>Topic: {generatedScript.topic}</span>
             <span>Niche: {generatedScript.script_metadata?.niche ?? niche}</span>
           </div>
-          <p className="script-id-copy">
-            🆔 Script ID (copy for Videos page): <strong>{generatedScript.id}</strong>
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', margin: '0.5rem 0 1rem' }}>
+            <p className="script-id-copy" style={{ margin: 0 }}>
+              🆔 Script ID: <strong>{generatedScript.id}</strong>
+            </p>
+            <button
+              onClick={() => { setVideoScriptId(generatedScript.id); setCurrentPage('videos'); }}
+              style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.1rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              🎬 Use in Videos →
+            </button>
+          </div>
 
           <div className="script-section">
             <h3>🎣 Hook (3-5 seconds)</h3>
@@ -1531,7 +1538,14 @@ function App() {
           <div className="scripts-list">
             {scripts.map((script) => (
               <div key={script.id} className="script-card">
-                <h3>{script.topic}</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <h3 style={{ margin: 0 }}>{script.topic}</h3>
+                  <button
+                    onClick={e => { e.stopPropagation(); setVideoScriptId(script.id); setCurrentPage('videos'); }}
+                    style={{ flexShrink: 0, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    🎬 Use
+                  </button>
+                </div>
                 <p className="script-niche">{script.script_metadata?.niche ?? ''}</p>
                 <div className="script-preview">
                   <strong>Hook:</strong> {script.hook.substring(0, 100)}...
