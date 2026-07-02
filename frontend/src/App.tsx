@@ -163,6 +163,8 @@ function App() {
   const [videoError, setVideoError]             = useState('');
   const [activeVideo, setActiveVideo]           = useState<VideoRecord | null>(null);
   const [videoHistory, setVideoHistory]         = useState<VideoRecord[]>([]);
+  const [allVideos, setAllVideos]               = useState<VideoRecord[]>([]);
+  const [allVideosLoading, setAllVideosLoading] = useState(false);
   const [publishLoading, setPublishLoading]     = useState(false);
   const [publishSuccess, setPublishSuccess]     = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -181,13 +183,26 @@ function App() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  // Fetch video provider once on mount
+  // Fetch video provider + all videos once on mount
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/health/video-provider`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setVideoProvider(d); })
       .catch(() => {});
+    loadAllVideos();
   }, []);
+
+  const loadAllVideos = async () => {
+    setAllVideosLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/videos/?limit=50`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllVideos(data.items ?? []);
+      }
+    } catch { /* ignore */ }
+    finally { setAllVideosLoading(false); }
+  };
 
   const startGenerate = async () => {
     if (!videoScriptId.trim()) { setVideoError('Paste a Script ID first'); return; }
@@ -202,6 +217,7 @@ function App() {
       const video: VideoRecord = await res.json();
       setActiveVideo(video);
       setVideoHistory(h => [video, ...h]);
+      setAllVideos(prev => [video, ...prev.filter(v => v.id !== video.id)]);
       // Start polling every 10 s
       pollRef.current = setInterval(() => pollVideo(video.id), 10_000);
     } catch (err) {
@@ -253,6 +269,7 @@ function App() {
       const video: VideoRecord = await res.json();
       setActiveVideo(video);
       setVideoHistory(h => h.map(v => v.id === id ? video : v));
+      setAllVideos(prev => prev.map(v => v.id === id ? video : v));
       if (video.status === 'ready' || video.status === 'failed') {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       }
@@ -532,30 +549,67 @@ function App() {
       {/* Scheduler section */}
       <div id="scheduler">{renderScheduler()}</div>
 
-      {/* History */}
-      {videoHistory.length > 1 && (
-        <div className="scripts-history" style={{ marginTop: '2rem' }}>
-          <h2>Recent Videos ({videoHistory.length})</h2>
+      {/* ── All videos from DB ── */}
+      <div className="scripts-history" style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+          <h2 style={{ margin: 0 }}>
+            📼 My Videos {allVideos.length > 0 && `(${allVideos.length})`}
+          </h2>
+          <button
+            onClick={loadAllVideos}
+            disabled={allVideosLoading}
+            style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: '0.5rem', padding: '0.35rem 0.85rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>
+            {allVideosLoading ? '⏳' : '🔄 Refresh'}
+          </button>
+        </div>
+
+        {allVideosLoading && <p style={{ color: '#64748b', fontSize: '0.875rem' }}>Loading…</p>}
+
+        {!allVideosLoading && allVideos.length === 0 && (
+          <p style={{ color: '#64748b', fontSize: '0.875rem' }}>No videos yet — generate one above.</p>
+        )}
+
+        {allVideos.length > 0 && (
           <div className="scripts-list">
-            {videoHistory.map(v => (
+            {allVideos.map(v => (
               <div
                 key={v.id}
                 className="script-card"
-                onClick={() => setActiveVideo(v)}
-                style={{ borderColor: activeVideo?.id === v.id ? statusColor(v.status) : undefined }}
+                onClick={() => { setActiveVideo(v); setPublishSuccess(''); setVideoError(''); }}
+                style={{ borderLeft: `4px solid ${statusColor(v.status)}`, borderColor: activeVideo?.id === v.id ? statusColor(v.status) : undefined, cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="script-preview"><strong>ID:</strong> {v.id.slice(0, 16)}…</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                   <span className="video-status-badge" style={{ background: statusColor(v.status), fontSize: '0.75rem' }}>
                     {statusLabel(v.status)}
                   </span>
+                  <span style={{ color: '#64748b', fontSize: '0.75rem', fontFamily: 'monospace' }}>
+                    {v.id.slice(0, 8)}…
+                  </span>
                 </div>
-                <p className="script-niche" style={{ marginTop: '0.5rem' }}>{new Date(v.created_at).toLocaleString()}</p>
+                <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: '0.4rem 0 0' }}>
+                  {new Date(v.created_at).toLocaleString()}
+                </p>
+                {v.video_url && (
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                    <a href={v.video_url} target="_blank" rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                      className="video-download-link" style={{ fontSize: '0.8125rem', padding: '0.3rem 0.75rem' }}>
+                      ▶ Preview / Download
+                    </a>
+                    {v.status === 'ready' && (
+                      <button
+                        onClick={e => { e.stopPropagation(); setActiveVideo(v); setPublishSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                        ▶ Upload to YouTube
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 
