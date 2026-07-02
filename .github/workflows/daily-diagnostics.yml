@@ -1,0 +1,72 @@
+name: Daily Diagnostic Check
+
+# Runs every day at 08:00 UTC.
+# Hits the /api/v1/health/run-daily endpoint on the live backend.
+# The backend runs all health checks and emails txnightcoder@gmail.com
+# if anything fails or warns.
+on:
+  schedule:
+    - cron: '0 8 * * *'   # 08:00 UTC daily
+  workflow_dispatch:       # also allows manual trigger from Actions tab
+
+env:
+  BACKEND_URL: https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io
+
+jobs:
+  daily-diagnostic:
+    name: Run Daily Health Check
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Call the backend /run-daily endpoint ──────────────────────────────
+      - name: Trigger diagnostic check
+        id: diag
+        run: |
+          echo "Calling $BACKEND_URL/api/v1/health/run-daily ..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -X POST "$BACKEND_URL/api/v1/health/run-daily" \
+            -H "Content-Type: application/json" \
+            --max-time 60)
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response body:"
+          echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
+
+          # Surface summary fields as step outputs
+          FAILED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['summary']['failed'])" 2>/dev/null || echo "unknown")
+          WARNED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['summary']['warned'])" 2>/dev/null || echo "unknown")
+          PASSED=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['summary']['passed'])" 2>/dev/null || echo "unknown")
+          ALERT=$(echo "$BODY"  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('alert_sent','false'))" 2>/dev/null || echo "false")
+
+          echo "passed=$PASSED"  >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED"  >> "$GITHUB_OUTPUT"
+          echo "warned=$WARNED"  >> "$GITHUB_OUTPUT"
+          echo "alert_sent=$ALERT" >> "$GITHUB_OUTPUT"
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+
+          # Fail the workflow step if the backend itself was unreachable
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::Backend returned HTTP $HTTP_CODE — backend may be down"
+            exit 1
+          fi
+
+      # ── 2. Print a human-readable summary ───────────────────────────────────
+      - name: Print summary
+        if: always()
+        run: |
+          echo "===== DAILY DIAGNOSTIC SUMMARY ====="
+          echo "Passed  : ${{ steps.diag.outputs.passed }}"
+          echo "Failed  : ${{ steps.diag.outputs.failed }}"
+          echo "Warned  : ${{ steps.diag.outputs.warned }}"
+          echo "Alert sent to txnightcoder@gmail.com: ${{ steps.diag.outputs.alert_sent }}"
+          echo "====================================="
+
+      # ── 3. Fail the workflow if any check failed (makes it visible in Actions) ─
+      - name: Fail if checks failed
+        if: steps.diag.outputs.failed != '0' && steps.diag.outputs.failed != 'unknown'
+        run: |
+          echo "::error::${{ steps.diag.outputs.failed }} health check(s) FAILED. Check the alert email."
+          exit 1

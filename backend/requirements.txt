@@ -33,3 +33,6 @@ python-dateutil==2.9.0.post0
 
 # Video assembly
 httpx[http2]==0.28.1
+
+# Email alerts (daily diagnostics)
+sendgrid==6.11.0
