@@ -21,12 +21,13 @@ class Video(Base, TimestampMixin):
     __tablename__ = "videos"
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    script_id = Column(UUID(as_uuid=True), ForeignKey("content_scripts.id"), nullable=False)
+    script_id = Column(UUID(as_uuid=True), ForeignKey("content_scripts.id"), nullable=True)
     heygen_video_id = Column(String(255), nullable=True)
     video_url = Column(String(500), nullable=True)
     thumbnail_url = Column(String(500), nullable=True)
     duration = Column(Integer, nullable=True)  # Duration in seconds
     status = Column(SQLEnum(VideoStatus), default=VideoStatus.GENERATING, nullable=False)
+    error_message = Column(String(1000), nullable=True)  # Human-readable failure reason
     
     # Relationships
     script = relationship("ContentScript", back_populates="videos")

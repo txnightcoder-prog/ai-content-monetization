@@ -369,12 +369,39 @@ async def parrot_video(
         )
 
         # Persist the blueprint as a ContentScript for later use
-        blueprint = result.get("blueprint", {})
+        blueprint  = result.get("blueprint", {})
+        structure  = blueprint.get("structure", {})
+        voiceover  = blueprint.get("voiceover_script", {})
+
+        # ── Build readable script text from blueprint ─────────────────────
+        # Prefer the AI-generated word-for-word voiceover body if present,
+        # otherwise assemble from the structured sections so ElevenLabs /
+        # video pipeline receives proper prose rather than a dict repr.
+        hook_text = (
+            voiceover.get("hook") or structure.get("hook") or ""
+        )
+        cta_text = (
+            voiceover.get("cta") or structure.get("outro") or ""
+        )
+
+        if voiceover.get("body"):
+            body_text = voiceover["body"]
+        else:
+            parts = []
+            if structure.get("intro"):
+                parts.append(structure["intro"])
+            for section in structure.get("sections", []):
+                if section.get("title"):
+                    parts.append(section["title"] + ":")
+                if section.get("content"):
+                    parts.append(section["content"])
+            body_text = "\n\n".join(parts) if parts else structure.get("intro", "")
+
         db_script = ContentScript(
             topic=blueprint.get("title", "Parrot Blueprint"),
-            hook=blueprint.get("structure", {}).get("hook", ""),
-            body=str(blueprint.get("structure", {})),
-            cta=blueprint.get("structure", {}).get("outro", ""),
+            hook=hook_text,
+            body=body_text,
+            cta=cta_text,
             status=ScriptStatus.DRAFT,
             script_metadata={
                 **blueprint,

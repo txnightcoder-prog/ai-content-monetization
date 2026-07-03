@@ -1,9 +1,13 @@
 import logging
+import os
+import shutil
+import uuid as _uuid
 from datetime import datetime
+from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -30,6 +34,80 @@ class ScheduleVideoRequest(BaseModel):
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
+
+
+# ---------------------------------------------------------------------------
+# iPhone / manual upload endpoint
+# ---------------------------------------------------------------------------
+
+_ALLOWED_TYPES = {"video/mp4", "video/quicktime", "video/mov", "video/mpeg", "video/webm"}
+_MAX_BYTES     = 500 * 1024 * 1024   # 500 MB
+
+
+@router.post("/upload", response_model=VideoResponse, status_code=201)
+async def upload_video_file(
+    file: UploadFile = File(..., description="Video file from iPhone or any device (MP4, MOV, etc.)"),
+    title: Optional[str] = Form(None, description="Optional title / label for this video"),
+    db: Session = Depends(get_db),
+):
+    """
+    **Upload a video file directly** (e.g. from an iPhone camera roll).
+
+    - Accepts MP4, MOV, MPEG, WebM up to 500 MB.
+    - Saves to the configured VIDEO_OUTPUT_DIR (or /tmp/videos).
+    - Creates a Video DB record in `ready` status immediately.
+    - The record can then be published to YouTube via `POST /{video_id}/publish`.
+    """
+    # ── Content-type guard ───────────────────────────────────────────────────
+    ct = (file.content_type or "").lower()
+    # Some browsers send application/octet-stream for .mov — allow by extension too
+    ext = Path(file.filename or "").suffix.lower()
+    if ct not in _ALLOWED_TYPES and ext not in {".mp4", ".mov", ".mpeg", ".mpg", ".webm"}:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{ct}'. Please upload MP4, MOV, or WebM.",
+        )
+
+    # ── Save file ────────────────────────────────────────────────────────────
+    output_dir = Path(os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    video_id  = _uuid.uuid4()
+    safe_ext  = ext if ext in {".mp4", ".mov", ".mpeg", ".mpg", ".webm"} else ".mp4"
+    file_path = output_dir / f"{video_id}{safe_ext}"
+
+    try:
+        with open(file_path, "wb") as out:
+            total = 0
+            while chunk := await file.read(1024 * 1024):   # 1 MB chunks
+                total += len(chunk)
+                if total > _MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="File exceeds 500 MB limit.")
+                out.write(chunk)
+    except HTTPException:
+        if file_path.exists():
+            file_path.unlink()
+        raise
+    except Exception as exc:
+        if file_path.exists():
+            file_path.unlink()
+        logger.exception("Upload failed for %s", video_id)
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+
+    logger.info("Uploaded video %s → %s (%d bytes)", video_id, file_path, total)
+
+    # ── Create DB record ─────────────────────────────────────────────────────
+    db_video = Video(
+        id=video_id,
+        script_id=None,                    # no script — manually uploaded
+        video_url=str(file_path),
+        status=VideoStatus.READY,
+        error_message=None,
+    )
+    db.add(db_video)
+    db.commit()
+    db.refresh(db_video)
+    return db_video
 
 
 # ---------------------------------------------------------------------------
