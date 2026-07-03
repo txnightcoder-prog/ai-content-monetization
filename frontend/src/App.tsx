@@ -961,6 +961,29 @@ function App() {
   const platformColor = (p: string) => ({ youtube: '#ef4444', tiktok: '#a78bfa', instagram: '#f59e0b' }[p] ?? '#3b82f6');
   const platformIcon  = (p: string) => ({ youtube: '▶️', tiktok: '🎵', instagram: '📸' }[p] ?? '📱');
 
+  const [trendingScriptLoading, setTrendingScriptLoading] = useState<number | null>(null);
+
+  const generateScriptFromTrending = async (item: TrendingItem, itemNiche: string) => {
+    setTrendingScriptLoading(item.rank);
+    try {
+      const topic = item.use_for_niche || item.title;
+      const params = new URLSearchParams({ topic, niche: itemNiche });
+      const res = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const script: Script = await res.json();
+      setGeneratedScript(script);
+      setScripts(prev => [script, ...prev]);
+      setCurrentPage('scripts');
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Script generation failed');
+    } finally {
+      setTrendingScriptLoading(null);
+    }
+  };
+
   const renderTrendingItems = (items: TrendingItem[], platform: string) => {
     if (!items.length) return <p style={{ color: '#94a3b8' }}>No data available.</p>;
     return (
@@ -980,7 +1003,21 @@ function App() {
                 {item.tags.map((t, i) => <span key={i} style={{ background: 'rgba(148,163,184,0.1)', color: '#94a3b8', fontSize: '0.75rem', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>#{t}</span>)}
               </div>
             )}
-            {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" className="video-download-link" style={{ marginTop: '0.75rem', display: 'inline-block', fontSize: '0.875rem' }}>▶ Watch</a>}
+            {/* ── Action buttons ── */}
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.85rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => generateScriptFromTrending(item, trendNiche)}
+                disabled={trendingScriptLoading === item.rank}
+                style={{ flex: '1 1 140px', background: 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: trendingScriptLoading === item.rank ? 'not-allowed' : 'pointer', opacity: trendingScriptLoading === item.rank ? 0.7 : 1 }}>
+                {trendingScriptLoading === item.rank ? '✍️ Generating…' : '✍️ Write Script'}
+              </button>
+              <button
+                onClick={() => { setTopic(item.use_for_niche || item.title); setNiche(trendNiche); setCurrentPage('blueprint'); }}
+                style={{ flex: '1 1 140px', background: 'linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                📋 Blueprint
+              </button>
+              {item.url && <a href={item.url} target="_blank" rel="noopener noreferrer" className="video-download-link" style={{ flex: '1 1 80px', marginTop: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', borderRadius: '0.5rem', padding: '0.55rem 1rem', textDecoration: 'none' }}>▶ Watch</a>}
+            </div>
           </div>
         ))}
       </div>
@@ -1180,6 +1217,54 @@ function App() {
   const [schedResult, setSchedResult]             = useState('');
   const [schedError, setSchedError]               = useState('');
   const [previewUrl, setPreviewUrl]               = useState<string | null>(null);
+
+  // ── iPhone upload state ───────────────────────────────────────────────────
+  const [uploadFile, setUploadFile]               = useState<File | null>(null);
+  const [uploadTitle, setUploadTitle]             = useState('');
+  const [uploadLoading, setUploadLoading]         = useState(false);
+  const [uploadProgress, setUploadProgress]       = useState(0);
+  const [uploadError, setUploadError]             = useState('');
+  const [uploadSuccess, setUploadSuccess]         = useState('');
+
+  const uploadIphoneVideo = async () => {
+    if (!uploadFile) { setUploadError('Choose a video file first'); return; }
+    setUploadLoading(true); setUploadError(''); setUploadSuccess(''); setUploadProgress(0);
+    try {
+      const form = new FormData();
+      form.append('file', uploadFile);
+      if (uploadTitle.trim()) form.append('title', uploadTitle.trim());
+
+      // Use XMLHttpRequest so we can track upload progress
+      const result = await new Promise<VideoRecord>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', e => {
+          if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+        });
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(JSON.parse(xhr.responseText));
+          } else {
+            try { reject(new Error(JSON.parse(xhr.responseText).detail ?? xhr.statusText)); }
+            catch { reject(new Error(xhr.statusText)); }
+          }
+        });
+        xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+        xhr.open('POST', `${API_BASE}/api/v1/videos/upload`);
+        xhr.send(form);
+      });
+
+      setUploadSuccess(`✅ Uploaded! Video ID: ${result.id}`);
+      setActiveVideo(result);
+      setUploadFile(null);
+      setUploadTitle('');
+      setAllVideos(prev => [result, ...prev]);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploadLoading(false);
+      setUploadProgress(0);
+    }
+  };
 
   const togglePlatform = (p: string) =>
     setSchedPlatforms(prev => prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p]);
