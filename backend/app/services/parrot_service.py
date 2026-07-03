@@ -1,13 +1,19 @@
 """
-Parrot Service — analyse a YouTube video and generate a Blueprint in your niche.
+Parrot Service — analyse a YouTube video and generate a full production Blueprint.
 
 How it works:
 1. Extract the video ID from any YouTube URL format.
 2. Fetch title, description, tags, category and view/like counts via the
    YouTube Data API v3 (public data, no OAuth needed).
    Falls back to OpenAI-only mode if YOUTUBE_DATA_API_KEY is not set.
-3. Feed that metadata into OpenAI and ask it to generate a full Blueprint
-   that matches the video's *structure and style* but uses your niche/topic.
+3. Feed that metadata + the creator's own production preferences into OpenAI
+   and generate a complete Blueprint including:
+   - Source analysis (hook style, structure, tone, why it works)
+   - Cinematic shot list with camera angles, movement, and lighting
+   - Scene-by-scene breakdown with B-roll suggestions
+   - Full voiceover script (hook → body → CTA)
+   - Audio direction (music style, SFX, voiceover tone)
+   - Thumbnail ideas and metadata
 """
 
 import json
@@ -73,8 +79,15 @@ async def _fetch_yt_metadata(video_id: str, api_key: str) -> Dict[str, Any]:
 
 class ParrotService:
     """
-    Analyse a YouTube video and produce a Blueprint that mirrors its
-    structure / style but targets your own niche and topic.
+    Analyse a YouTube video and produce a full production Blueprint that mirrors
+    its structure / style but targets your own niche and topic.
+
+    Enhanced with cinematic production options:
+    - style: cinematic style preference (e.g. "documentary", "fast-paced", "educational")
+    - duration: target video length (e.g. "60 seconds", "5 minutes", "10 minutes")
+    - aspect_ratio: output ratio (e.g. "9:16" for Shorts/TikTok, "16:9" for YouTube)
+    - audio_style: music and audio direction (e.g. "upbeat background music", "dramatic orchestral")
+    - camera_notes: any specific camera or visual preferences
     """
 
     def __init__(self, openai_service: OpenAIService):
@@ -86,21 +99,30 @@ class ParrotService:
         youtube_url: str,
         niche: str = "AI tools",
         your_topic: Optional[str] = None,
+        # ── Production customisation ─────────────────────────────────────────
+        style: Optional[str] = None,
+        duration: Optional[str] = None,
+        aspect_ratio: Optional[str] = None,
+        audio_style: Optional[str] = None,
+        camera_notes: Optional[str] = None,
+        video_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Analyse a YouTube video and generate a Blueprint.
+        Analyse a YouTube video and generate a full production Blueprint.
 
         Args:
-            youtube_url:  Any valid YouTube URL.
-            niche:        Your content niche (used for the generated Blueprint).
-            your_topic:   Optional override topic. If omitted, OpenAI picks a
-                          fitting topic within the niche based on the source video.
+            youtube_url:   Any valid YouTube URL.
+            niche:         Your content niche (used for the generated Blueprint).
+            your_topic:    Optional override topic. If omitted, OpenAI picks one.
+            style:         Cinematic style (e.g. "documentary", "fast-paced").
+            duration:      Target length (e.g. "60 seconds", "5 minutes").
+            aspect_ratio:  Output ratio ("9:16", "16:9", "1:1").
+            audio_style:   Music/audio direction (e.g. "upbeat", "dramatic orchestral").
+            camera_notes:  Any specific visual or camera preferences.
+            video_prompt:  Free-form description of the video you want to create.
 
-        Returns:
-            {
-              "source_video": { title, views, likes, channel, url },
-              "blueprint":    { ... same shape as /scripts/blueprint ... }
-            }
+        Returns a full Blueprint dict including shot list, scenes, voiceover script,
+        and audio direction.
         """
         video_id = _extract_video_id(youtube_url)
 
@@ -122,12 +144,21 @@ class ParrotService:
 
         yt_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        # ── 2. Ask OpenAI to analyse + generate Blueprint ────────────────────
+        # ── 2. Build production context block ────────────────────────────────
         topic_instruction = (
             f"The creator's target topic is: {your_topic}"
             if your_topic
             else f"Choose a high-CPM topic that fits the '{niche}' niche and mirrors the source video's theme."
         )
+
+        production_block = "\n".join(filter(None, [
+            f"- Cinematic style: {style}"          if style         else None,
+            f"- Target duration: {duration}"        if duration      else None,
+            f"- Aspect ratio: {aspect_ratio}"       if aspect_ratio  else None,
+            f"- Audio direction: {audio_style}"     if audio_style   else None,
+            f"- Camera / visual notes: {camera_notes}" if camera_notes else None,
+            f"- Creator's video description: {video_prompt}" if video_prompt else None,
+        ])) or "No specific production preferences provided — use sensible defaults."
 
         meta_block = (
             f"Title: {meta['title'] or '(not available)'}\n"
@@ -140,24 +171,27 @@ class ParrotService:
         )
 
         prompt = f"""
-You are a viral content strategist. Analyse the following YouTube video and then
-create a complete Video Blueprint for a creator in the "{niche}" niche.
+You are a viral content strategist and cinematic video director. Analyse the following
+YouTube video and create a complete Video Production Blueprint for a creator in the "{niche}" niche.
 
 === SOURCE VIDEO ===
 {meta_block}
 
+=== CREATOR'S PRODUCTION PREFERENCES ===
+{production_block}
+
 === YOUR TASK ===
-1. Identify what makes this video successful:
-   - Hook style (question / shock / story / number)
-   - Content structure (how many sections, transitions)
-   - Tone (educational / entertaining / motivational)
-   - Thumbnail / title strategy
-   - CTA approach
-
+1. Analyse what makes the source video successful (hook, structure, tone, pacing).
 2. {topic_instruction}
+3. Generate a complete Blueprint that MIRRORS THE STRUCTURE AND STYLE of the source
+   video but uses ORIGINAL content for the creator's own niche/topic.
 
-3. Generate a Blueprint that MIRRORS THE STRUCTURE AND STYLE of the source
-   video but uses YOUR OWN original topic, niche, and wording (no copying).
+The Blueprint must include:
+- A full cinematic SHOT LIST (each scene: shot type, camera movement, lighting, duration)
+- A scene-by-scene BREAKDOWN with B-roll suggestions and on-screen text ideas
+- A complete VOICEOVER SCRIPT written out word-for-word (hook → body → CTA)
+- AUDIO DIRECTION (music style, tempo, SFX moments, voiceover tone/pace)
+- THUMBNAIL IDEAS (3 options with visual description + headline copy)
 
 Return ONLY valid JSON (no markdown fences) with this exact shape:
 {{
@@ -165,11 +199,18 @@ Return ONLY valid JSON (no markdown fences) with this exact shape:
     "hook_style": "...",
     "structure": "...",
     "tone": "...",
+    "pacing": "...",
     "why_it_works": "..."
   }},
   "title": "Your compelling video title",
   "topic": "Main topic/theme",
   "niche": "{niche}",
+  "production": {{
+    "style": "{style or 'auto'}",
+    "duration": "{duration or 'auto'}",
+    "aspect_ratio": "{aspect_ratio or '16:9'}",
+    "audio_style": "{audio_style or 'auto'}"
+  }},
   "structure": {{
     "hook": "Attention-grabbing hook (first 5-10 seconds)",
     "intro": "Brief introduction",
@@ -178,7 +219,33 @@ Return ONLY valid JSON (no markdown fences) with this exact shape:
     ],
     "outro": "Call to action and closing"
   }},
-  "thumbnail_ideas": ["idea 1", "idea 2", "idea 3"],
+  "voiceover_script": {{
+    "hook": "Word-for-word hook voiceover text",
+    "body": "Word-for-word full body narration",
+    "cta": "Word-for-word call to action"
+  }},
+  "shot_list": [
+    {{
+      "scene": 1,
+      "description": "What the viewer sees",
+      "shot_type": "Wide / Close-up / Medium / Drone / POV / etc.",
+      "camera_movement": "Static / Pan left / Zoom in / Handheld / etc.",
+      "lighting": "Natural / Studio / Golden hour / etc.",
+      "duration_seconds": 5,
+      "broll_suggestion": "Suggested stock footage or b-roll to source",
+      "on_screen_text": "Optional caption or title card"
+    }}
+  ],
+  "audio_direction": {{
+    "music_style": "Description of background music genre and mood",
+    "music_tempo": "BPM range or descriptor (e.g. 90-110 BPM, energetic)",
+    "voiceover_tone": "How the narrator should sound (calm, excited, authoritative...)",
+    "voiceover_pace": "Words per minute or descriptor (conversational, rapid-fire...)",
+    "sfx_notes": "Key sound effect moments (e.g. whoosh on cuts, ding on key points)"
+  }},
+  "thumbnail_ideas": [
+    {{"visual": "Visual description", "headline": "Headline copy", "style": "Design style"}}
+  ],
   "metadata": {{
     "target_audience": "Who this is for",
     "estimated_length": "X-Y minutes",
@@ -190,11 +257,12 @@ Return ONLY valid JSON (no markdown fences) with this exact shape:
         raw = await self.openai.generate_completion(
             prompt=prompt,
             system_message=(
-                "You are an expert content strategist who reverse-engineers "
-                "successful YouTube videos and recreates their structure for new niches."
+                "You are an expert content strategist and video director who reverse-engineers "
+                "successful YouTube videos and creates complete cinematic production blueprints "
+                "for new creators. Always return valid JSON only."
             ),
             temperature=0.75,
-            max_tokens=2500,
+            max_tokens=4000,
         )
 
         # Strip markdown fences if present
@@ -214,16 +282,25 @@ Return ONLY valid JSON (no markdown fences) with this exact shape:
                 "title": meta["title"] or "Parrot Blueprint",
                 "topic": your_topic or niche,
                 "niche": niche,
+                "production": {
+                    "style": style or "auto",
+                    "duration": duration or "auto",
+                    "aspect_ratio": aspect_ratio or "16:9",
+                    "audio_style": audio_style or "auto",
+                },
                 "structure": {
                     "hook": "",
                     "intro": "",
                     "sections": [{"title": "Content", "content": cleaned[:800], "tips": []}],
                     "outro": "",
                 },
+                "voiceover_script": {"hook": "", "body": cleaned[:800], "cta": ""},
+                "shot_list": [],
+                "audio_direction": {},
                 "thumbnail_ideas": [],
                 "metadata": {
                     "target_audience": "General",
-                    "estimated_length": "5-10 minutes",
+                    "estimated_length": duration or "5-10 minutes",
                     "cpm_potential": "Medium",
                 },
             }
