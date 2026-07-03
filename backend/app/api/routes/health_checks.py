@@ -172,38 +172,7 @@ async def run_checks() -> Dict[str, Any]:
         _yt()
     ))
 
-    # ── 7. D-ID API key ──────────────────────────────────────────────────────
-    async def _did():
-        key = os.getenv("DID_API_KEY", "")
-        if not key:
-            raise ValueError(
-                "DID_API_KEY is not set — video generation uses local pipeline (ElevenLabs+Pexels+FFmpeg)"
-            )
-        # D-ID keys are already base64(email:secret) — use directly
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(
-                "https://api.d-id.com/credits",
-                headers={"Authorization": f"Basic {key}", "Accept": "application/json"},
-            )
-            if r.status_code == 401:
-                raise ValueError("Invalid D-ID API key (401). Check DID_API_KEY env var.")
-            r.raise_for_status()
-            data = r.json()
-        remaining = data.get("remaining", "?")
-        total     = data.get("total", "?")
-        return f"D-ID key valid — {remaining}/{total} credits remaining (talking-avatar mode active)"
-    did_check = await _check(
-        "D-ID API Key",
-        "Set DID_API_KEY to enable talking-avatar videos. Get key at studio.d-id.com → Settings → API. "
-        "Starter plan ~$5.90/month. Without this key, local faceless video pipeline is used instead.",
-        _did()
-    )
-    # Downgrade to warn (not fail) when key is simply absent — local pipeline is a valid fallback
-    if did_check["status"] == "fail" and "not set" in did_check["detail"]:
-        did_check["status"] = "warn"
-    checks.append(did_check)
-
-    # ── 8. CORS ───────────────────────────────────────────────────────────────
+    # ── 7. CORS ───────────────────────────────────────────────────────────────
     checks.append({
         "name": "CORS Configuration",
         "status": "pass",
@@ -249,56 +218,76 @@ async def get_video_provider() -> Dict[str, str]:
     Returns which video generation provider is currently active.
     Frontend uses this to show the correct badge on the Videos page.
     """
-    if os.getenv("DID_API_KEY"):
-        return {
-            "provider": "did",
-            "label":    "D-ID Talking Avatar",
-            "detail":   "AI presenter reads your script on camera",
-            "color":    "#8b5cf6",
-        }
     if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
         return {
             "provider": "local",
-            "label":    "Local Faceless Video",
+            "label":    "Faceless Video",
             "detail":   "ElevenLabs voiceover + Pexels stock footage + FFmpeg",
             "color":    "#3b82f6",
         }
     return {
         "provider": "none",
         "label":    "No video provider configured",
-        "detail":   "Set DID_API_KEY or both ELEVENLABS_API_KEY and PEXELS_API_KEY",
+        "detail":   "Set ELEVENLABS_API_KEY and PEXELS_API_KEY",
         "color":    "#ef4444",
     }
 
 
 # ── Restart endpoints ─────────────────────────────────────────────────────────
+# Uses a service principal (AZURE_TENANT_ID + AZURE_CLIENT_ID + AZURE_CLIENT_SECRET)
+# to authenticate against the Azure Management API.
+# Set these three env vars in your Azure Container Apps environment.
 
-_SUBSCRIPTION = "0624b0c7-bc20-40a1-8156-b33b8f52e951"
-_RESOURCE_GROUP = "ai-video-pipeline"
-_MGMT_BASE = "https://management.azure.com"
+_SUBSCRIPTION  = os.getenv("AZURE_SUBSCRIPTION_ID", "0624b0c7-bc20-40a1-8156-b33b8f52e951")
+_RESOURCE_GROUP = os.getenv("AZURE_RESOURCE_GROUP",  "ai-video-pipeline")
+_MGMT_BASE     = "https://management.azure.com"
+_TOKEN_URL     = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
 
 
 async def _get_mgmt_token() -> str:
-    """Obtain an access token for the Azure Management API via Managed Identity."""
-    async with httpx.AsyncClient(timeout=10) as c:
-        r = await c.get(
-            "http://169.254.169.254/metadata/identity/oauth2/token",
-            params={
-                "api-version": "2018-02-01",
-                "resource": "https://management.azure.com/",
-            },
-            headers={"Metadata": "true"},
+    """
+    Get an Azure Management API token using service principal credentials.
+    Requires AZURE_TENANT_ID, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET env vars.
+    """
+    tenant_id     = (os.getenv("AZURE_TENANT_ID") or "").strip()
+    client_id     = (os.getenv("AZURE_CLIENT_ID") or "").strip()
+    client_secret = (os.getenv("AZURE_CLIENT_SECRET") or "").strip()
+
+    if not tenant_id or not client_id or not client_secret:
+        missing = [n for n, v in [
+            ("AZURE_TENANT_ID", tenant_id),
+            ("AZURE_CLIENT_ID", client_id),
+            ("AZURE_CLIENT_SECRET", client_secret),
+        ] if not v]
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Restart unavailable — missing env vars: {', '.join(missing)}. "
+                "Set AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET "
+                "on the ai-content-backend Container App."
+            )
         )
-        r.raise_for_status()
+
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.post(
+            _TOKEN_URL.format(tenant=tenant_id),
+            data={
+                "grant_type":    "client_credentials",
+                "client_id":     client_id,
+                "client_secret": client_secret,
+                "scope":         "https://management.azure.com/.default",
+            },
+        )
+        if not r.is_success:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Azure token request failed ({r.status_code}): {r.text[:300]}"
+            )
         return r.json()["access_token"]
 
 
 async def _restart_container_app(app_name: str) -> str:
-    """
-    Restart an Azure Container App by cycling to a new revision-less restart.
-    We trigger a restart by patching the container app with the Azure Management API,
-    forcing a new revision which restarts all replicas.
-    """
+    """Restart an Azure Container App via the Management REST API."""
     token = await _get_mgmt_token()
     url = (
         f"{_MGMT_BASE}/subscriptions/{_SUBSCRIPTION}"
@@ -309,10 +298,26 @@ async def _restart_container_app(app_name: str) -> str:
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(url, headers={"Authorization": f"Bearer {token}"})
         if r.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Container App '{app_name}' not found")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Container App '{app_name}' not found in resource group '{_RESOURCE_GROUP}'"
+            )
         if r.status_code not in (200, 202, 204):
-            raise HTTPException(status_code=502, detail=f"Azure restart failed: {r.status_code} {r.text[:200]}")
-    return f"{app_name} restart triggered (status {r.status_code})"
+            raise HTTPException(
+                status_code=502,
+                detail=f"Azure restart failed ({r.status_code}): {r.text[:300]}"
+            )
+    return f"✅ {app_name} restart triggered (HTTP {r.status_code})"
+
+
+@router.get("/env-check")
+async def env_check() -> Dict[str, str]:
+    """Temporary: verify Azure env vars are visible to the running container."""
+    return {
+        "AZURE_TENANT_ID":     "set" if os.getenv("AZURE_TENANT_ID") else "MISSING",
+        "AZURE_CLIENT_ID":     "set" if os.getenv("AZURE_CLIENT_ID") else "MISSING",
+        "AZURE_CLIENT_SECRET": "set" if os.getenv("AZURE_CLIENT_SECRET") else "MISSING",
+    }
 
 
 @router.post("/restart/backend")
