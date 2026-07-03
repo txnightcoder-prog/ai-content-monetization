@@ -813,6 +813,20 @@ function App() {
             <option value="health">💰 Health &amp; Fitness</option>
             <option value="side hustles">💰 Side Hustles / Productivity</option>
             <option value="finance">💰 Finance / Investing</option>
+            <option value="kids">🧒 Kids &amp; Family</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="music">🎵 Music &amp; Entertainment</option>
+            <option value="comedy">😂 Comedy &amp; Skits</option>
+            <option value="beauty">💄 Beauty &amp; Fashion</option>
+            <option value="food">🍕 Food &amp; Cooking</option>
+            <option value="travel">✈️ Travel &amp; Adventure</option>
+            <option value="sports">⚽ Sports &amp; Fitness</option>
+            <option value="news">📰 News &amp; Current Events</option>
+            <option value="pets">🐾 Pets &amp; Animals</option>
+            <option value="diy">🔨 DIY &amp; Home Improvement</option>
+            <option value="cars">🚗 Cars &amp; Automotive</option>
+            <option value="motivation">🔥 Motivation &amp; Self-Help</option>
+            <option value="paranormal">👻 True Crime &amp; Paranormal</option>
           </select>
         </div>
         <div className="form-group">
@@ -1039,6 +1053,20 @@ function App() {
             <option value="health">💰 Health &amp; Fitness</option>
             <option value="side hustles">💰 Side Hustles / Productivity</option>
             <option value="finance">💰 Finance / Investing</option>
+            <option value="kids">🧒 Kids &amp; Family</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="music">🎵 Music &amp; Entertainment</option>
+            <option value="comedy">😂 Comedy &amp; Skits</option>
+            <option value="beauty">💄 Beauty &amp; Fashion</option>
+            <option value="food">🍕 Food &amp; Cooking</option>
+            <option value="travel">✈️ Travel &amp; Adventure</option>
+            <option value="sports">⚽ Sports &amp; Fitness</option>
+            <option value="news">📰 News &amp; Current Events</option>
+            <option value="pets">🐾 Pets &amp; Animals</option>
+            <option value="diy">🔨 DIY &amp; Home Improvement</option>
+            <option value="cars">🚗 Cars &amp; Automotive</option>
+            <option value="motivation">🔥 Motivation &amp; Self-Help</option>
+            <option value="paranormal">👻 True Crime &amp; Paranormal</option>
           </select>
         </div>
         {trendError && <div className="error-message">{trendError}</div>}
@@ -1839,6 +1867,21 @@ function App() {
             <option value="education">💰 Education (Skills, Tutorials)</option>
             <option value="health">💰 Health & Fitness</option>
             <option value="side hustles">💰 Side Hustles / Productivity</option>
+            <option value="finance">💰 Finance / Investing</option>
+            <option value="kids">🧒 Kids & Family</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="music">🎵 Music & Entertainment</option>
+            <option value="comedy">😂 Comedy & Skits</option>
+            <option value="beauty">💄 Beauty & Fashion</option>
+            <option value="food">🍕 Food & Cooking</option>
+            <option value="travel">✈️ Travel & Adventure</option>
+            <option value="sports">⚽ Sports & Fitness</option>
+            <option value="news">📰 News & Current Events</option>
+            <option value="pets">🐾 Pets & Animals</option>
+            <option value="diy">🔨 DIY & Home Improvement</option>
+            <option value="cars">🚗 Cars & Automotive</option>
+            <option value="motivation">🔥 Motivation & Self-Help</option>
+            <option value="paranormal">👻 True Crime & Paranormal</option>
           </select>
           <small style={{ color: '#94a3b8', fontSize: '0.875rem', marginTop: '0.25rem', display: 'block' }}>
             💰 = High revenue potential niches
@@ -2013,6 +2056,20 @@ function App() {
             <option value="health">💰 Health & Fitness</option>
             <option value="side hustles">💰 Side Hustles / Productivity</option>
             <option value="finance">💰 Finance / Investing</option>
+            <option value="kids">🧒 Kids & Family</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="music">🎵 Music & Entertainment</option>
+            <option value="comedy">😂 Comedy & Skits</option>
+            <option value="beauty">💄 Beauty & Fashion</option>
+            <option value="food">🍕 Food & Cooking</option>
+            <option value="travel">✈️ Travel & Adventure</option>
+            <option value="sports">⚽ Sports & Fitness</option>
+            <option value="news">📰 News & Current Events</option>
+            <option value="pets">🐾 Pets & Animals</option>
+            <option value="diy">🔨 DIY & Home Improvement</option>
+            <option value="cars">🚗 Cars & Automotive</option>
+            <option value="motivation">🔥 Motivation & Self-Help</option>
+            <option value="paranormal">👻 True Crime & Paranormal</option>
           </select>
         </div>
 
