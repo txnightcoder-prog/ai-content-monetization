@@ -20,6 +20,7 @@ interface VideoRecord {
   video_url: string | null;
   thumbnail_url: string | null;
   duration: number | null;
+  error_message: string | null;
   created_at: string;
 }
 
@@ -129,7 +130,9 @@ interface ParrotResult {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help'>('home');
+  const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
+  const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
   const [niche, setNiche] = useState('AI tools');
   const [loading, setLoading] = useState(false);
@@ -178,18 +181,54 @@ function App() {
   const [editSaving, setEditSaving]             = useState(false);
   const [editSaved, setEditSaved]               = useState(false);
 
+  // AI Assistant state
+  const [askQuestion, setAskQuestion]     = useState('');
+  const [askAnswer, setAskAnswer]         = useState('');
+  const [askLoading, setAskLoading]       = useState(false);
+  const [askError, setAskError]           = useState('');
+  const [askOpen, setAskOpen]             = useState(false);
+  const [copiedId, setCopiedId]           = useState('');
+
+  const copyId = (id: string) => {
+    navigator.clipboard.writeText(id).catch(() => {});
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(''), 2000);
+  };
+
+  const submitAsk = async (q?: string) => {
+    const question = (q ?? askQuestion).trim();
+    if (!question) return;
+    setAskLoading(true); setAskError(''); setAskAnswer('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setAskAnswer(data.answer);
+      setAskOpen(true);
+    } catch (err) { setAskError(err instanceof Error ? err.message : 'AI unavailable'); }
+    finally { setAskLoading(false); }
+  };
+
   // Stop polling when component unmounts or page changes away from videos
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
-  // Fetch video provider + all videos once on mount
+  // Fetch video provider + all videos + dashboard metrics once on mount
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/health/video-provider`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setVideoProvider(d); })
       .catch(() => {});
     loadAllVideos();
+    fetch(`${API_BASE}/api/v1/dashboard/metrics`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setDashboardMetrics(d); })
+      .catch(() => {});
   }, []);
 
   const loadAllVideos = async () => {
@@ -322,21 +361,15 @@ function App() {
 
       {/* ── Active provider banner ── */}
       {videoProvider && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: `${videoProvider.color}14`, border: `1px solid ${videoProvider.color}40`, borderRadius: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: `${videoProvider.color}14`, border: `1px solid ${videoProvider.color}40`, borderRadius: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
           <span style={{ background: videoProvider.color, color: '#fff', borderRadius: '999px', padding: '0.2rem 0.75rem', fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-            {videoProvider.provider === 'did' ? '🎭' : videoProvider.provider === 'local' ? '🎞️' : '⚠️'} {videoProvider.label}
+            {videoProvider.provider === 'local' ? '🎞️' : '⚠️'} {videoProvider.label}
           </span>
           <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{videoProvider.detail}</span>
           {videoProvider.provider === 'none' && (
             <button className="inline-link" onClick={() => setCurrentPage('diagnostics')} style={{ marginLeft: 'auto' }}>
               Fix in Diagnostics →
             </button>
-          )}
-          {videoProvider.provider === 'local' && (
-            <a href="https://studio.d-id.com" target="_blank" rel="noopener noreferrer"
-              style={{ marginLeft: 'auto', color: '#a78bfa', fontSize: '0.8125rem', textDecoration: 'underline', whiteSpace: 'nowrap' }}>
-              Upgrade to D-ID talking avatar →
-            </a>
           )}
         </div>
       )}
@@ -505,9 +538,15 @@ function App() {
 
           {activeVideo.status === 'failed' && (
             <div style={{ marginTop: '1rem' }}>
-              <p style={{ color: '#fca5a5', marginBottom: '0.75rem' }}>
-                Generation failed. Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to check your API keys
-                {videoProvider?.provider === 'did' ? ' (D-ID key and credits)' : ' (ElevenLabs and Pexels)'}.
+              {/* Real error from backend */}
+              {activeVideo.error_message && (
+                <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                  <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: 0, fontWeight: 600 }}>❌ {activeVideo.error_message}</p>
+                </div>
+              )}
+              <p style={{ color: '#94a3b8', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
+                Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to run all checks
+                {' — verify your ElevenLabs and Pexels keys'}.
               </p>
               <button
                 onClick={() => retryVideo(activeVideo)}
@@ -654,9 +693,53 @@ function App() {
         body: JSON.stringify({ youtube_url: parrotUrl.trim(), niche: parrotNiche, your_topic: parrotTopic || undefined }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
-      setParrotResult(await res.json());
+      const raw = await res.json();
+      console.log('[Parrot] raw response:', JSON.stringify(raw, null, 2));
+      // Normalise: backend returns { id, source_video, blueprint } but sometimes
+      // blueprint fields are spread at the top level — handle both shapes.
+      const normalised = {
+        id: raw.id ?? raw.created_at ?? '',
+        source_video: raw.source_video ?? { url: '', title: '', channel: '', views: '', likes: '' },
+        blueprint: raw.blueprint ?? {
+          title:       raw.title,
+          topic:       raw.topic,
+          niche:       raw.niche,
+          structure:   raw.structure,
+          thumbnail_ideas: raw.thumbnail_ideas,
+          metadata:    raw.metadata,
+          source_analysis: raw.source_analysis,
+        },
+      };
+      setParrotResult(normalised);
     } catch (err) { setParrotError(err instanceof Error ? err.message : 'Parrot failed'); }
     finally { setParrotLoading(false); }
+  };
+
+  const [parrotScriptLoading, setParrotScriptLoading] = useState(false);
+  const [parrotScriptError, setParrotScriptError]     = useState('');
+
+  const generateScriptFromParrot = async () => {
+    if (!parrotResult) return;
+    const topic = parrotResult.blueprint.title;
+    const niche = parrotResult.blueprint.niche ?? 'AI tools';
+    setParrotScriptLoading(true); setParrotScriptError('');
+    try {
+      const params = new URLSearchParams({ topic, niche });
+      const res = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const script: Script = await res.json();
+      // Pre-load into the Scripts page state and navigate there
+      setGeneratedScript(script);
+      setScripts(prev => [script, ...prev]);
+      setCurrentPage('scripts');
+    } catch (err) {
+      setParrotScriptError(err instanceof Error ? err.message : 'Script generation failed');
+    } finally {
+      setParrotScriptLoading(false);
+    }
   };
 
   const renderParrot = () => (
@@ -697,8 +780,24 @@ function App() {
         const sa = blueprint.source_analysis;
         return (
           <div>
+            {/* ── TOP action bar — visible immediately without scrolling ── */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', margin: '1.5rem 0 1rem' }}>
+              <button
+                onClick={generateScriptFromParrot}
+                disabled={parrotScriptLoading}
+                style={{ flex: '1 1 200px', background: 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem 1.5rem', fontWeight: 800, fontSize: '1.0625rem', cursor: parrotScriptLoading ? 'not-allowed' : 'pointer', opacity: parrotScriptLoading ? 0.7 : 1, boxShadow: '0 2px 12px rgba(124,58,237,0.4)', textAlign: 'center' }}>
+                {parrotScriptLoading ? '✍️ Generating Script…' : '✍️ Step 1 — Turn into Script'}
+              </button>
+              <button
+                onClick={() => { setVideoScriptId(parrotResult.id); setCurrentPage('videos'); }}
+                style={{ flex: '1 1 200px', background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem 1.5rem', fontWeight: 800, fontSize: '1.0625rem', cursor: 'pointer', boxShadow: '0 2px 12px rgba(16,185,129,0.4)', textAlign: 'center' }}>
+                🎬 Step 2 — Generate Video →
+              </button>
+            </div>
+            {parrotScriptError && <div className="error-message" style={{ marginBottom: '1rem' }}>{parrotScriptError}</div>}
+
             {/* Source video card */}
-            <div className="video-status-card" style={{ borderColor: '#8b5cf6', marginTop: '1.5rem' }}>
+            <div className="video-status-card" style={{ borderColor: '#8b5cf6', marginTop: '0' }}>
               <h3 style={{ color: '#a78bfa', marginBottom: '0.75rem' }}>📺 Source Video Analysed</h3>
               <p style={{ color: '#e2e8f0', fontWeight: 600 }}>{source_video.title || '(title via AI)'}</p>
               <p style={{ color: '#94a3b8', fontSize: '0.875rem', margin: '0.25rem 0' }}>by {source_video.channel || 'unknown'} · {source_video.views} views · {source_video.likes} likes</p>
@@ -724,7 +823,41 @@ function App() {
                 {blueprint.metadata?.estimated_length && <span>⏱️ {blueprint.metadata.estimated_length}</span>}
                 {blueprint.metadata?.cpm_potential && <span>💰 {blueprint.metadata.cpm_potential}</span>}
               </div>
-              <p className="script-id-copy">🆔 Saved as Script ID: <strong>{parrotResult.id}</strong> — use this in the Videos tab</p>
+
+              {/* ── Secondary actions (copy/save) ── */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', margin: '0 0 1rem' }}>
+                <span style={{ color: '#64748b', fontSize: '0.8rem', fontFamily: 'monospace' }}>ID: {parrotResult.id.slice(0,8)}…</span>
+                <button
+                  onClick={() => copyId(parrotResult.id)}
+                  style={{ background: copiedId === parrotResult.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', border: `1px solid ${copiedId === parrotResult.id ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.25)'}`, color: copiedId === parrotResult.id ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  {copiedId === parrotResult.id ? '✓ Copied' : '📋 Copy ID'}
+                </button>
+                <button
+                  onClick={() => {
+                    const lines = [
+                      `BLUEPRINT: ${blueprint.title}`,
+                      `NICHE: ${blueprint.niche}`,
+                      `ID: ${parrotResult.id}`,
+                      ``,
+                      `SOURCE VIDEO: ${source_video.title || source_video.url}`,
+                      ``,
+                      `HOOK`, blueprint.structure.hook ?? '',
+                      ``, `INTRO`, blueprint.structure.intro ?? '',
+                      ...(blueprint.structure.sections?.flatMap(s => [``, `## ${s.title}`, s.content]) ?? []),
+                      ``, `OUTRO / CTA`, blueprint.structure.outro ?? '',
+                      ``, `THUMBNAIL IDEAS`,
+                      ...(blueprint.thumbnail_ideas?.map(t => `• ${t}`) ?? []),
+                    ].join('\n');
+                    const blob = new Blob([lines], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `blueprint-${blueprint.title.replace(/[^a-z0-9]/gi,'-').toLowerCase().slice(0,40)}.txt`; a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontWeight: 600, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  💾 Save .txt
+                </button>
+              </div>
               {blueprint.structure.hook && <div className="blueprint-section"><h3>🔥 Hook</h3><p>{blueprint.structure.hook}</p></div>}
               {blueprint.structure.intro && <div className="blueprint-section"><h3>🧠 Intro</h3><p>{blueprint.structure.intro}</p></div>}
               {blueprint.structure.sections?.map((s, i) => (
@@ -1494,7 +1627,7 @@ function App() {
         <ul>
           <li>✅ Generate AI-powered video scripts</li>
           <li>✅ Create comprehensive video blueprints</li>
-          <li>🎨 Create videos manually (Canva) or automate (D-ID)</li>
+          <li>🎨 Create videos manually (Canva) or automate with AI voiceover + stock footage</li>
           <li>📤 Upload to YouTube automatically</li>
           <li>📊 Track performance and monetization</li>
         </ul>
@@ -1615,7 +1748,7 @@ function App() {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', margin: '0.5rem 0 1rem' }}>
             <p className="script-id-copy" style={{ margin: 0 }}>
-              🆔 Script ID: <strong>{generatedScript.id}</strong>
+              🆔 Script ID: <strong style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}>{generatedScript.id}</strong>
             </p>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button
@@ -1646,9 +1779,14 @@ function App() {
                 💾 Save as .txt
               </button>
               <button
+                onClick={() => copyId(generatedScript.id)}
+                style={{ background: copiedId === generatedScript.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', border: `1px solid ${copiedId === generatedScript.id ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.25)'}`, color: copiedId === generatedScript.id ? '#34d399' : '#94a3b8', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {copiedId === generatedScript.id ? '✓ Copied!' : '📋 Copy ID'}
+              </button>
+              <button
                 onClick={() => { setVideoScriptId(generatedScript.id); setCurrentPage('videos'); }}
-                style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.1rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                🎬 Use in Videos →
+                style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1.25rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: '0 2px 8px rgba(16,185,129,0.35)' }}>
+                🎬 Generate Video →
               </button>
             </div>
           </div>
@@ -1667,6 +1805,13 @@ function App() {
             <h3>📢 Call to Action (3-5 seconds)</h3>
             <p>{generatedScript.cta}</p>
           </div>
+
+          <div className="make-video-bar">
+            <p>✅ Script ready — make a video from it now</p>
+            <button className="btn-green" onClick={() => { setVideoScriptId(generatedScript.id); loadScript(generatedScript.id); setCurrentPage('videos'); }}>
+              🎬 Step 3: Make Video →
+            </button>
+          </div>
         </div>
       )}
 
@@ -1678,11 +1823,18 @@ function App() {
               <div key={script.id} className="script-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
                   <h3 style={{ margin: 0 }}>{script.topic}</h3>
-                  <button
-                    onClick={e => { e.stopPropagation(); setVideoScriptId(script.id); setCurrentPage('videos'); }}
-                    style={{ flexShrink: 0, background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    🎬 Use
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); copyId(script.id); }}
+                      style={{ background: copiedId === script.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', border: `1px solid ${copiedId === script.id ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.25)'}`, color: copiedId === script.id ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      {copiedId === script.id ? '✓' : '📋'}
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setVideoScriptId(script.id); setCurrentPage('videos'); }}
+                      style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      🎬 Use
+                    </button>
+                  </div>
                 </div>
                 <p className="script-niche">{script.script_metadata?.niche ?? ''}</p>
                 <div className="script-preview">
@@ -1888,8 +2040,8 @@ Example:
           </ul>
           <p style={{ marginTop: '1rem' }}><strong>Automated Creation (Coming Soon):</strong></p>
           <ul>
-            <li>Add D-ID API key to automate video generation ($5.90/month)</li>
-            <li>Videos created automatically from scripts</li>
+            <li>Set ELEVENLABS_API_KEY + PEXELS_API_KEY to automate video generation (free tier available)</li>
+            <li>Videos created automatically: AI voiceover + stock footage + captions</li>
           </ul>
         </div>
 
@@ -1931,9 +2083,9 @@ Example:
               <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>Free</td>
             </tr>
             <tr>
-              <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>Automated Video (D-ID)</td>
-              <td style={{ padding: '0.75rem', textAlign: 'center', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>⏳ Pending Setup</td>
-              <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>$5.90/month</td>
+              <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>Automated Video (ElevenLabs + Pexels)</td>
+              <td style={{ padding: '0.75rem', textAlign: 'center', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>⏳ Needs API Keys</td>
+              <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>Free tier available</td>
             </tr>
             <tr>
               <td style={{ padding: '0.75rem', borderTop: '1px solid rgba(148, 163, 184, 0.1)' }}>YouTube Upload</td>
@@ -2028,7 +2180,7 @@ Example:
           <li>Use the Blueprint generator for longer, more detailed videos</li>
           <li>Keep videos 3-8 minutes for best engagement</li>
           <li>Add captions in Canva for better accessibility</li>
-          <li>Consider D-ID automation once you're creating 5+ videos/week</li>
+          <li>Use ElevenLabs + Pexels automation once you're creating 5+ videos/week</li>
         </ul>
       </div>
 
@@ -2047,69 +2199,93 @@ Example:
     <div className="app">
       <nav className="navbar">
         <div className="nav-brand">AI Content Publisher</div>
-        <div className="nav-links">
-          <button
-            className={currentPage === 'home' ? 'active' : ''}
-            onClick={() => setCurrentPage('home')}
-          >
-            Home
+        
+        <div className="nav-workflow">
+          <div className="nav-step">
+            <button className={`nav-step-btn ${currentPage === 'home' ? 'active' : ''}`} onClick={() => setCurrentPage('home')}>
+              <span className="nav-step-num">⌂</span>
+              <span>Home</span>
+            </button>
+            <span className="nav-step-arrow">→</span>
+          </div>
+          <div className="nav-step">
+            <button className={`nav-step-btn ${currentPage === 'source' ? 'active' : ''}`} onClick={() => setCurrentPage('source')}>
+              <span className="nav-step-num">1</span>
+              <span>Source</span>
+            </button>
+            <span className="nav-step-arrow">→</span>
+          </div>
+          <div className="nav-step">
+            <button className={`nav-step-btn ${currentPage === 'script' ? 'active' : ''}`} onClick={() => setCurrentPage('script')}>
+              <span className="nav-step-num">2</span>
+              <span>Script</span>
+            </button>
+            <span className="nav-step-arrow">→</span>
+          </div>
+          <div className="nav-step">
+            <button className={`nav-step-btn ${currentPage === 'videos' ? 'active' : ''}`} onClick={() => setCurrentPage('videos')}>
+              <span className="nav-step-num">3</span>
+              <span>Video</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="nav-utils">
+          <button className={`nav-util-btn ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }}>
+            📊
           </button>
-          <button
-            className={currentPage === 'scripts' ? 'active' : ''}
-            onClick={() => setCurrentPage('scripts')}
-          >
-            Scripts
+          <button className={`nav-util-btn ${currentPage === 'diagnostics' ? 'active' : ''}`} onClick={() => setCurrentPage('diagnostics')}>
+            🔧
           </button>
-          <button
-            className={currentPage === 'blueprint' ? 'active' : ''}
-            onClick={() => setCurrentPage('blueprint')}
-          >
-            Blueprints
-          </button>
-          <button
-            className={currentPage === 'videos' ? 'active' : ''}
-            onClick={() => setCurrentPage('videos')}
-          >
-            🎬 Videos
-          </button>
-          <button
-            className={currentPage === 'parrot' ? 'active' : ''}
-            onClick={() => setCurrentPage('parrot')}
-          >
-            🦜 Parrot
-          </button>
-          <button
-            className={currentPage === 'trending' ? 'active' : ''}
-            onClick={() => setCurrentPage('trending')}
-          >
-            🔥 Trending
-          </button>
-          <button
-            className={currentPage === 'diagnostics' ? 'active' : ''}
-            onClick={() => setCurrentPage('diagnostics')}
-          >
-            🔧 Diagnostics
-          </button>
-          <button
-            className={currentPage === 'analytics' ? 'active' : ''}
-            onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }}
-          >
-            📊 Analytics
-          </button>
-          <button
-            className={currentPage === 'monetize' ? 'active' : ''}
-            onClick={() => setCurrentPage('monetize')}
-          >
-            💰 Monetize
-          </button>
-          <button
-            className={currentPage === 'help' ? 'active' : ''}
-            onClick={() => setCurrentPage('help')}
-          >
-            📖 Help
+          <button className={`nav-util-btn ${currentPage === 'help' ? 'active' : ''}`} onClick={() => setCurrentPage('help')}>
+            📖
           </button>
         </div>
       </nav>
+
+      {/* ── AI Assistant bar ── */}
+      <div style={{ background: 'rgba(15,23,42,0.95)', borderBottom: '1px solid rgba(59,130,246,0.2)', padding: '0.5rem 1rem' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ color: '#3b82f6', fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>🤖 Ask AI</span>
+            <input
+              type="text"
+              value={askQuestion}
+              onChange={e => setAskQuestion(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !askLoading) submitAsk(); }}
+              placeholder="Ask anything about the platform, content strategy, monetization…"
+              style={{ flex: 1, background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '0.4rem', color: '#e2e8f0', padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none' }}
+              disabled={askLoading}
+            />
+            <button onClick={() => submitAsk()} disabled={askLoading || !askQuestion.trim()}
+              style={{ background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', borderRadius: '0.4rem', padding: '0.4rem 0.85rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {askLoading ? '…' : 'Ask'}
+            </button>
+            <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+              {['How do I make money?', 'How to generate a video?', 'What is the Parrot feature?'].map(q => (
+                <button key={q} onClick={() => { setAskQuestion(q); submitAsk(q); }}
+                  style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', color: '#94a3b8', borderRadius: '0.4rem', padding: '0.3rem 0.6rem', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Answer panel */}
+          {(askAnswer || askError) && askOpen && (
+            <div style={{ marginTop: '0.5rem', background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '0.5rem', padding: '0.75rem 1rem', position: 'relative' }}>
+              <button onClick={() => setAskOpen(false)}
+                style={{ position: 'absolute', top: '0.5rem', right: '0.75rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>
+                ✕
+              </button>
+              {askError
+                ? <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: 0 }}>⚠️ {askError}</p>
+                : <p style={{ color: '#e2e8f0', fontSize: '0.875rem', margin: 0, whiteSpace: 'pre-wrap', paddingRight: '1.5rem' }}>{askAnswer}</p>
+              }
+            </div>
+          )}
+        </div>
+      </div>
 
       <main className="main-content">
         {currentPage === 'home' ? renderHome() :
