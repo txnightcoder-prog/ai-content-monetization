@@ -286,28 +286,48 @@ async def _get_mgmt_token() -> str:
         return r.json()["access_token"]
 
 
-async def _restart_container_app(app_name: str) -> str:
-    """Restart an Azure Container App via the Management REST API."""
-    token = await _get_mgmt_token()
+async def _get_active_revision(app_name: str, token: str) -> str:
+    """Get the name of the active revision for a Container App."""
     url = (
         f"{_MGMT_BASE}/subscriptions/{_SUBSCRIPTION}"
         f"/resourceGroups/{_RESOURCE_GROUP}"
         f"/providers/Microsoft.App/containerApps/{app_name}"
-        f"/restart?api-version=2024-03-01"
+        f"/revisions?api-version=2023-05-01"
+    )
+    async with httpx.AsyncClient(timeout=15) as c:
+        r = await c.get(url, headers={"Authorization": f"Bearer {token}"})
+        if not r.is_success:
+            raise HTTPException(status_code=502, detail=f"Could not list revisions: {r.text[:200]}")
+        revisions = r.json().get("value", [])
+        active = [rev["name"] for rev in revisions if rev.get("properties", {}).get("active")]
+        if not active:
+            raise HTTPException(status_code=404, detail=f"No active revision found for '{app_name}'")
+        return active[-1]
+
+
+async def _restart_container_app(app_name: str) -> str:
+    """Restart an Azure Container App by restarting its active revision."""
+    token = await _get_mgmt_token()
+    revision = await _get_active_revision(app_name, token)
+    url = (
+        f"{_MGMT_BASE}/subscriptions/{_SUBSCRIPTION}"
+        f"/resourceGroups/{_RESOURCE_GROUP}"
+        f"/providers/Microsoft.App/containerApps/{app_name}"
+        f"/revisions/{revision}/restart?api-version=2023-05-01"
     )
     async with httpx.AsyncClient(timeout=30) as c:
         r = await c.post(url, headers={"Authorization": f"Bearer {token}"})
         if r.status_code == 404:
             raise HTTPException(
                 status_code=404,
-                detail=f"Container App '{app_name}' not found in resource group '{_RESOURCE_GROUP}'"
+                detail=f"Revision '{revision}' not found for app '{app_name}'"
             )
         if r.status_code not in (200, 202, 204):
             raise HTTPException(
                 status_code=502,
                 detail=f"Azure restart failed ({r.status_code}): {r.text[:300]}"
             )
-    return f"✅ {app_name} restart triggered (HTTP {r.status_code})"
+    return f"✅ {app_name} restarted (revision: {revision}, HTTP {r.status_code})"
 
 
 @router.get("/env-check")
