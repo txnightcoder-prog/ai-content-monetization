@@ -115,16 +115,30 @@ interface DashboardMetrics {
 }
 
 // ── Parrot types ──────────────────────────────────────────────────────────────
+interface ParrotShotScene {
+  scene: number;
+  description: string;
+  shot_type: string;
+  camera_movement: string;
+  lighting: string;
+  duration_seconds: number;
+  broll_suggestion?: string;
+  on_screen_text?: string;
+}
 interface ParrotResult {
   id: string;
   source_video: { url: string; title: string; channel: string; views: string; likes: string };
   blueprint: {
-    source_analysis?: { hook_style: string; structure: string; tone: string; why_it_works: string };
+    source_analysis?: { hook_style: string; structure: string; tone: string; pacing?: string; why_it_works: string };
     title: string;
     topic: string;
     niche: string;
+    production?: { style?: string; duration?: string; aspect_ratio?: string; audio_style?: string };
     structure: { hook?: string; intro?: string; sections?: Array<{ title: string; content: string; tips?: string[] }>; outro?: string };
-    thumbnail_ideas?: string[];
+    voiceover_script?: { hook?: string; body?: string; cta?: string };
+    shot_list?: ParrotShotScene[];
+    audio_direction?: { music_style?: string; music_tempo?: string; voiceover_tone?: string; voiceover_pace?: string; sfx_notes?: string };
+    thumbnail_ideas?: Array<{ visual?: string; headline?: string; style?: string } | string>;
     metadata?: { target_audience?: string; estimated_length?: string; cpm_potential?: string };
   };
 }
@@ -676,12 +690,19 @@ function App() {
   );
 
   // ── Parrot state ─────────────────────────────────────────────────────────
-  const [parrotUrl, setParrotUrl]           = useState('');
-  const [parrotTopic, setParrotTopic]       = useState('');
-  const [parrotNiche, setParrotNiche]       = useState('AI tools');
-  const [parrotLoading, setParrotLoading]   = useState(false);
-  const [parrotError, setParrotError]       = useState('');
-  const [parrotResult, setParrotResult]     = useState<ParrotResult | null>(null);
+  const [parrotUrl, setParrotUrl]               = useState('');
+  const [parrotTopic, setParrotTopic]           = useState('');
+  const [parrotNiche, setParrotNiche]           = useState('AI tools');
+  const [parrotVideoPrompt, setParrotVideoPrompt] = useState('');
+  const [parrotStyle, setParrotStyle]           = useState('');
+  const [parrotDuration, setParrotDuration]     = useState('');
+  const [parrotAspect, setParrotAspect]         = useState('16:9');
+  const [parrotAudio, setParrotAudio]           = useState('');
+  const [parrotCamera, setParrotCamera]         = useState('');
+  const [parrotLoading, setParrotLoading]       = useState(false);
+  const [parrotError, setParrotError]           = useState('');
+  const [parrotResult, setParrotResult]         = useState<ParrotResult | null>(null);
+  const [parrotTab, setParrotTab]               = useState<'blueprint' | 'voiceover' | 'shots' | 'audio'>('blueprint');
 
   const runParrot = async () => {
     if (!parrotUrl.trim()) { setParrotError('Paste a YouTube URL first'); return; }
@@ -690,27 +711,31 @@ function App() {
       const res = await fetch(`${API_BASE}/api/v1/scripts/parrot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ youtube_url: parrotUrl.trim(), niche: parrotNiche, your_topic: parrotTopic || undefined }),
+        body: JSON.stringify({
+          youtube_url:  parrotUrl.trim(),
+          niche:        parrotNiche,
+          your_topic:   parrotTopic   || undefined,
+          video_prompt: parrotVideoPrompt || undefined,
+          style:        parrotStyle   || undefined,
+          duration:     parrotDuration || undefined,
+          aspect_ratio: parrotAspect  || undefined,
+          audio_style:  parrotAudio   || undefined,
+          camera_notes: parrotCamera  || undefined,
+        }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const raw = await res.json();
-      console.log('[Parrot] raw response:', JSON.stringify(raw, null, 2));
-      // Normalise: backend returns { id, source_video, blueprint } but sometimes
-      // blueprint fields are spread at the top level — handle both shapes.
-      const normalised = {
-        id: raw.id ?? raw.created_at ?? '',
+      const normalised: ParrotResult = {
+        id: raw.id ?? '',
         source_video: raw.source_video ?? { url: '', title: '', channel: '', views: '', likes: '' },
         blueprint: raw.blueprint ?? {
-          title:       raw.title,
-          topic:       raw.topic,
-          niche:       raw.niche,
-          structure:   raw.structure,
-          thumbnail_ideas: raw.thumbnail_ideas,
-          metadata:    raw.metadata,
-          source_analysis: raw.source_analysis,
+          title: raw.title, topic: raw.topic, niche: raw.niche,
+          structure: raw.structure, thumbnail_ideas: raw.thumbnail_ideas,
+          metadata: raw.metadata, source_analysis: raw.source_analysis,
         },
       };
       setParrotResult(normalised);
+      setParrotTab('blueprint');
     } catch (err) { setParrotError(err instanceof Error ? err.message : 'Parrot failed'); }
     finally { setParrotLoading(false); }
   };
@@ -741,6 +766,32 @@ function App() {
       setParrotScriptLoading(false);
     }
   };
+
+  const renderSource = () => (
+    <div className="videos-page">
+      <h1>🎯 Source</h1>
+      <p className="subtitle">Find inspiration — parrot a proven video or browse what's trending right now</p>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <button
+          onClick={() => setSourceTab('parrot')}
+          style={{ padding: '0.55rem 1.5rem', borderRadius: '999px', border: `2px solid #a78bfa`,
+            background: sourceTab === 'parrot' ? '#a78bfa' : 'transparent',
+            color: sourceTab === 'parrot' ? '#fff' : '#a78bfa',
+            fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem' }}>
+          🦜 Parrot a Video
+        </button>
+        <button
+          onClick={() => setSourceTab('trending')}
+          style={{ padding: '0.55rem 1.5rem', borderRadius: '999px', border: `2px solid #ef4444`,
+            background: sourceTab === 'trending' ? '#ef4444' : 'transparent',
+            color: sourceTab === 'trending' ? '#fff' : '#ef4444',
+            fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem' }}>
+          🔥 Trending Now
+        </button>
+      </div>
+      {sourceTab === 'parrot' ? renderParrot() : renderTrending()}
+    </div>
+  );
 
   const renderParrot = () => (
     <div className="videos-page">
@@ -2216,7 +2267,7 @@ Example:
             <span className="nav-step-arrow">→</span>
           </div>
           <div className="nav-step">
-            <button className={`nav-step-btn ${currentPage === 'script' ? 'active' : ''}`} onClick={() => setCurrentPage('script')}>
+            <button className={`nav-step-btn ${currentPage === 'scripts' ? 'active' : ''}`} onClick={() => setCurrentPage('scripts')}>
               <span className="nav-step-num">2</span>
               <span>Script</span>
             </button>
@@ -2289,6 +2340,7 @@ Example:
 
       <main className="main-content">
         {currentPage === 'home' ? renderHome() :
+         currentPage === 'source' ? renderSource() :
          currentPage === 'scripts' ? renderScripts() :
          currentPage === 'blueprint' ? renderBlueprint() :
          currentPage === 'videos' ? renderVideos() :

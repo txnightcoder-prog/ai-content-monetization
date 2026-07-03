@@ -37,6 +37,13 @@ class ParrotRequest(BaseModel):
     youtube_url: str
     niche: str = "AI tools"
     your_topic: Optional[str] = None
+    # ── Production customisation ──────────────────────────────────────────────
+    style: Optional[str] = None          # e.g. "documentary", "fast-paced", "educational"
+    duration: Optional[str] = None       # e.g. "60 seconds", "5 minutes", "10 minutes"
+    aspect_ratio: Optional[str] = None   # e.g. "9:16", "16:9", "1:1"
+    audio_style: Optional[str] = None    # e.g. "upbeat", "dramatic orchestral", "lo-fi"
+    camera_notes: Optional[str] = None   # any specific camera / visual preferences
+    video_prompt: Optional[str] = None   # free-form description of the video
 
     @field_validator("youtube_url")
     @classmethod
@@ -353,6 +360,12 @@ async def parrot_video(
             youtube_url=request.youtube_url,
             niche=request.niche,
             your_topic=request.your_topic,
+            style=request.style,
+            duration=request.duration,
+            aspect_ratio=request.aspect_ratio,
+            audio_style=request.audio_style,
+            camera_notes=request.camera_notes,
+            video_prompt=request.video_prompt,
         )
 
         # Persist the blueprint as a ContentScript for later use
@@ -374,9 +387,10 @@ async def parrot_video(
         db.refresh(db_script)
 
         return {
-            "id": db_script.id,
+            "id": str(db_script.id),
             "created_at": db_script.created_at.isoformat(),
-            **result,
+            "source_video": result.get("source_video", {}),
+            "blueprint": result.get("blueprint", {}),
         }
 
     except ValueError as exc:
@@ -407,6 +421,50 @@ async def get_trending(
     except Exception as exc:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Trending failed: {exc}")
+
+
+class AskRequest(BaseModel):
+    question: str
+
+
+@router.post("/ask")
+async def ask_ai(
+    request: AskRequest,
+    openai: OpenAIService = Depends(lambda: OpenAIService()),
+):
+    """
+    **AI Assistant** — ask any question about the platform, content strategy,
+    monetization, script writing, or how to grow your YouTube/TikTok channel.
+
+    The assistant knows all about this platform's features and will give
+    actionable, specific advice.
+    """
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    system_message = (
+        "You are an expert AI assistant for the AI Content Monetization Platform — "
+        "a tool that lets creators generate viral video scripts, create blueprints, "
+        "produce faceless videos with ElevenLabs voiceover + Pexels stock footage + FFmpeg, "
+        "auto-upload to YouTube, schedule posts, and track analytics. "
+        "You also know about content strategy, growing a YouTube/TikTok/Instagram channel, "
+        "monetization (YouTube ads, affiliate marketing, sponsorships, digital products), "
+        "and AI tools for creators. "
+        "Be concise, specific, and actionable. If the question is about a platform feature, "
+        "explain exactly how to use it. Keep responses under 300 words."
+    )
+
+    try:
+        answer = await openai.generate_completion(
+            prompt=request.question.strip(),
+            system_message=system_message,
+            temperature=0.7,
+            max_tokens=400,
+        )
+        return {"answer": answer}
+    except Exception as exc:
+        logger.exception("AI ask failed")
+        raise HTTPException(status_code=500, detail=f"AI assistant unavailable: {exc}")
 
 
 # Made with Bob
