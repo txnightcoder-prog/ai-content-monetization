@@ -919,7 +919,16 @@ function App() {
               ))}
               {blueprint.structure.outro && <div className="blueprint-section"><h3>💡 Outro / CTA</h3><p>{blueprint.structure.outro}</p></div>}
               {blueprint.thumbnail_ideas && blueprint.thumbnail_ideas.length > 0 && (
-                <div className="blueprint-section"><h3>🧲 Thumbnail Ideas</h3><ul className="thumbnail-ideas">{blueprint.thumbnail_ideas.map((t, i) => <li key={i}>{t}</li>)}</ul></div>
+                <div className="blueprint-section">
+                  <h3>🧲 Thumbnail Ideas</h3>
+                  <ul className="thumbnail-ideas">
+                    {blueprint.thumbnail_ideas.map((t, i) => (
+                      <li key={i}>
+                        {typeof t === 'string' ? t : `${t.headline ?? ''}${t.visual ? ` — ${t.visual}` : ''}${t.style ? ` (${t.style})` : ''}`}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           </div>
