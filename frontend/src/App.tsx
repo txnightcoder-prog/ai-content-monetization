@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
+if (!API_BASE) console.warn('[App] VITE_API_URL is not set — all API calls will fail. Check your Azure build args.');
 
 interface Script {
   id: string;
@@ -15,7 +16,7 @@ interface Script {
 
 interface VideoRecord {
   id: string;
-  script_id: string;
+  script_id: string | null;   // null for manually-uploaded videos
   status: 'generating' | 'ready' | 'posted' | 'failed';
   video_url: string | null;
   thumbnail_url: string | null;
@@ -282,6 +283,7 @@ function App() {
 
   const retryVideo = (v: VideoRecord) => {
     // Pre-fill the script ID field and load the script preview, then scroll to the form
+    if (!v.script_id) { setVideoError('This video has no linked script — upload a new video instead.'); return; }
     setVideoScriptId(v.script_id);
     loadScript(v.script_id);
     setActiveVideo(null);

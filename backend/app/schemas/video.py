@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 from app.models.video import VideoStatus
 
@@ -9,8 +9,8 @@ from app.models.video import VideoStatus
 class VideoBase(BaseModel):
     """Base schema for Video with common fields"""
     render_id: Optional[str] = Field(None, description="Video generation job ID", alias="heygen_video_id")
-    video_url: Optional[HttpUrl] = Field(None, description="URL to the generated video")
-    thumbnail_url: Optional[HttpUrl] = Field(None, description="URL to video thumbnail")
+    video_url: Optional[str] = Field(None, description="URL to the generated video")
+    thumbnail_url: Optional[str] = Field(None, description="URL to video thumbnail")
     duration: Optional[int] = Field(None, ge=0, description="Video duration in seconds")
 
     class Config:
@@ -51,8 +51,8 @@ class PublishVideoRequest(BaseModel):
 
 class VideoUpdate(BaseModel):
     """Schema for updating an existing video"""
-    video_url: Optional[HttpUrl] = None
-    thumbnail_url: Optional[HttpUrl] = None
+    video_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     duration: Optional[int] = Field(None, ge=0)
     status: Optional[VideoStatus] = None
 
@@ -60,8 +60,9 @@ class VideoUpdate(BaseModel):
 class VideoResponse(VideoBase):
     """Schema for video responses"""
     id: UUID
-    script_id: UUID
+    script_id: Optional[UUID] = None   # None for manually-uploaded videos
     status: VideoStatus
+    error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

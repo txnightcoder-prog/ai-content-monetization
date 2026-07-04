@@ -27,6 +27,27 @@ from app.api.routes.integrations import router as integrations_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.health_checks import router as health_router
 from app.core.database import init_db
+from sqlalchemy import text
+
+
+def _migrate_add_columns():
+    """
+    Safe, idempotent schema migrations — adds new columns to existing tables.
+    Uses IF NOT EXISTS (PostgreSQL 9.6+) so it's safe to run on every startup.
+    """
+    from app.core.database import engine
+    migrations = [
+        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",
+        # Make script_id nullable to support manually uploaded videos
+        "ALTER TABLE videos ALTER COLUMN script_id DROP NOT NULL",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception as exc:
+                logger.warning("Migration skipped (%s): %s", sql[:60], exc)
 
 
 @asynccontextmanager
@@ -38,6 +59,7 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database
     logger.info("Initializing database...")
     init_db()
+    _migrate_add_columns()
     logger.info("Database initialized successfully!")
 
     yield
