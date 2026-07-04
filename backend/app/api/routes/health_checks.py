@@ -172,7 +172,23 @@ async def run_checks() -> Dict[str, Any]:
         _yt()
     ))
 
-    # ── 7. CORS ───────────────────────────────────────────────────────────────
+    # ── 7. OpenArt / image generation ───────────────────────────────────────
+    async def _openart():
+        openart_key = os.getenv("OPENART_API_KEY", "")
+        openai_key  = os.getenv("OPENAI_API_KEY", "")
+        if openart_key:
+            return "OpenArt.ai key is set — thumbnail & social-pack generation ready"
+        elif openai_key:
+            return "DALL·E 3 fallback active (set OPENART_API_KEY for OpenArt.ai)"
+        raise ValueError("Neither OPENART_API_KEY nor OPENAI_API_KEY is set — image generation disabled")
+    checks.append(await _check(
+        "AI Image Generation (OpenArt / DALL·E 3)",
+        "Set OPENART_API_KEY at openart.ai → Settings → API Keys (free tier available). "
+        "Or OPENAI_API_KEY will be used as a DALL·E 3 fallback automatically.",
+        _openart()
+    ))
+
+    # ── 8. CORS ───────────────────────────────────────────────────────────────
     checks.append({
         "name": "CORS Configuration",
         "status": "pass",
