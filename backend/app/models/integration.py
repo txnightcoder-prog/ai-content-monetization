@@ -9,7 +9,6 @@ class IntegrationType(str, enum.Enum):
     """Types of integrations"""
     # Video Generation
     HEYGEN = "heygen"
-    DID = "d-id"
     SYNTHESIA = "synthesia"
     
     # Social Media

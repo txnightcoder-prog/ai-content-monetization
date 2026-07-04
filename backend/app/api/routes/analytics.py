@@ -6,9 +6,11 @@ GET  /api/v1/analytics/summary           — aggregated totals across all platfo
 GET  /api/v1/analytics/platforms         — list of registered platform names
 GET  /api/v1/analytics/platform/{name}   — stats for one specific platform
 GET  /api/v1/analytics/top-posts         — top N posts ranked by views
+POST /api/v1/analytics/channel-audit     — AI-powered YouTube channel health audit
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timezone
@@ -19,6 +21,8 @@ from app.core.database import get_db
 from app.models.analytics import Analytics
 from app.models.post import Post
 from app.services import social_analytics_service as svc
+from app.services.channel_audit_service import ChannelAuditService
+from app.services.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -247,3 +251,34 @@ def _row_to_dict(row: Analytics) -> dict:
 def _last_synced(db: Session) -> Optional[str]:
     latest = db.query(func.max(Analytics.updated_at)).scalar()
     return latest.isoformat() if latest else None
+
+
+# ── POST /channel-audit ────────────────────────────────────────────────────────
+
+class ChannelAuditRequest(BaseModel):
+    channel: str       # channel ID (UC...), handle (@name), or full YouTube URL
+    niche: str = "AI tools"
+
+
+@router.post("/channel-audit")
+async def channel_audit(request: ChannelAuditRequest):
+    """
+    **AI-powered YouTube Channel Audit.**
+
+    Analyses a YouTube channel and returns:
+    - Overall score and grade (A-F)
+    - Scores across 6 dimensions (consistency, SEO, engagement, content quality, niche focus, growth)
+    - Top strengths and prioritised improvement actions
+    - Recommended next 5 videos with target keywords
+    - Monetization readiness assessment
+
+    Requires YOUTUBE_DATA_API_KEY env var.
+    """
+    try:
+        service = ChannelAuditService(OpenAIService())
+        return await service.audit(channel_input=request.channel, niche=request.niche)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Channel audit failed")
+        raise HTTPException(status_code=500, detail=f"Channel audit failed: {exc}")
