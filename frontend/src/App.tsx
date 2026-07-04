@@ -171,7 +171,7 @@ interface ChannelAuditResult {
   channel: { title: string; subscribers: number; total_views: number; video_count: number; avg_views: number; channel_id: string };
 }
 
-// ── OpenArt types ─────────────────────────────────────────────────────────────
+// ── AI Visuals / DALL·E 3 types ──────────────────────────────────────────────
 interface AIImage {
   url: string;
   revised_prompt: string;
@@ -2215,7 +2215,7 @@ function App() {
     }
   };
 
-  // ── OpenArt / Visuals state ───────────────────────────────────────────────
+  // ── AI Visuals / DALL·E 3 state ──────────────────────────────────────────
   const [oaTopic, setOaTopic]           = useState('');
   const [oaNiche, setOaNiche]           = useState('AI tools');
   const [oaPrompt, setOaPrompt]         = useState('');
@@ -2329,23 +2329,22 @@ function App() {
     <div className="videos-page">
       <h1>🎨 AI Visuals — Thumbnails & Images</h1>
       <p className="subtitle">
-        Generate eye-catching thumbnails, social media packs, and consistent AI avatars.{' '}
-        {oaProvider ? <span style={{ color: '#34d399', fontWeight: 600 }}>Powered by {oaProvider}</span>
-          : <span style={{ color: '#f59e0b' }}>Set OPENART_API_KEY or uses DALL·E 3 fallback automatically</span>}
+        Generate eye-catching thumbnails, social media packs, and consistent AI avatars — powered by DALL·E 3 HD.{' '}
+        {oaProvider && <span style={{ color: '#34d399', fontWeight: 600 }}>Active: {oaProvider}</span>}
       </p>
 
       {/* Info banner */}
       <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: 1 }}>
-          <p style={{ color: '#a78bfa', fontWeight: 700, margin: '0 0 0.35rem', fontSize: '0.9375rem' }}>🎨 OpenArt.ai + DALL·E 3</p>
+          <p style={{ color: '#a78bfa', fontWeight: 700, margin: '0 0 0.35rem', fontSize: '0.9375rem' }}>🎨 DALL·E 3 HD Image Generation</p>
           <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: 0, lineHeight: 1.5 }}>
-            No OPENART_API_KEY? No problem — DALL·E 3 (your OpenAI key) generates HD images automatically.
-            For OpenArt's full 100+ model library, <a href="https://openart.ai" target="_blank" rel="noopener noreferrer" style={{ color: '#a78bfa' }}>get a free key at openart.ai</a>.
+            Uses your existing <strong style={{ color: '#e2e8f0' }}>OPENAI_API_KEY</strong> — no extra key needed.
+            Cost: ~$0.04–0.08 per image. Generates 1792×1024 (16:9), 1024×1792 (9:16), or 1024×1024 (1:1).
           </p>
         </div>
-        <a href="https://openart.ai" target="_blank" rel="noopener noreferrer"
+        <a href="https://platform.openai.com/docs/guides/images" target="_blank" rel="noopener noreferrer"
           className="video-download-link" style={{ whiteSpace: 'nowrap', fontSize: '0.875rem', padding: '0.45rem 1rem', alignSelf: 'center' }}>
-          Get OpenArt Key →
+          DALL·E 3 Docs →
         </a>
       </div>
 
@@ -2548,7 +2547,7 @@ function App() {
           <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Use the Social Pack to publish the same video across YouTube, TikTok, and Instagram in one click</li>
           <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Create a consistent AI avatar to build brand recognition without showing your face</li>
           <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Sell image packs to small businesses — 10 social media images for $97 is a common price point</li>
-          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>OpenArt free tier gives you 50 credits/day — enough for 10–15 thumbnails daily</li>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>DALL·E 3 costs ~$0.04–0.08/image — 25 thumbnails costs about $1. Very cheap at scale.</li>
         </ul>
       </div>
     </div>

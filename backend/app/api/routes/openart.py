@@ -1,10 +1,9 @@
 """
-OpenArt / AI Image Generation Routes
-=====================================
+AI Image Generation Routes (DALL·E 3)
+======================================
 Endpoints for thumbnail generation, social media packs, and AI avatars.
 
-Uses OpenArt.ai if OPENART_API_KEY is set; falls back to DALL·E 3 via
-OPENAI_API_KEY. Either way the caller gets the same response shape.
+Powered by DALL·E 3 via your existing OPENAI_API_KEY — no extra key needed.
 """
 
 import logging
