@@ -148,16 +148,25 @@ class LocalVideoService:
         output_path: str,
         caption: str,
     ) -> None:
-        """Synchronous wrapper called from asyncio.to_thread."""
+        """Synchronous wrapper called from asyncio.to_thread.
+
+        Creates a fresh event loop for this thread — avoids the
+        'cannot run nested event loop' error when called via asyncio.to_thread.
+        """
         import asyncio
-        asyncio.run(
-            self._assembler.assemble(
-                clip_urls=clip_urls,
-                voice_mp3_path=voice_path,
-                output_path=output_path,
-                caption_text=caption,
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(
+                self._assembler.assemble(
+                    clip_urls=clip_urls,
+                    voice_mp3_path=voice_path,
+                    output_path=output_path,
+                    caption_text=caption,
+                )
             )
-        )
+        finally:
+            loop.close()
 
     # ------------------------------------------------------------------
     async def get_account_info(self) -> Dict[str, Any]:
