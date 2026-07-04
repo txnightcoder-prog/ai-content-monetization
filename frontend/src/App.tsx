@@ -144,6 +144,33 @@ interface ParrotResult {
   };
 }
 
+// ── Optimize / Keywords / Channel Audit types ─────────────────────────────────
+interface OptimizeTitle { title: string; style: string; ctr_score: number; }
+interface OptimizeResult {
+  titles: OptimizeTitle[];
+  description: string;
+  tags: string[];
+  content_pack: { recommended_title: string; target_audience: string; best_posting_time: string; estimated_cpm: string; seo_tips: string[] };
+}
+interface KeywordItem {
+  keyword: string; search_volume: string; competition: string; opportunity_score: number;
+  intent: string; suggested_title: string; why: string; result_count?: number;
+}
+interface KeywordResult {
+  seed_keyword: string; keywords: KeywordItem[]; long_tail: string[];
+  recommended_primary: string; niche_tips: string[];
+}
+interface AuditScore { score: number; label: string; detail: string; }
+interface ChannelAuditResult {
+  overall_score: number; grade: string; summary: string;
+  scores: Record<string, AuditScore>;
+  strengths: string[];
+  improvements: Array<{ priority: string; action: string; impact: string }>;
+  next_5_videos: Array<{ title: string; why: string; keyword: string }>;
+  monetization_readiness: { adsense_eligible: boolean; estimated_monthly_revenue: string; recommendation: string };
+  channel: { title: string; subscribers: number; total_views: number; video_count: number; avg_views: number; channel_id: string };
+}
+
 function App() {
   const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
@@ -173,6 +200,10 @@ function App() {
   const [analyticsSyncMsg, setAnalyticsSyncMsg]     = useState('');
   const [analyticsTopMetric, setAnalyticsTopMetric] = useState<'views'|'likes'|'comments'|'shares'>('views');
 
+
+  // Helper: return backend streaming URL for a video record
+  const videoStreamUrl = (v: VideoRecord) =>
+    v.video_url ? `${API_BASE}/api/v1/videos/${v.id}/stream` : null;
 
   // ── Video page state ──────────────────────────────────────────────────────
   const [videoProvider, setVideoProvider]       = useState<{provider:string;label:string;detail:string;color:string}|null>(null);
@@ -522,10 +553,10 @@ function App() {
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                   <button className="publish-button"
                     style={{ background: 'rgba(59,130,246,0.8)', flex: 1 }}
-                    onClick={() => setPreviewUrl(activeVideo.video_url)}>
+                    onClick={() => setPreviewUrl(videoStreamUrl(activeVideo))}>
                     ▶ Preview Video
                   </button>
-                  <a href={activeVideo.video_url} target="_blank" rel="noopener noreferrer"
+                  <a href={videoStreamUrl(activeVideo) ?? '#'} target="_blank" rel="noopener noreferrer"
                     className="video-download-link" style={{ flex: 1, textAlign: 'center' }}>
                     ⬇️ Download
                   </a>
@@ -549,6 +580,12 @@ function App() {
                 onClick={() => { setScheduleVideoId(activeVideo.id); document.getElementById('scheduler')?.scrollIntoView({ behavior: 'smooth' }); }}>
                 📅 Schedule for Later
               </button>
+              {activeVideo.script_id && (
+                <button className="idea-button" style={{ marginTop: '0.5rem', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24' }}
+                  onClick={() => { setVarSourceId(activeVideo.script_id!); document.getElementById('variations')?.scrollIntoView({ behavior: 'smooth' }); }}>
+                  🔄 Make Viral Variations
+                </button>
+              )}
             </div>
           )}
 
@@ -620,6 +657,9 @@ function App() {
       {/* Scheduler section */}
       <div id="scheduler">{renderScheduler()}</div>
 
+      {/* Viral Variations section */}
+      {renderVariations()}
+
       {/* ── All videos from DB ── */}
       <div className="scripts-history" style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -662,10 +702,17 @@ function App() {
                 </p>
                 <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
                   {v.video_url && (
-                    <a href={v.video_url} target="_blank" rel="noopener noreferrer"
+                    <button
+                      onClick={e => { e.stopPropagation(); setPreviewUrl(videoStreamUrl(v)); }}
+                      style={{ background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                      ▶ Preview
+                    </button>
+                  )}
+                  {v.video_url && (
+                    <a href={videoStreamUrl(v) ?? '#'} target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       className="video-download-link" style={{ fontSize: '0.8125rem', padding: '0.3rem 0.75rem' }}>
-                      ▶ Preview / Download
+                      ⬇️ Download
                     </a>
                   )}
                   {v.status === 'ready' && (
@@ -688,6 +735,94 @@ function App() {
           </div>
         )}
       </div>
+    </div>
+  );
+
+  // ── Viral Variations state ────────────────────────────────────────────────
+  const [varLoading, setVarLoading]           = useState(false);
+  const [varError, setVarError]               = useState('');
+  const [varResults, setVarResults]           = useState<Script[]>([]);
+  const [varSourceId, setVarSourceId]         = useState('');
+
+  const generateVariations = async (scriptId: string) => {
+    if (!scriptId.trim()) { setVarError('No script selected'); return; }
+    setVarLoading(true); setVarError(''); setVarResults([]);
+    setVarSourceId(scriptId);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/${scriptId.trim()}`);
+      if (!res.ok) throw new Error('Script not found');
+      const original: Script = await res.json();
+      // Ask AI to generate 3 variations by generating new scripts on the same topic
+      const promises = ['curiosity-gap hook', 'shocking statistic hook', 'story-based hook'].map(async (style) => {
+        const params = new URLSearchParams({
+          topic: `${original.topic} — ${style}`,
+          niche: original.script_metadata?.niche as string ?? 'AI tools',
+        });
+        const r = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!r.ok) throw new Error('Variation generation failed');
+        return r.json() as Promise<Script>;
+      });
+      const scripts = await Promise.all(promises);
+      setVarResults(scripts);
+      setScripts(prev => [...scripts, ...prev]);
+    } catch (err) { setVarError(err instanceof Error ? err.message : 'Failed to generate variations'); }
+    finally { setVarLoading(false); }
+  };
+
+  const renderVariations = () => (
+    <div id="variations" style={{ marginTop: '2.5rem', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.75rem', padding: '1.5rem' }}>
+      <h2 style={{ color: '#fbbf24', marginBottom: '0.25rem', fontSize: '1.1rem' }}>🔄 Viral Variations</h2>
+      <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '1rem' }}>
+        Generate 3 viral hook variations from any script — different opening styles to A/B test. Each becomes a separate video you can generate and publish.
+      </p>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+        <input
+          type="text"
+          value={varSourceId}
+          onChange={e => setVarSourceId(e.target.value)}
+          placeholder="Paste Script ID (from Scripts page)"
+          disabled={varLoading}
+          style={{ flex: '1 1 260px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}
+        />
+        <button
+          onClick={() => generateVariations(varSourceId)}
+          disabled={varLoading || !varSourceId.trim()}
+          style={{ background: 'linear-gradient(135deg,#f59e0b 0%,#d97706 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: varLoading ? 'not-allowed' : 'pointer', opacity: varLoading || !varSourceId.trim() ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+          {varLoading ? '⏳ Generating…' : '🔄 Make 3 Variations'}
+        </button>
+      </div>
+      {varError && <div className="error-message">{varError}</div>}
+      {varResults.length > 0 && (
+        <div>
+          <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginBottom: '0.75rem' }}>✅ 3 variations ready — click a script to use it, or generate a video directly:</p>
+          <div className="scripts-list">
+            {varResults.map((s, i) => (
+              <div key={s.id} className="script-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <h3 style={{ color: '#fbbf24', margin: 0, fontSize: '0.9375rem' }}>Variation {i + 1}</h3>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                    <button onClick={() => copyId(s.id)}
+                      style={{ background: copiedId === s.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', border: `1px solid ${copiedId === s.id ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.25)'}`, color: copiedId === s.id ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.25rem 0.6rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                      {copiedId === s.id ? '✓' : '📋 Copy ID'}
+                    </button>
+                    <button
+                      onClick={() => { setVideoScriptId(s.id); loadScript(s.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.375rem', padding: '0.25rem 0.75rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                      🎬 Generate Video
+                    </button>
+                  </div>
+                </div>
+                <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0.4rem 0 0.25rem', fontFamily: 'monospace' }}>{s.id.slice(0, 16)}…</p>
+                <p style={{ color: '#fbbf24', fontSize: '0.875rem', fontWeight: 600, margin: '0.3rem 0 0.15rem' }}>Hook: {s.hook}</p>
+                <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: 0, whiteSpace: 'pre-wrap' }}>{s.body?.slice(0, 120)}…</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -772,26 +907,31 @@ function App() {
   const renderSource = () => (
     <div className="videos-page">
       <h1>🎯 Source</h1>
-      <p className="subtitle">Find inspiration — parrot a proven video or browse what's trending right now</p>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
-        <button
-          onClick={() => setSourceTab('parrot')}
+      <p className="subtitle">Find inspiration — parrot a proven video, browse trending, or research keywords</p>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <button onClick={() => setSourceTab('parrot')}
           style={{ padding: '0.55rem 1.5rem', borderRadius: '999px', border: `2px solid #a78bfa`,
             background: sourceTab === 'parrot' ? '#a78bfa' : 'transparent',
             color: sourceTab === 'parrot' ? '#fff' : '#a78bfa',
             fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem' }}>
           🦜 Parrot a Video
         </button>
-        <button
-          onClick={() => setSourceTab('trending')}
+        <button onClick={() => setSourceTab('trending')}
           style={{ padding: '0.55rem 1.5rem', borderRadius: '999px', border: `2px solid #ef4444`,
             background: sourceTab === 'trending' ? '#ef4444' : 'transparent',
             color: sourceTab === 'trending' ? '#fff' : '#ef4444',
             fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem' }}>
           🔥 Trending Now
         </button>
+        <button onClick={() => setSourceTab('keywords' as any)}
+          style={{ padding: '0.55rem 1.5rem', borderRadius: '999px', border: `2px solid #10b981`,
+            background: sourceTab === ('keywords' as any) ? '#10b981' : 'transparent',
+            color: sourceTab === ('keywords' as any) ? '#fff' : '#10b981',
+            fontWeight: 700, cursor: 'pointer', fontSize: '0.9375rem' }}>
+          🔍 Keywords
+        </button>
       </div>
-      {sourceTab === 'parrot' ? renderParrot() : renderTrending()}
+      {sourceTab === 'parrot' ? renderParrot() : sourceTab === ('keywords' as any) ? renderKeywords() : renderTrending()}
     </div>
   );
 
@@ -1368,6 +1508,67 @@ function App() {
   );
 
 
+  // ── Optimize state ────────────────────────────────────────────────────────
+  const [optLoading, setOptLoading]       = useState(false);
+  const [optError, setOptError]           = useState('');
+  const [optResult, setOptResult]         = useState<OptimizeResult | null>(null);
+  const [optCopied, setOptCopied]         = useState('');
+
+  const runOptimize = async (scriptTopic: string, scriptNiche: string, hook?: string, body?: string, cta?: string) => {
+    setOptLoading(true); setOptError(''); setOptResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/optimize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: scriptTopic, niche: scriptNiche, hook, body, cta }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setOptResult(await res.json());
+    } catch (err) { setOptError(err instanceof Error ? err.message : 'Optimize failed'); }
+    finally { setOptLoading(false); }
+  };
+
+  // ── Keywords state ────────────────────────────────────────────────────────
+  const [kwTopic, setKwTopic]             = useState('');
+  const [kwNiche, setKwNiche]             = useState('AI tools');
+  const [kwLoading, setKwLoading]         = useState(false);
+  const [kwError, setKwError]             = useState('');
+  const [kwResult, setKwResult]           = useState<KeywordResult | null>(null);
+
+  const runKeywords = async () => {
+    if (!kwTopic.trim()) { setKwError('Enter a topic first'); return; }
+    setKwLoading(true); setKwError(''); setKwResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/keywords`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: kwTopic.trim(), niche: kwNiche, count: 10 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setKwResult(await res.json());
+    } catch (err) { setKwError(err instanceof Error ? err.message : 'Keyword research failed'); }
+    finally { setKwLoading(false); }
+  };
+
+  // ── Channel Audit state ───────────────────────────────────────────────────
+  const [auditChannel, setAuditChannel]   = useState('');
+  const [auditNiche, setAuditNiche]       = useState('AI tools');
+  const [auditLoading, setAuditLoading]   = useState(false);
+  const [auditError, setAuditError]       = useState('');
+  const [auditResult, setAuditResult]     = useState<ChannelAuditResult | null>(null);
+
+  const runAudit = async () => {
+    if (!auditChannel.trim()) { setAuditError('Enter a channel ID, handle or URL'); return; }
+    setAuditLoading(true); setAuditError(''); setAuditResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/analytics/channel-audit`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: auditChannel.trim(), niche: auditNiche }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setAuditResult(await res.json());
+    } catch (err) { setAuditError(err instanceof Error ? err.message : 'Audit failed'); }
+    finally { setAuditLoading(false); }
+  };
+
   // ── Analytics page ────────────────────────────────────────────────────────
   const fetchAnalytics = async (metric: 'views'|'likes'|'comments'|'shares' = analyticsTopMetric) => {
     setAnalyticsLoading(true); setAnalyticsError('');
@@ -1397,6 +1598,114 @@ function App() {
   };
 
   const fmt = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(1)}K` : String(n);
+
+  const renderKeywords = () => (
+    <div className="videos-page">
+      <h1>🔍 Keyword Research</h1>
+      <p className="subtitle">Find the best YouTube search terms — search volume, competition, and opportunity scores</p>
+      <div className="generator-form">
+        <div className="form-group">
+          <label>Topic or seed keyword *</label>
+          <input type="text" value={kwTopic} onChange={e => setKwTopic(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !kwLoading) runKeywords(); }}
+            placeholder="e.g. Azure data engineering, AI tools for beginners" disabled={kwLoading} />
+        </div>
+        <div className="form-group">
+          <label>Your Niche</label>
+          <select value={kwNiche} onChange={e => setKwNiche(e.target.value)} disabled={kwLoading}>
+            <option value="AI tools">💰 AI Tools / Online Business</option>
+            <option value="technology">💰 Technology / Gadget Reviews</option>
+            <option value="education">💰 Education (Skills, Tutorials)</option>
+            <option value="health">💰 Health & Fitness</option>
+            <option value="side hustles">💰 Side Hustles / Productivity</option>
+            <option value="finance">💰 Finance / Investing</option>
+            <option value="kids">🧒 Kids & Family</option>
+            <option value="gaming">🎮 Gaming</option>
+            <option value="music">🎵 Music & Entertainment</option>
+            <option value="comedy">😂 Comedy & Skits</option>
+            <option value="beauty">💄 Beauty & Fashion</option>
+            <option value="food">🍕 Food & Cooking</option>
+            <option value="travel">✈️ Travel & Adventure</option>
+            <option value="sports">⚽ Sports & Fitness</option>
+            <option value="news">📰 News & Current Events</option>
+            <option value="pets">🐾 Pets & Animals</option>
+            <option value="diy">🔨 DIY & Home Improvement</option>
+            <option value="cars">🚗 Cars & Automotive</option>
+            <option value="motivation">🔥 Motivation & Self-Help</option>
+            <option value="paranormal">👻 True Crime & Paranormal</option>
+          </select>
+        </div>
+        {kwError && <div className="error-message">{kwError}</div>}
+        <button className="generate-button" onClick={runKeywords} disabled={kwLoading}>
+          {kwLoading ? '🔍 Researching…' : '🔍 Research Keywords'}
+        </button>
+      </div>
+
+      {kwResult && (
+        <div>
+          {/* Recommended primary */}
+          <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.75rem', padding: '1rem 1.25rem', margin: '1.5rem 0 1rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>⭐ Best Keyword to Target</p>
+            <p style={{ color: '#34d399', fontWeight: 700, fontSize: '1.1rem', margin: 0 }}>{kwResult.recommended_primary}</p>
+          </div>
+
+          {/* Keyword table */}
+          <div className="scripts-list">
+            {kwResult.keywords.map((kw, i) => {
+              const oppColor = kw.opportunity_score >= 8 ? '#10b981' : kw.opportunity_score >= 6 ? '#f59e0b' : '#ef4444';
+              const volBg = kw.search_volume === 'High' ? 'rgba(16,185,129,0.15)' : kw.search_volume === 'Medium' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
+              const volColor = kw.search_volume === 'High' ? '#34d399' : kw.search_volume === 'Medium' ? '#fbbf24' : '#fca5a5';
+              const compBg = kw.competition === 'Low' ? 'rgba(16,185,129,0.15)' : kw.competition === 'Medium' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
+              const compColor = kw.competition === 'Low' ? '#34d399' : kw.competition === 'Medium' ? '#fbbf24' : '#fca5a5';
+              return (
+                <div key={i} className="script-card" style={{ borderLeft: `4px solid ${oppColor}` }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '1rem' }}>{kw.keyword}</h3>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, alignItems: 'center' }}>
+                      <span style={{ background: volBg, color: volColor, borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.73rem', fontWeight: 700 }}>Vol: {kw.search_volume}</span>
+                      <span style={{ background: compBg, color: compColor, borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.73rem', fontWeight: 700 }}>Comp: {kw.competition}</span>
+                      <span style={{ background: `rgba(${oppColor.slice(1).match(/.{2}/g)!.map(h=>parseInt(h,16)).join(',')},0.2)`, color: oppColor, borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.73rem', fontWeight: 700 }}>Score: {kw.opportunity_score}</span>
+                    </div>
+                  </div>
+                  <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0.3rem 0 0.5rem' }}>{kw.intent} · {kw.why}</p>
+                  {kw.result_count !== undefined && <p style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: '0.4rem' }}>📊 {kw.result_count.toLocaleString()} results on YouTube</p>}
+                  <p style={{ color: '#60a5fa', fontSize: '0.8125rem', marginBottom: '0.6rem' }}>💡 Suggested title: <em>{kw.suggested_title}</em></p>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button onClick={() => { setTopic(kw.suggested_title); setNiche(kwNiche); setCurrentPage('scripts'); }}
+                      style={{ background: 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.4rem 0.85rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                      ✍️ Write Script
+                    </button>
+                    <button onClick={() => { setTopic(kw.suggested_title); setNiche(kwNiche); setCurrentPage('blueprint'); }}
+                      style={{ background: 'linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)', color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.4rem 0.85rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                      📋 Blueprint
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Long-tail */}
+          {kwResult.long_tail?.length > 0 && (
+            <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginTop: '1rem' }}>
+              <p style={{ color: '#60a5fa', fontWeight: 700, marginBottom: '0.5rem' }}>🔗 Long-tail Variants</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {kwResult.long_tail.map((t, i) => <span key={i} style={{ background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.8125rem', cursor: 'pointer' }} onClick={() => { setKwTopic(t); }}>{t}</span>)}
+              </div>
+            </div>
+          )}
+
+          {/* Niche tips */}
+          {kwResult.niche_tips?.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.35rem' }}>💡 SEO Tips for {kwNiche}</p>
+              <ul style={{ paddingLeft: '1rem', margin: 0 }}>{kwResult.niche_tips.map((t, i) => <li key={i} style={{ color: '#94a3b8', fontSize: '0.8125rem', marginBottom: '0.25rem' }}>{t}</li>)}</ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const renderAnalytics = () => (
     <div className="videos-page">
@@ -1558,6 +1867,115 @@ function App() {
           }
         </>
       )}
+
+      {/* ── Channel Audit ── */}
+      <div style={{ marginTop: '2.5rem', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '0.75rem', padding: '1.5rem' }}>
+        <h2 style={{ color: '#a78bfa', marginBottom: '0.25rem', fontSize: '1.1rem' }}>🎓 Channel Audit</h2>
+        <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '1rem' }}>AI analyses your YouTube channel and scores it across 6 dimensions with actionable recommendations.</p>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+          <input type="text" value={auditChannel} onChange={e => setAuditChannel(e.target.value)}
+            placeholder="Channel ID (UC...), @handle, or YouTube URL"
+            disabled={auditLoading}
+            style={{ flex: '1 1 260px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }} />
+          <select value={auditNiche} onChange={e => setAuditNiche(e.target.value)} disabled={auditLoading}
+            style={{ flex: '0 0 auto', background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}>
+            <option value="AI tools">AI Tools</option><option value="technology">Technology</option>
+            <option value="education">Education</option><option value="finance">Finance</option>
+            <option value="health">Health</option><option value="gaming">Gaming</option>
+            <option value="kids">Kids & Family</option><option value="beauty">Beauty</option>
+            <option value="food">Food</option><option value="travel">Travel</option>
+          </select>
+          <button onClick={runAudit} disabled={auditLoading}
+            style={{ background: 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: auditLoading ? 'not-allowed' : 'pointer', opacity: auditLoading ? 0.7 : 1, whiteSpace: 'nowrap' }}>
+            {auditLoading ? '🔍 Analysing…' : '🔍 Audit Channel'}
+          </button>
+        </div>
+        {auditError && <div className="error-message">{auditError}</div>}
+
+        {auditResult && (() => {
+          const gradeColor = auditResult.overall_score >= 8 ? '#10b981' : auditResult.overall_score >= 6 ? '#f59e0b' : '#ef4444';
+          const scoreKeys = Object.entries(auditResult.scores ?? {});
+          return (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '3rem', fontWeight: 900, color: gradeColor, lineHeight: 1 }}>{auditResult.grade}</div>
+                  <div style={{ color: '#64748b', fontSize: '0.8rem' }}>Overall Grade</div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ color: '#e2e8f0', fontSize: '0.9375rem', margin: '0 0 0.5rem', fontWeight: 600 }}>{auditResult.channel?.title}</p>
+                  <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    {[['👥', auditResult.channel?.subscribers?.toLocaleString(), 'Subscribers'],['👁', auditResult.channel?.total_views?.toLocaleString(), 'Total Views'],['🎬', auditResult.channel?.video_count?.toLocaleString(), 'Videos'],['📊', auditResult.channel?.avg_views?.toLocaleString(), 'Avg Views']].map(([icon, val, lbl]) => (
+                      <div key={lbl as string}><div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.9rem' }}>{icon} {val}</div><div style={{ color: '#64748b', fontSize: '0.73rem' }}>{lbl as string}</div></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <p style={{ color: '#cbd5e1', fontSize: '0.875rem', marginBottom: '1.25rem' }}>{auditResult.summary}</p>
+              {scoreKeys.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.6rem', marginBottom: '1.25rem' }}>
+                  {scoreKeys.map(([key, val]) => {
+                    const sc = val as AuditScore; const c = sc.score >= 8 ? '#10b981' : sc.score >= 6 ? '#f59e0b' : '#ef4444';
+                    return (
+                      <div key={key} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${c}44`, borderRadius: '0.5rem', padding: '0.6rem 0.75rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
+                          <span style={{ color: '#94a3b8', fontSize: '0.8rem', textTransform: 'capitalize' }}>{key.replace('_', ' ')}</span>
+                          <span style={{ color: c, fontWeight: 700, fontSize: '0.875rem' }}>{sc.score}/10</span>
+                        </div>
+                        <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '999px', height: '4px', overflow: 'hidden' }}>
+                          <div style={{ background: c, width: `${sc.score * 10}%`, height: '100%', borderRadius: '999px' }} />
+                        </div>
+                        <p style={{ color: '#64748b', fontSize: '0.73rem', margin: '0.25rem 0 0' }}>{sc.detail}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {auditResult.strengths?.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <p style={{ color: '#34d399', fontWeight: 700, fontSize: '0.8125rem', textTransform: 'uppercase', marginBottom: '0.4rem' }}>✅ Strengths</p>
+                  <ul style={{ paddingLeft: '1rem', margin: 0 }}>{auditResult.strengths.map((s, i) => <li key={i} style={{ color: '#a7f3d0', fontSize: '0.8125rem', marginBottom: '0.2rem' }}>{s}</li>)}</ul>
+                </div>
+              )}
+              {auditResult.improvements?.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <p style={{ color: '#fbbf24', fontWeight: 700, fontSize: '0.8125rem', textTransform: 'uppercase', marginBottom: '0.5rem' }}>🔧 Action Plan</p>
+                  {auditResult.improvements.map((imp, i) => {
+                    const pc = imp.priority === 'High' ? '#ef4444' : imp.priority === 'Medium' ? '#f59e0b' : '#94a3b8';
+                    return (
+                      <div key={i} style={{ display: 'flex', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <span style={{ background: `${pc}22`, color: pc, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', fontWeight: 700, flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.1rem' }}>{imp.priority}</span>
+                        <div><p style={{ color: '#e2e8f0', fontSize: '0.8125rem', margin: '0 0 0.15rem', fontWeight: 600 }}>{imp.action}</p><p style={{ color: '#64748b', fontSize: '0.78rem', margin: 0 }}>{imp.impact}</p></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {auditResult.next_5_videos?.length > 0 && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <p style={{ color: '#60a5fa', fontWeight: 700, fontSize: '0.8125rem', textTransform: 'uppercase', marginBottom: '0.5rem' }}>🎬 Recommended Next Videos</p>
+                  {auditResult.next_5_videos.map((v, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid rgba(255,255,255,0.05)', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#3b82f6', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>#{i+1}</span>
+                      <div style={{ flex: 1 }}><p style={{ color: '#e2e8f0', fontSize: '0.8125rem', margin: '0 0 0.1rem', fontWeight: 600 }}>{v.title}</p><p style={{ color: '#64748b', fontSize: '0.75rem', margin: 0 }}>Keyword: <span style={{ color: '#93c5fd' }}>{v.keyword}</span> · {v.why}</p></div>
+                      <button onClick={() => { setTopic(v.title); setNiche(auditNiche); setCurrentPage('scripts'); }}
+                        style={{ background: 'linear-gradient(135deg,#a78bfa 0%,#7c3aed 100%)', color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.35rem 0.75rem', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', flexShrink: 0 }}>
+                        ✍️ Write Script
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {auditResult.monetization_readiness?.recommendation && (
+                <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+                  <p style={{ color: '#fbbf24', fontWeight: 700, marginBottom: '0.35rem', fontSize: '0.875rem' }}>💰 Monetization — {auditResult.monetization_readiness.estimated_monthly_revenue}/mo estimate {auditResult.monetization_readiness.adsense_eligible ? '· ✅ AdSense eligible' : '· ⚠️ Not yet eligible'}</p>
+                  <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: 0 }}>{auditResult.monetization_readiness.recommendation}</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 
@@ -2001,6 +2419,84 @@ function App() {
             <button className="btn-green" onClick={() => { setVideoScriptId(generatedScript.id); loadScript(generatedScript.id); setCurrentPage('videos'); }}>
               🎬 Step 3: Make Video →
             </button>
+          </div>
+
+          {/* ── SEO Optimizer panel ── */}
+          <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.75rem', padding: '1.25rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <h3 style={{ color: '#34d399', margin: 0 }}>🎯 YouTube SEO Optimizer</h3>
+              <button onClick={() => runOptimize(generatedScript.topic, generatedScript.script_metadata?.niche ?? niche, generatedScript.hook, generatedScript.body, generatedScript.cta)}
+                disabled={optLoading}
+                style={{ background: 'linear-gradient(135deg,#10b981 0%,#059669 100%)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: optLoading ? 'not-allowed' : 'pointer', opacity: optLoading ? 0.7 : 1 }}>
+                {optLoading ? '⏳ Generating…' : '✨ Generate Titles, Description & Tags'}
+              </button>
+            </div>
+            <p style={{ color: '#64748b', fontSize: '0.8125rem', margin: '0 0 0.75rem' }}>
+              Get 10 click-optimised title options, a full SEO description, and 20 keyword tags ready to paste into YouTube Studio.
+            </p>
+            {optError && <div className="error-message">{optError}</div>}
+            {optResult && (() => {
+              const cp = optResult.content_pack;
+              return (
+                <div>
+                  {/* Recommended title */}
+                  <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+                    <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.25rem' }}>⭐ Recommended Title</p>
+                    <p style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '1rem', margin: 0 }}>{cp.recommended_title}</p>
+                    <div style={{ display: 'flex', gap: '1rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>👥 {cp.target_audience}</span>
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>🕐 {cp.best_posting_time}</span>
+                      <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>💰 {cp.estimated_cpm}</span>
+                    </div>
+                  </div>
+                  {/* All title options */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.5rem' }}>📝 All Title Options (ranked by CTR)</p>
+                    {optResult.titles.map((t, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <span style={{ background: `rgba(16,185,129,${0.15 + (10-i)*0.015})`, color: '#34d399', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>{t.ctr_score.toFixed(1)}</span>
+                        <span style={{ color: '#e2e8f0', fontSize: '0.875rem', flex: 1 }}>{t.title}</span>
+                        <span style={{ color: '#64748b', fontSize: '0.75rem', flexShrink: 0 }}>{t.style}</span>
+                        <button onClick={() => { navigator.clipboard.writeText(t.title); setOptCopied(t.title); setTimeout(() => setOptCopied(''), 2000); }}
+                          style={{ background: optCopied === t.title ? 'rgba(16,185,129,0.2)' : 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', color: optCopied === t.title ? '#34d399' : '#94a3b8', borderRadius: '0.3rem', padding: '0.2rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                          {optCopied === t.title ? '✓' : '📋'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Description */}
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                      <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>📄 YouTube Description</p>
+                      <button onClick={() => { navigator.clipboard.writeText(optResult.description); setOptCopied('desc'); setTimeout(() => setOptCopied(''), 2000); }}
+                        style={{ background: optCopied === 'desc' ? 'rgba(16,185,129,0.2)' : 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', color: optCopied === 'desc' ? '#34d399' : '#94a3b8', borderRadius: '0.3rem', padding: '0.2rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        {optCopied === 'desc' ? '✓ Copied' : '📋 Copy'}
+                      </button>
+                    </div>
+                    <pre style={{ color: '#cbd5e1', fontSize: '0.8rem', background: 'rgba(0,0,0,0.2)', borderRadius: '0.5rem', padding: '0.75rem', whiteSpace: 'pre-wrap', maxHeight: '200px', overflowY: 'auto', margin: 0 }}>{optResult.description}</pre>
+                  </div>
+                  {/* Tags */}
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                      <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>🏷️ Tags ({optResult.tags.length})</p>
+                      <button onClick={() => { navigator.clipboard.writeText(optResult.tags.join(', ')); setOptCopied('tags'); setTimeout(() => setOptCopied(''), 2000); }}
+                        style={{ background: optCopied === 'tags' ? 'rgba(16,185,129,0.2)' : 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', color: optCopied === 'tags' ? '#34d399' : '#94a3b8', borderRadius: '0.3rem', padding: '0.2rem 0.5rem', fontSize: '0.75rem', cursor: 'pointer' }}>
+                        {optCopied === 'tags' ? '✓ Copied' : '📋 Copy All'}
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                      {optResult.tags.map((t, i) => <span key={i} style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.25)', color: '#34d399', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.78rem' }}>#{t}</span>)}
+                    </div>
+                  </div>
+                  {cp.seo_tips?.length > 0 && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <p style={{ color: '#64748b', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', marginBottom: '0.35rem' }}>💡 SEO Tips</p>
+                      <ul style={{ paddingLeft: '1rem', margin: 0 }}>{cp.seo_tips.map((t, i) => <li key={i} style={{ color: '#94a3b8', fontSize: '0.8125rem', marginBottom: '0.2rem' }}>{t}</li>)}</ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

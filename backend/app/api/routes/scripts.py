@@ -20,6 +20,8 @@ from app.services.openai_service import OpenAIService
 from app.services.script_generator import ScriptGenerator
 from app.services.parrot_service import ParrotService
 from app.services.trending_service import TrendingService
+from app.services.optimize_service import OptimizeService
+from app.services.keyword_service import KeywordService
 
 router = APIRouter(prefix="/api/v1/scripts", tags=["scripts"])
 
@@ -31,6 +33,20 @@ class TopicIdeasRequest(BaseModel):
 class BlueprintRequest(BaseModel):
     instructions: str
     niche: str
+
+
+class OptimizeRequest(BaseModel):
+    topic: str
+    niche: str = "AI tools"
+    hook: Optional[str] = None
+    body: Optional[str] = None
+    cta: Optional[str] = None
+
+
+class KeywordRequest(BaseModel):
+    topic: str
+    niche: str = "AI tools"
+    count: int = 10
 
 
 class ParrotRequest(BaseModel):
@@ -75,6 +91,14 @@ def get_parrot_service() -> ParrotService:
 def get_trending_service() -> TrendingService:
     openai_service = OpenAIService()
     return TrendingService(openai_service)
+
+
+def get_optimize_service() -> OptimizeService:
+    return OptimizeService(OpenAIService())
+
+
+def get_keyword_service() -> KeywordService:
+    return KeywordService(OpenAIService())
 
 
 @router.post("/generate", response_model=ContentScriptResponse, status_code=201)
@@ -492,6 +516,62 @@ async def ask_ai(
     except Exception as exc:
         logger.exception("AI ask failed")
         raise HTTPException(status_code=500, detail=f"AI assistant unavailable: {exc}")
+
+
+@router.post("/optimize")
+async def optimize_script(
+    request: OptimizeRequest,
+    service: OptimizeService = Depends(get_optimize_service),
+):
+    """
+    **YouTube SEO Optimizer** — generate titles, description, and tags for a video.
+
+    Given a topic and optional script text, returns:
+    - 10 title options ranked by click-through potential
+    - A full SEO-optimised YouTube description with hashtags
+    - 20 keyword tags ordered by relevance
+    - Content pack with best posting time and monetization estimate
+    """
+    try:
+        return await service.optimize(
+            topic=request.topic,
+            niche=request.niche,
+            hook=request.hook,
+            body=request.body,
+            cta=request.cta,
+        )
+    except Exception as exc:
+        logger.exception("Optimize failed")
+        raise HTTPException(status_code=500, detail=f"Optimize failed: {exc}")
+
+
+@router.post("/keywords")
+async def keyword_research(
+    request: KeywordRequest,
+    service: KeywordService = Depends(get_keyword_service),
+):
+    """
+    **Keyword Research** — find the best YouTube search terms for a topic.
+
+    Returns keywords with:
+    - Search volume estimate (High/Medium/Low)
+    - Competition level
+    - Opportunity score (1-10)
+    - Real YouTube result counts (if YOUTUBE_DATA_API_KEY is set)
+    - Long-tail variants
+    - Suggested video title per keyword
+    """
+    if request.count < 1 or request.count > 20:
+        raise HTTPException(status_code=400, detail="count must be between 1 and 20")
+    try:
+        return await service.research(
+            topic=request.topic,
+            niche=request.niche,
+            count=request.count,
+        )
+    except Exception as exc:
+        logger.exception("Keyword research failed")
+        raise HTTPException(status_code=500, detail=f"Keyword research failed: {exc}")
 
 
 # Made with Bob

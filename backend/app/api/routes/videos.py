@@ -8,6 +8,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -323,6 +324,34 @@ def mark_video_failed(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update video status: {str(e)}")
+
+@router.get("/{video_id}/stream")
+def stream_video(
+    video_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Stream / download the generated video file from the container's local storage.
+    This is what the browser calls to preview or download a video whose
+    video_url is a local filesystem path (e.g. /tmp/videos/<id>.mp4).
+    """
+    db_video = db.query(Video).filter(Video.id == video_id).first()
+    if not db_video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not db_video.video_url:
+        raise HTTPException(status_code=404, detail="Video file not available yet")
+
+    video_path = Path(db_video.video_url)
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail=f"Video file not found on disk: {db_video.video_url}")
+
+    return FileResponse(
+        path=str(video_path),
+        media_type="video/mp4",
+        filename=f"video-{video_id}.mp4",
+        headers={"Accept-Ranges": "bytes"},
+    )
+
 
 @router.post("/{video_id}/schedule", response_model=list[PostResponse], status_code=201)
 async def schedule_video(

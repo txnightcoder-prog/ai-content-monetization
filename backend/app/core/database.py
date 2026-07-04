@@ -3,20 +3,10 @@ from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 import os
 
-# Database URL - defaults to SQLite for local development
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_content_monetization.db")
+# DATABASE_URL must be set — no local fallback (all data lives in Azure PostgreSQL)
+DATABASE_URL = os.environ["DATABASE_URL"]
 
-# Create engine
-# For SQLite, we need check_same_thread=False
-# For PostgreSQL in production, remove this parameter
-if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-        echo=False  # Disabled for better performance
-    )
-else:
-    engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, echo=False)
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
