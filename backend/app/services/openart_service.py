@@ -1,25 +1,20 @@
 """
-OpenArt.ai Service
-==================
-Generates thumbnails, social-media images, and AI art for your videos.
+AI Image Generation Service (DALL·E 3)
+=======================================
+Generates thumbnails, social-media images, and AI art for your videos
+using OpenAI's DALL·E 3 model — HD quality, photorealistic results.
 
-OpenArt supports an OpenAI-compatible REST API (images/generations endpoint)
-so if you have an OpenArt API key it works natively; otherwise we fall back
-to DALL·E 3 via your existing OPENAI_API_KEY so you ALWAYS get an image.
+Powered by your existing OPENAI_API_KEY. No extra key needed.
 
 Supported use-cases
 -------------------
-1. YouTube thumbnail — eye-catching title-card style image (16:9 / 1280×720)
+1. YouTube thumbnail — eye-catching title-card style image (16:9 / 1792×1024)
 2. Social media visual — square or portrait post image (1:1 / 9:16)
 3. Consistent avatar — a repeatable AI presenter face/character
 4. Training-material diagram — clean technical illustration
 
-API keys
---------
-  OPENART_API_KEY   → uses api.openart.ai/api/v1/images/generations (OpenAI-compatible)
-  OPENAI_API_KEY    → fallback via api.openai.com/v1/images/generations (DALL·E 3)
-
-Both accept the same request shape so the logic is identical.
+Cost: ~$0.04–0.08 per image (DALL·E 3 HD pricing).
+Free tier: included in OpenAI API credits.
 """
 
 import logging
@@ -31,8 +26,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # ── API endpoints ────────────────────────────────────────────────────────────
-_OPENART_BASE = "https://api.openart.ai/api/v1"
-_OPENAI_BASE  = "https://api.openai.com/v1"
+_OPENAI_BASE = "https://api.openai.com/v1"
 
 # Preset style recipes for common use-cases
 STYLE_PRESETS = {
@@ -63,7 +57,7 @@ STYLE_PRESETS = {
     ),
 }
 
-# Size mapping for OpenArt / DALL-E 3
+# Size mapping for DALL·E 3
 SIZE_MAP = {
     "16:9":  "1792x1024",
     "9:16":  "1024x1792",
@@ -81,29 +75,16 @@ def _headers(api_key: str) -> Dict[str, str]:
 
 class OpenArtService:
     """
-    Generate AI images for thumbnails and social media.
-    Uses OpenArt.ai if OPENART_API_KEY is set, falls back to DALL·E 3.
+    Generate AI images for thumbnails and social media via DALL·E 3.
+    Requires OPENAI_API_KEY (already used for scripts — no extra key needed).
     """
 
     def __init__(self):
-        self._openart_key = os.getenv("OPENART_API_KEY", "")
-        self._openai_key  = os.getenv("OPENAI_API_KEY", "")
-
-        if self._openart_key:
-            self._base    = _OPENART_BASE
-            self._key     = self._openart_key
-            self._provider = "openart"
-            self._model    = "openart-xl"          # OpenArt's default SDXL model
-        elif self._openai_key:
-            self._base    = _OPENAI_BASE
-            self._key     = self._openai_key
-            self._provider = "dall-e-3"
-            self._model    = "dall-e-3"
-        else:
-            self._base    = ""
-            self._key     = ""
-            self._provider = "none"
-            self._model    = ""
+        self._openai_key = os.getenv("OPENAI_API_KEY", "")
+        self._base       = _OPENAI_BASE
+        self._key        = self._openai_key
+        self._provider   = "dall-e-3"
+        self._model      = "dall-e-3"
 
     @property
     def provider(self) -> str:
@@ -111,7 +92,7 @@ class OpenArtService:
 
     @property
     def configured(self) -> bool:
-        return bool(self._key)
+        return bool(self._openai_key)
 
     # ------------------------------------------------------------------
     async def generate_image(
