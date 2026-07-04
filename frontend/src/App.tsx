@@ -171,8 +171,15 @@ interface ChannelAuditResult {
   channel: { title: string; subscribers: number; total_views: number; video_count: number; avg_views: number; channel_id: string };
 }
 
+// ── OpenArt types ─────────────────────────────────────────────────────────────
+interface AIImage {
+  url: string;
+  revised_prompt: string;
+  provider: string;
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -2208,6 +2215,345 @@ function App() {
     }
   };
 
+  // ── OpenArt / Visuals state ───────────────────────────────────────────────
+  const [oaTopic, setOaTopic]           = useState('');
+  const [oaNiche, setOaNiche]           = useState('AI tools');
+  const [oaPrompt, setOaPrompt]         = useState('');
+  const [oaAvatarDesc, setOaAvatarDesc] = useState('professional AI content creator, clean neutral background, confident pose');
+  const [oaAspect, setOaAspect]         = useState('16:9');
+  const [oaStyle, setOaStyle]           = useState('youtube_thumbnail');
+  const [oaTab, setOaTab]               = useState<'thumbnail' | 'social_pack' | 'image' | 'avatar'>('thumbnail');
+  const [oaLoading, setOaLoading]       = useState(false);
+  const [oaError, setOaError]           = useState('');
+  const [oaImages, setOaImages]         = useState<AIImage[]>([]);
+  const [oaPack, setOaPack]             = useState<{youtube_thumbnail:AIImage|null;shorts_tiktok_thumbnail:AIImage|null;instagram_square:AIImage|null;topic:string;niche:string;provider:string}|null>(null);
+  const [oaProvider, setOaProvider]     = useState('');
+
+  const runOaThumbnail = async () => {
+    if (!oaTopic.trim()) { setOaError('Enter a video topic first'); return; }
+    setOaLoading(true); setOaError(''); setOaImages([]);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/openart/thumbnail`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: oaTopic.trim(), niche: oaNiche, style: oaStyle, aspect_ratio: oaAspect }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setOaImages(data.images ?? []);
+      setOaProvider(data.provider ?? '');
+    } catch (err) { setOaError(err instanceof Error ? err.message : 'Generation failed'); }
+    finally { setOaLoading(false); }
+  };
+
+  const runOaSocialPack = async () => {
+    if (!oaTopic.trim()) { setOaError('Enter a video topic first'); return; }
+    setOaLoading(true); setOaError(''); setOaPack(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/openart/social-pack`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: oaTopic.trim(), niche: oaNiche }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setOaPack(data);
+      setOaProvider(data.provider ?? '');
+    } catch (err) { setOaError(err instanceof Error ? err.message : 'Generation failed'); }
+    finally { setOaLoading(false); }
+  };
+
+  const runOaImage = async () => {
+    if (!oaPrompt.trim()) { setOaError('Enter a prompt first'); return; }
+    setOaLoading(true); setOaError(''); setOaImages([]);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/openart/image`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: oaPrompt.trim(), style_preset: oaStyle || null, aspect_ratio: oaAspect, n: 2 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setOaImages(data.images ?? []);
+      setOaProvider(data.provider ?? '');
+    } catch (err) { setOaError(err instanceof Error ? err.message : 'Generation failed'); }
+    finally { setOaLoading(false); }
+  };
+
+  const runOaAvatar = async () => {
+    setOaLoading(true); setOaError(''); setOaImages([]);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/openart/avatar`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: oaAvatarDesc }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setOaImages(data.images ?? []);
+      setOaProvider(data.provider ?? '');
+    } catch (err) { setOaError(err instanceof Error ? err.message : 'Generation failed'); }
+    finally { setOaLoading(false); }
+  };
+
+  const renderAIImageGrid = (images: AIImage[]) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginTop: '1.25rem' }}>
+      {images.map((img, i) => (
+        <div key={i} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', overflow: 'hidden' }}>
+          <img src={img.url} alt={`AI image ${i+1}`} style={{ width: '100%', display: 'block', maxHeight: '320px', objectFit: 'cover' }}
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+          <div style={{ padding: '0.75rem' }}>
+            <p style={{ color: '#64748b', fontSize: '0.73rem', margin: '0 0 0.5rem', lineHeight: 1.4 }}>{img.revised_prompt?.slice(0, 100)}…</p>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <a href={img.url} target="_blank" rel="noopener noreferrer" download
+                className="video-download-link" style={{ flex: 1, textAlign: 'center', fontSize: '0.8125rem', padding: '0.35rem 0.5rem' }}>
+                ⬇️ Download
+              </a>
+              <button onClick={() => navigator.clipboard.writeText(img.url)}
+                style={{ flex: 1, background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', color: '#94a3b8', borderRadius: '0.375rem', padding: '0.35rem 0.5rem', fontSize: '0.8125rem', cursor: 'pointer' }}>
+                📋 Copy URL
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  const nicheOptions = [
+    ["AI tools","💰 AI Tools / Online Business"],["technology","💰 Technology"],
+    ["education","💰 Education"],["finance","💰 Finance / Investing"],
+    ["health","💰 Health & Fitness"],["side hustles","💰 Side Hustles"],
+    ["gaming","🎮 Gaming"],["beauty","💄 Beauty & Fashion"],
+    ["food","🍕 Food & Cooking"],["travel","✈️ Travel"],
+    ["motivation","🔥 Motivation & Self-Help"],["kids","🧒 Kids & Family"],
+  ];
+
+  const renderVisuals = () => (
+    <div className="videos-page">
+      <h1>🎨 AI Visuals — Thumbnails & Images</h1>
+      <p className="subtitle">
+        Generate eye-catching thumbnails, social media packs, and consistent AI avatars.{' '}
+        {oaProvider ? <span style={{ color: '#34d399', fontWeight: 600 }}>Powered by {oaProvider}</span>
+          : <span style={{ color: '#f59e0b' }}>Set OPENART_API_KEY or uses DALL·E 3 fallback automatically</span>}
+      </p>
+
+      {/* Info banner */}
+      <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1 }}>
+          <p style={{ color: '#a78bfa', fontWeight: 700, margin: '0 0 0.35rem', fontSize: '0.9375rem' }}>🎨 OpenArt.ai + DALL·E 3</p>
+          <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: 0, lineHeight: 1.5 }}>
+            No OPENART_API_KEY? No problem — DALL·E 3 (your OpenAI key) generates HD images automatically.
+            For OpenArt's full 100+ model library, <a href="https://openart.ai" target="_blank" rel="noopener noreferrer" style={{ color: '#a78bfa' }}>get a free key at openart.ai</a>.
+          </p>
+        </div>
+        <a href="https://openart.ai" target="_blank" rel="noopener noreferrer"
+          className="video-download-link" style={{ whiteSpace: 'nowrap', fontSize: '0.875rem', padding: '0.45rem 1rem', alignSelf: 'center' }}>
+          Get OpenArt Key →
+        </a>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+        {([
+          ['thumbnail',   '🖼️ YouTube Thumbnail'],
+          ['social_pack', '📦 Social Pack (3-in-1)'],
+          ['image',       '✨ Custom Image'],
+          ['avatar',      '🤖 AI Avatar'],
+        ] as const).map(([t, label]) => (
+          <button key={t} onClick={() => { setOaTab(t); setOaError(''); setOaImages([]); setOaPack(null); }}
+            style={{ padding: '0.55rem 1.25rem', borderRadius: '999px',
+              border: `2px solid #a78bfa`,
+              background: oaTab === t ? '#a78bfa' : 'transparent',
+              color: oaTab === t ? '#fff' : '#a78bfa',
+              fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="generator-form">
+        {/* Shared: topic + niche */}
+        {(oaTab === 'thumbnail' || oaTab === 'social_pack') && (
+          <>
+            <div className="form-group">
+              <label>Video Topic *</label>
+              <input type="text" value={oaTopic} onChange={e => setOaTopic(e.target.value)}
+                placeholder="e.g. 5 AI Tools to Make Money Online in 2025" disabled={oaLoading} />
+            </div>
+            <div className="form-group">
+              <label>Niche</label>
+              <select value={oaNiche} onChange={e => setOaNiche(e.target.value)} disabled={oaLoading}>
+                {nicheOptions.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Thumbnail extras */}
+        {oaTab === 'thumbnail' && (
+          <>
+            <div className="form-group">
+              <label>Style</label>
+              <select value={oaStyle} onChange={e => setOaStyle(e.target.value)} disabled={oaLoading}>
+                <option value="youtube_thumbnail">🎬 YouTube Thumbnail (16:9)</option>
+                <option value="youtube_shorts_thumbnail">📱 YouTube Shorts (9:16)</option>
+                <option value="motivational">🔥 Motivational</option>
+                <option value="tech_diagram">🔧 Tech Diagram</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Aspect Ratio</label>
+              <select value={oaAspect} onChange={e => setOaAspect(e.target.value)} disabled={oaLoading}>
+                <option value="16:9">16:9 — YouTube landscape</option>
+                <option value="9:16">9:16 — Shorts / TikTok</option>
+                <option value="1:1">1:1 — Instagram square</option>
+              </select>
+            </div>
+            {oaError && <div className="error-message">{oaError}</div>}
+            <button className="generate-button" onClick={runOaThumbnail} disabled={oaLoading}>
+              {oaLoading ? '🎨 Generating…' : '🖼️ Generate 2 Thumbnail Options'}
+            </button>
+          </>
+        )}
+
+        {/* Social pack */}
+        {oaTab === 'social_pack' && (
+          <>
+            <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+              <p style={{ color: '#34d399', fontSize: '0.875rem', margin: 0, fontWeight: 600 }}>
+                📦 Generates 3 images in parallel:
+              </p>
+              <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: '0.25rem 0 0' }}>
+                YouTube thumbnail (16:9) · Shorts/TikTok (9:16) · Instagram square (1:1)
+              </p>
+            </div>
+            {oaError && <div className="error-message">{oaError}</div>}
+            <button className="generate-button" onClick={runOaSocialPack} disabled={oaLoading}>
+              {oaLoading ? '🎨 Generating 3 images…' : '📦 Generate Full Social Pack'}
+            </button>
+          </>
+        )}
+
+        {/* Custom image */}
+        {oaTab === 'image' && (
+          <>
+            <div className="form-group">
+              <label>Image Prompt *</label>
+              <textarea value={oaPrompt} onChange={e => setOaPrompt(e.target.value)}
+                rows={3} disabled={oaLoading}
+                placeholder="e.g. A futuristic data center with glowing blue servers, cinematic lighting, 8K quality"
+                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.5rem', color: '#f1f5f9', padding: '0.6rem 0.75rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Style Preset (optional)</label>
+              <select value={oaStyle} onChange={e => setOaStyle(e.target.value)} disabled={oaLoading}>
+                <option value="">None</option>
+                <option value="youtube_thumbnail">🎬 YouTube Thumbnail</option>
+                <option value="social_square">📱 Social Media Square</option>
+                <option value="ai_avatar">🤖 AI Avatar</option>
+                <option value="tech_diagram">🔧 Tech Diagram</option>
+                <option value="motivational">🔥 Motivational</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Aspect Ratio</label>
+              <select value={oaAspect} onChange={e => setOaAspect(e.target.value)} disabled={oaLoading}>
+                <option value="16:9">16:9 — Widescreen</option>
+                <option value="9:16">9:16 — Portrait / Shorts</option>
+                <option value="1:1">1:1 — Square</option>
+              </select>
+            </div>
+            {oaError && <div className="error-message">{oaError}</div>}
+            <button className="generate-button" onClick={runOaImage} disabled={oaLoading}>
+              {oaLoading ? '✨ Generating…' : '✨ Generate 2 Images'}
+            </button>
+          </>
+        )}
+
+        {/* Avatar */}
+        {oaTab === 'avatar' && (
+          <>
+            <div style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+              <p style={{ color: '#60a5fa', fontSize: '0.875rem', margin: 0, fontWeight: 600 }}>🤖 Consistent AI Presenter Avatar</p>
+              <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: '0.25rem 0 0' }}>
+                Creates a reusable AI character to use across all your thumbnails and social media.
+                Describe the look you want — the AI keeps it consistent across generations.
+              </p>
+            </div>
+            <div className="form-group">
+              <label>Avatar Description</label>
+              <textarea value={oaAvatarDesc} onChange={e => setOaAvatarDesc(e.target.value)}
+                rows={2} disabled={oaLoading}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '0.5rem', color: '#f1f5f9', padding: '0.6rem 0.75rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit' }}
+              />
+            </div>
+            {oaError && <div className="error-message">{oaError}</div>}
+            <button className="generate-button" onClick={runOaAvatar} disabled={oaLoading}>
+              {oaLoading ? '🤖 Generating…' : '🤖 Generate 2 Avatar Options'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Results */}
+      {oaImages.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', margin: '1.5rem 0 0.5rem' }}>
+            <h2 style={{ margin: 0, color: '#f1f5f9' }}>✅ Generated Images</h2>
+            {oaProvider && <span style={{ background: 'rgba(52,211,153,0.15)', color: '#34d399', borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.78rem', fontWeight: 700 }}>{oaProvider}</span>}
+          </div>
+          <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '0.5rem' }}>
+            Right-click any image to save, or use the Download button.
+          </p>
+          {renderAIImageGrid(oaImages)}
+        </div>
+      )}
+
+      {/* Social pack results */}
+      {oaPack && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <h2 style={{ color: '#f1f5f9', marginBottom: '0.25rem' }}>✅ Social Media Pack — {oaPack.topic}</h2>
+          <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '1rem' }}>3 images ready for all platforms</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {[
+              { label: '🎬 YouTube Thumbnail (16:9)', img: oaPack.youtube_thumbnail, bg: '#ef4444' },
+              { label: '📱 Shorts / TikTok (9:16)',  img: oaPack.shorts_tiktok_thumbnail, bg: '#a78bfa' },
+              { label: '📸 Instagram Square (1:1)',  img: oaPack.instagram_square, bg: '#f59e0b' },
+            ].map(({ label, img, bg }) => img && (
+              <div key={label} style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${bg}40`, borderRadius: '0.75rem', overflow: 'hidden' }}>
+                <div style={{ background: `${bg}22`, padding: '0.5rem 0.75rem' }}>
+                  <span style={{ color: bg, fontWeight: 700, fontSize: '0.8rem' }}>{label}</span>
+                </div>
+                <img src={img.url} alt={label} style={{ width: '100%', display: 'block', maxHeight: '200px', objectFit: 'cover' }}
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                <div style={{ padding: '0.6rem', display: 'flex', gap: '0.4rem' }}>
+                  <a href={img.url} target="_blank" rel="noopener noreferrer" download
+                    className="video-download-link" style={{ flex: 1, textAlign: 'center', fontSize: '0.78rem', padding: '0.3rem 0.4rem' }}>
+                    ⬇️ Download
+                  </a>
+                  <button onClick={() => navigator.clipboard.writeText(img.url)}
+                    style={{ flex: 1, background: 'rgba(148,163,184,0.1)', border: '1px solid rgba(148,163,184,0.2)', color: '#94a3b8', borderRadius: '0.375rem', padding: '0.3rem 0.4rem', fontSize: '0.78rem', cursor: 'pointer' }}>
+                    📋 URL
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tips */}
+      <div style={{ marginTop: '2.5rem', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '0.75rem', padding: '1.25rem' }}>
+        <h3 style={{ color: '#fbbf24', margin: '0 0 0.75rem', fontSize: '1rem' }}>💡 Monetization Tips</h3>
+        <ul style={{ paddingLeft: '1.25rem', margin: 0, lineHeight: 1.7 }}>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>A/B test 2 thumbnails — upload both and YouTube shows the winner automatically (Studio → Tests)</li>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Use the Social Pack to publish the same video across YouTube, TikTok, and Instagram in one click</li>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Create a consistent AI avatar to build brand recognition without showing your face</li>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>Sell image packs to small businesses — 10 social media images for $97 is a common price point</li>
+          <li style={{ color: '#cbd5e1', fontSize: '0.875rem' }}>OpenArt free tier gives you 50 credits/day — enough for 10–15 thumbnails daily</li>
+        </ul>
+      </div>
+    </div>
+  );
+
   const renderHome = () => (
     <div className="home">
       <h1>🎬 AI Content Monetization Platform</h1>
@@ -2931,13 +3277,19 @@ Example:
         </div>
 
         <div className="nav-utils">
-          <button className={`nav-util-btn ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }}>
+          <button className={`nav-util-btn ${currentPage === 'visuals' ? 'active' : ''}`} onClick={() => setCurrentPage('visuals')} title="AI Visuals">
+            🎨
+          </button>
+          <button className={`nav-util-btn ${currentPage === 'monetize' ? 'active' : ''}`} onClick={() => setCurrentPage('monetize')} title="Monetization">
+            💰
+          </button>
+          <button className={`nav-util-btn ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }} title="Analytics">
             📊
           </button>
-          <button className={`nav-util-btn ${currentPage === 'diagnostics' ? 'active' : ''}`} onClick={() => setCurrentPage('diagnostics')}>
+          <button className={`nav-util-btn ${currentPage === 'diagnostics' ? 'active' : ''}`} onClick={() => setCurrentPage('diagnostics')} title="Diagnostics">
             🔧
           </button>
-          <button className={`nav-util-btn ${currentPage === 'help' ? 'active' : ''}`} onClick={() => setCurrentPage('help')}>
+          <button className={`nav-util-btn ${currentPage === 'help' ? 'active' : ''}`} onClick={() => setCurrentPage('help')} title="Help">
             📖
           </button>
         </div>
@@ -2998,6 +3350,7 @@ Example:
          currentPage === 'diagnostics' ? renderDiagnostics() :
          currentPage === 'analytics' ? renderAnalytics() :
          currentPage === 'monetize' ? renderMonetize() :
+         currentPage === 'visuals' ? renderVisuals() :
          renderHelp()}
       </main>
 
