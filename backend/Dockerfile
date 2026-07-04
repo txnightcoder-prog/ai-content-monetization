@@ -23,10 +23,11 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Runtime dependencies
+# Runtime dependencies (libpq5 for postgres, ffmpeg + fonts for video assembly)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     ffmpeg \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
