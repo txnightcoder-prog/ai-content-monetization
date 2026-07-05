@@ -182,27 +182,24 @@ Make it conversational, energetic, and valuable. Use "you" to speak directly to 
         niche: str = "AI tools"
     ) -> list[Dict[str, Any]]:
         """
-        Generate scripts for multiple topics (async).
-        
-        Args:
-            topics: List of video topics
-            niche: Content niche
-            
-        Returns:
-            List of script dictionaries
+        Generate scripts for multiple topics concurrently (parallel, not serial).
         """
-        logger.info(f"🎬 Starting batch generation for {len(topics)} topics")
-        scripts = []
-        for i, topic in enumerate(topics, 1):
+        import asyncio as _asyncio  # noqa: PLC0415
+
+        logger.info(f"🎬 Starting parallel batch generation for {len(topics)} topics")
+
+        async def _safe_generate(topic: str) -> Dict[str, Any] | None:
             try:
-                logger.info(f"[{i}/{len(topics)}] Processing topic: '{topic}'")
                 script = await self.generate_script(topic, niche)
-                script["topic"] = topic  # Ensure topic is included
-                scripts.append(script)
+                script["topic"] = topic
+                return script
             except Exception as e:
                 logger.error(f"✗ Error generating script for topic '{topic}': {e}")
-                continue
-        
+                return None
+
+        results = await _asyncio.gather(*[_safe_generate(t) for t in topics])
+        scripts = [r for r in results if r is not None]
+
         logger.info(f"✓ Batch generation completed: {len(scripts)}/{len(topics)} successful")
         return scripts
     

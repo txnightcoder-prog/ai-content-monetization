@@ -2,7 +2,7 @@
 Video Assembler Service
 ========================
 Assembles a faceless short-form video from:
-  1. Stock video clips  (downloaded from Pexels)
+  1. Stock video clips  (downloaded from Pexels in parallel)
   2. AI voiceover       (MP3 from ElevenLabs)
   3. Auto-captions      (burned in via FFmpeg drawtext)
 
@@ -12,7 +12,7 @@ Requires: ffmpeg installed on the system (available in the Docker image).
 
 Pipeline:
   assemble(script, voice_mp3, clip_urls) -> output_mp4_path
-    1. Download each clip to a temp dir
+    1. Download each clip to a temp dir  (parallel)
     2. Re-encode all clips to a common format (1080x1920, 30fps)
     3. Concatenate clips to match voiceover duration
     4. Mix voiceover audio over clips
@@ -21,6 +21,7 @@ Pipeline:
 """
 
 import asyncio
+import glob as _glob
 import logging
 import os
 import subprocess
@@ -38,6 +39,57 @@ VIDEO_HEIGHT = 1920
 VIDEO_FPS    = 30
 VIDEO_CRF    = 23   # quality: lower = better, 23 is a good default
 
+
+# ── FFmpeg/ffprobe path detection (Fix Warn #7 / #8) ─────────────────────────
+
+def _find_binary(name: str) -> str:
+    """Locate ffmpeg or ffprobe, checking PATH then common install locations."""
+    # Check PATH first (works on both Linux and Windows)
+    for candidate in [name, f"{name}.exe"]:
+        try:
+            subprocess.run([candidate, "-version"], capture_output=True, check=True)
+            return candidate
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            pass
+    # Linux system paths
+    for path in [f"/usr/bin/{name}", f"/usr/local/bin/{name}"]:
+        if os.path.exists(path):
+            return path
+    # Windows WinGet / Chocolatey / manual install paths
+    for pattern in [
+        rf"C:\Program Files\FFmpeg*\bin\{name}.exe",
+        rf"C:\Users\*\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg*\ffmpeg-*\bin\{name}.exe",
+        rf"C:\ProgramData\chocolatey\bin\{name}.exe",
+    ]:
+        matches = _glob.glob(pattern, recursive=True)
+        if matches:
+            return matches[0]
+    raise FileNotFoundError(
+        f"{name} not found. "
+        "On Linux: apt-get install ffmpeg  "
+        "On Windows: winget install Gyan.FFmpeg"
+    )
+
+
+_FFMPEG:  Optional[str] = None
+_FFPROBE: Optional[str] = None
+
+
+def _get_ffmpeg() -> str:
+    global _FFMPEG
+    if _FFMPEG is None:
+        _FFMPEG = _find_binary("ffmpeg")
+    return _FFMPEG
+
+
+def _get_ffprobe() -> str:
+    global _FFPROBE
+    if _FFPROBE is None:
+        _FFPROBE = _find_binary("ffprobe")
+    return _FFPROBE
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 
 class VideoAssembler:
     """Assemble stock clips + voiceover + captions into a single MP4."""
@@ -67,7 +119,7 @@ class VideoAssembler:
         with tempfile.TemporaryDirectory(prefix="vidasm_") as tmpdir:
             tmp = Path(tmpdir)
 
-            # 1. Download clips
+            # 1. Download clips in parallel (Fix Warn #11)
             clip_paths = await self._download_clips(clip_urls, tmp)
             if not clip_paths:
                 raise RuntimeError("No video clips could be downloaded from Pexels.")
@@ -106,20 +158,26 @@ class VideoAssembler:
     # ------------------------------------------------------------------
 
     async def _download_clips(self, urls: List[str], tmpdir: Path) -> List[str]:
-        paths = []
+        """Download all clips in parallel (Fix Warn #11)."""
+        async def _fetch_one(client: httpx.AsyncClient, i: int, url: str) -> Optional[str]:
+            try:
+                r = await client.get(url)
+                r.raise_for_status()
+                p = str(tmpdir / f"clip_{i}.mp4")
+                with open(p, "wb") as f:
+                    f.write(r.content)
+                logger.debug("Downloaded clip %d: %s", i, url)
+                return p
+            except Exception as exc:
+                logger.warning("Failed to download clip %s: %s", url, exc)
+                return None
+
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            for i, url in enumerate(urls):
-                try:
-                    r = await client.get(url)
-                    r.raise_for_status()
-                    p = str(tmpdir / f"clip_{i}.mp4")
-                    with open(p, "wb") as f:
-                        f.write(r.content)
-                    paths.append(p)
-                    logger.debug("Downloaded clip %d: %s", i, url)
-                except Exception as exc:
-                    logger.warning("Failed to download clip %s: %s", url, exc)
-        return paths
+            results = await asyncio.gather(
+                *[_fetch_one(client, i, url) for i, url in enumerate(urls)]
+            )
+
+        return [p for p in results if p is not None]
 
     def _normalise_clips(self, paths: List[str], tmpdir: Path) -> List[str]:
         """Re-encode each clip to 1080x1920 @ 30fps, stripping audio."""
@@ -127,7 +185,7 @@ class VideoAssembler:
         for i, p in enumerate(paths):
             dst = str(tmpdir / f"norm_{i}.mp4")
             cmd = [
-                "ffmpeg", "-y", "-i", p,
+                _get_ffmpeg(), "-y", "-i", p,
                 "-vf", f"scale={VIDEO_WIDTH}:{VIDEO_HEIGHT}:force_original_aspect_ratio=increase,"
                        f"crop={VIDEO_WIDTH}:{VIDEO_HEIGHT},fps={VIDEO_FPS}",
                 "-an",   # strip original audio
@@ -140,38 +198,62 @@ class VideoAssembler:
         return out
 
     def _get_duration(self, path: str) -> float:
-        """Return duration of a media file in seconds using ffprobe."""
+        """Return duration of a media file in seconds.
+
+        Tries ffprobe first; falls back to ffmpeg -i stderr parsing so it works
+        even when ffprobe is not separately installed (Fix Warn #8).
+        """
+        try:
+            result = subprocess.run(
+                [_get_ffprobe(), "-v", "error", "-show_entries", "format=duration",
+                 "-of", "default=noprint_wrappers=1:nokey=1", path],
+                capture_output=True, text=True, check=True,
+            )
+            return float(result.stdout.strip())
+        except (FileNotFoundError, subprocess.CalledProcessError, ValueError):
+            pass
+
+        # ffprobe unavailable — parse "Duration: HH:MM:SS.ss" from ffmpeg -i stderr
         result = subprocess.run(
-            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-             "-of", "default=noprint_wrappers=1:nokey=1", path],
-            capture_output=True, text=True, check=True,
+            [_get_ffmpeg(), "-i", path],
+            capture_output=True, text=True,
         )
-        return float(result.stdout.strip())
+        for line in result.stderr.splitlines():
+            if "Duration:" in line:
+                dur_str = line.split("Duration:")[1].split(",")[0].strip()
+                h, m, s = dur_str.split(":")
+                return int(h) * 3600 + int(m) * 60 + float(s)
+        raise RuntimeError(f"Could not determine duration of {path}")
 
     def _concat_to_duration(self, clips: List[str], target_duration: float, out: str) -> None:
         """Concatenate (and loop if needed) clips until they reach ``target_duration``."""
-        # Write a concat list, repeating clips if needed
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            total = 0.0
-            while total < target_duration:
-                for clip in clips:
-                    d = self._get_duration(clip)
-                    f.write(f"file '{clip}'\n")
-                    total += d
-                    if total >= target_duration:
-                        break
-            list_path = f.name
+        list_path: Optional[str] = None
+        try:
+            # Write a concat list, repeating clips if needed (Fix Bug #5: use try/finally)
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+                list_path = f.name
+                total = 0.0
+                while total < target_duration:
+                    for clip in clips:
+                        d = self._get_duration(clip)
+                        f.write(f"file '{clip}'\n")
+                        total += d
+                        if total >= target_duration:
+                            break
 
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", list_path,
-            "-t", str(target_duration),
-            "-c:v", "libx264", "-crf", str(VIDEO_CRF), "-preset", "fast",
-            "-pix_fmt", "yuv420p",
-            out,
-        ]
-        self._run(cmd)
-        os.unlink(list_path)
+            cmd = [
+                _get_ffmpeg(), "-y",
+                "-f", "concat", "-safe", "0", "-i", list_path,
+                "-t", str(target_duration),
+                "-c:v", "libx264", "-crf", str(VIDEO_CRF), "-preset", "fast",
+                "-pix_fmt", "yuv420p",
+                out,
+            ]
+            self._run(cmd)
+        finally:
+            # Always clean up the temp concat list (Fix Bug #5)
+            if list_path and os.path.exists(list_path):
+                os.unlink(list_path)
 
     def _mix_audio(self, video_path: str, voice_path: str, out: str,
                    bg_music_path: Optional[str] = None) -> None:
@@ -179,7 +261,7 @@ class VideoAssembler:
         if bg_music_path:
             # Mix voice (full volume) + bg music (20% volume)
             cmd = [
-                "ffmpeg", "-y",
+                _get_ffmpeg(), "-y",
                 "-i", video_path,
                 "-i", voice_path,
                 "-i", bg_music_path,
@@ -192,7 +274,7 @@ class VideoAssembler:
             ]
         else:
             cmd = [
-                "ffmpeg", "-y",
+                _get_ffmpeg(), "-y",
                 "-i", video_path,
                 "-i", voice_path,
                 "-map", "0:v", "-map", "1:a",
@@ -212,7 +294,7 @@ class VideoAssembler:
             f"line_spacing=8:expansion=none"
         )
         cmd = [
-            "ffmpeg", "-y", "-i", video_path,
+            _get_ffmpeg(), "-y", "-i", video_path,
             "-vf", drawtext,
             "-c:v", "libx264", "-crf", str(VIDEO_CRF), "-preset", "fast",
             "-c:a", "copy",

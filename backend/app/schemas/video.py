@@ -8,7 +8,7 @@ from app.models.video import VideoStatus
 
 class VideoBase(BaseModel):
     """Base schema for Video with common fields"""
-    render_id: Optional[str] = Field(None, description="Video generation job ID", alias="heygen_video_id")
+    job_id: Optional[str] = Field(None, description="Video generation job ID")
     video_url: Optional[str] = Field(None, description="URL to the generated video")
     thumbnail_url: Optional[str] = Field(None, description="URL to video thumbnail")
     duration: Optional[int] = Field(None, ge=0, description="Video duration in seconds")

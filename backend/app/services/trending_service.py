@@ -34,15 +34,57 @@ logger = logging.getLogger(__name__)
 
 _YT_API_BASE = "https://www.googleapis.com/youtube/v3"
 
-# YouTube category IDs that map to high-CPM content
+# YouTube category IDs — full mapping for every niche the frontend offers.
+# Reference: https://developers.google.com/youtube/v3/docs/videoCategories/list
 _YT_CATEGORY_IDS = {
-    "AI tools":    "28",   # Science & Technology
-    "technology":  "28",
-    "education":   "27",   # Education
-    "finance":     "25",   # News & Politics (best proxy)
-    "health":      "26",   # Howto & Style
-    "side hustles": "25",
-    "default":     "28",
+    # High-CPM niches
+    "AI tools":     "28",   # Science & Technology
+    "technology":   "28",   # Science & Technology
+    "education":    "27",   # Education
+    "finance":      "25",   # News & Politics (closest proxy for finance)
+    "side hustles": "22",   # People & Blogs (best proxy for side hustles/business)
+    "health":       "26",   # Howto & Style (wellness/fitness tutorials)
+    # Entertainment / lifestyle niches
+    "gaming":       "20",   # Gaming
+    "music":        "10",   # Music
+    "beauty":       "26",   # Howto & Style (beauty tutorials live here)
+    "food":         "26",   # Howto & Style (cooking/food channels)
+    "travel":       "19",   # Travel & Events
+    "sports":       "17",   # Sports
+    "comedy":       "23",   # Comedy
+    "kids":         "20",   # Film & Animation (closest; Family & Kids is 25/28 region-dependent)
+    "motivation":   "22",   # People & Blogs
+    "news":         "25",   # News & Politics
+    "pets":         "15",   # Pets & Animals
+    "diy":          "26",   # Howto & Style
+    "cars":         "2",    # Autos & Vehicles
+    "paranormal":   "22",   # People & Blogs (true crime/paranormal)
+    # Fallback
+    "default":      "28",
+}
+
+# Human-readable niche descriptions used to sharpen the AI trending prompt
+_NICHE_DESCRIPTIONS = {
+    "AI tools":     "AI tools, automation, ChatGPT, online business, passive income with AI",
+    "technology":   "tech reviews, gadgets, software, consumer electronics",
+    "education":    "tutorials, how-to guides, skills, courses, learning",
+    "finance":      "investing, personal finance, stocks, crypto, budgeting, wealth building",
+    "side hustles": "side hustles, freelancing, remote work, productivity, making money online",
+    "health":       "health, fitness, workout, diet, mental wellness, biohacking",
+    "gaming":       "gaming, game reviews, walkthroughs, esports, streamers",
+    "music":        "music, new releases, artists, covers, music production",
+    "beauty":       "makeup, skincare, fashion, haul videos, beauty tutorials",
+    "food":         "cooking, recipes, restaurant reviews, food challenges, baking",
+    "travel":       "travel vlogs, destinations, budget travel, travel tips",
+    "sports":       "sports highlights, athlete news, fitness training, match recaps",
+    "comedy":       "comedy sketches, stand-up, funny videos, reaction content",
+    "kids":         "kids content, family vlogs, educational cartoons, toy reviews",
+    "motivation":   "motivation, self-help, mindset, productivity, personal development",
+    "news":         "current events, breaking news, commentary, political analysis",
+    "pets":         "pets, animals, dog training, cat videos, wildlife",
+    "diy":          "DIY projects, home improvement, crafts, repairs, woodworking",
+    "cars":         "cars, automotive reviews, road tests, car mods, EV news",
+    "paranormal":   "true crime, paranormal, horror stories, mysteries, unsolved cases",
 }
 
 
@@ -138,22 +180,26 @@ class TrendingService:
     # ── AI-generated trending (TikTok / Instagram / fallback YouTube) ─────────
 
     async def _ai_trending(self, platform: str, niche: str, count: int) -> List[Dict[str, Any]]:
+        niche_desc = _NICHE_DESCRIPTIONS.get(niche, niche)
         prompt = f"""
-You are a social media trends analyst with up-to-date knowledge.
+You are a social media trends analyst with deep, specific knowledge of current viral content.
+
+Niche: "{niche}" — specifically: {niche_desc}
 
 List the {count} most trending video topics/formats RIGHT NOW on {platform}
-that are relevant to the "{niche}" niche or would resonate with that audience.
+that are DIRECTLY relevant to this exact niche. Do NOT give generic or off-topic trends.
+Every item must be something a creator in the "{niche}" space would actually make.
 
-Return ONLY a valid JSON array (no markdown fences) of {count} objects:
+Return ONLY a valid JSON array (no markdown fences) of exactly {count} objects:
 [
   {{
     "rank": 1,
-    "title": "Exact trending topic or video title style",
-    "creator": "Example creator or account type (or empty string)",
+    "title": "Specific trending topic or viral video title format for this niche",
+    "creator": "Example creator name or account type in this niche (or empty string)",
     "views": "Estimated reach e.g. 50M or 'Viral'",
-    "tags": ["tag1", "tag2", "tag3"],
-    "why_trending": "One sentence: why this is blowing up right now",
-    "use_for_niche": "How a {niche} creator can use this trend for a video",
+    "tags": ["niche-specific-tag1", "niche-specific-tag2", "niche-specific-tag3"],
+    "why_trending": "One sentence: why THIS specific topic is blowing up in the {niche} space right now",
+    "use_for_niche": "A specific, actionable video idea for a {niche} creator to make TODAY using this trend",
     "url": ""
   }}
 ]

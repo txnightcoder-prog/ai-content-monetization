@@ -36,3 +36,6 @@ httpx[http2]==0.28.1
 
 # Email alerts (daily diagnostics)
 sendgrid==6.11.0
+
+# Google Veo AI video generation
+google-genai>=0.8.0
