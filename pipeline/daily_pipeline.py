@@ -181,7 +181,14 @@ async def run_pipeline() -> dict:
     for script, video in zip(scripts, videos):
         if not video:
             continue
-        vid_id = str(uuid.uuid4())[:8]
+        # Retry on collision instead of silently dropping the item (Fix Warn #12)
+        for _ in range(10):
+            vid_id = str(uuid.uuid4())[:8]
+            if vid_id not in existing_ids:
+                break
+        else:
+            # Extremely unlikely — use full UUID as fallback
+            vid_id = str(uuid.uuid4())
         if vid_id in existing_ids:
             continue
         caption = _build_caption(script)

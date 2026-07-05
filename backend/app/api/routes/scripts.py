@@ -22,6 +22,10 @@ from app.services.parrot_service import ParrotService
 from app.services.trending_service import TrendingService
 from app.services.optimize_service import OptimizeService
 from app.services.keyword_service import KeywordService
+from app.services.top_performers_service import (
+    get_top_performers,
+    generate_ideas_from_top_performers,
+)
 
 router = APIRouter(prefix="/api/v1/scripts", tags=["scripts"])
 
@@ -572,6 +576,64 @@ async def keyword_research(
     except Exception as exc:
         logger.exception("Keyword research failed")
         raise HTTPException(status_code=500, detail=f"Keyword research failed: {exc}")
+
+
+# ── Top Performers — AI Feedback Loop ────────────────────────────────────────
+
+@router.get("/top-performers")
+def get_top_performers_route(
+    limit: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """
+    **Top Performing Videos** — ranked by weighted engagement score.
+
+    Returns up to ``limit`` analytics records ordered by:
+        views + (likes × 10) + (comments × 5)
+
+    Use this to see which topics are resonating before generating new content.
+    """
+    results = get_top_performers(db, limit=limit)
+    return {
+        "top_performers": results,
+        "count": len(results),
+        "data_available": len(results) > 0,
+    }
+
+
+class TopPerformersRequest(BaseModel):
+    niche: str = "AI tools"
+    count: int = 10
+
+
+@router.post("/generate-from-top-performers")
+async def generate_from_top_performers(
+    request: TopPerformersRequest,
+    db: Session = Depends(get_db),
+    openai: OpenAIService = Depends(lambda: OpenAIService()),
+):
+    """
+    **AI Feedback Loop** — generate new topic ideas biased toward what's
+    already performing well on your channel.
+
+    1. Queries your analytics table for top-performing videos.
+    2. Extracts patterns from titles and engagement data.
+    3. Asks GPT to generate new ideas following the same winning formula.
+
+    If no analytics data exists yet, falls back to standard idea generation
+    and returns ``data_available: false`` so the frontend can show a notice.
+    """
+    try:
+        result = await generate_ideas_from_top_performers(
+            db=db,
+            openai=openai,
+            niche=request.niche,
+            count=request.count,
+        )
+        return result
+    except Exception as exc:
+        logger.exception("generate-from-top-performers failed")
+        raise HTTPException(status_code=500, detail=f"Failed: {exc}")
 
 
 # Made with Bob

@@ -131,7 +131,20 @@ async def generate_video(
 
     Poll `GET /api/v1/videos/{video_id}` to track progress.
     Once `status == ready`, call `POST /api/v1/videos/{video_id}/publish`.
+
+    Returns 503 immediately if ELEVENLABS_API_KEY or PEXELS_API_KEY are not configured,
+    rather than creating a DB record that will instantly fail in the background.
     """
+    # Reject early if the video provider is not configured (Fix Warn #9)
+    if pipeline._video is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Video generation is not configured. "
+                "Set ELEVENLABS_API_KEY and PEXELS_API_KEY environment variables to enable it."
+            ),
+        )
+
     # Verify the script exists before creating the video row
     from app.models.content_script import ContentScript
     script = db.query(ContentScript).filter(

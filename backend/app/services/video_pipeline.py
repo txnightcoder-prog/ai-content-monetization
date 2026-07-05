@@ -2,8 +2,12 @@
 Video Pipeline Service
 ======================
 Orchestrates:
-  1. Video generation — Local ElevenLabs+Pexels+FFmpeg faceless video
+  1. Video generation — Veo (Google AI) or Local (ElevenLabs+Pexels+FFmpeg)
   2. YouTube direct upload via OAuth (publish / schedule)
+
+Provider precedence (checked at request time):
+  1. Veo  — if GOOGLE_API_KEY is set  (AI-generated video clips)
+  2. Local — if ELEVENLABS_API_KEY + PEXELS_API_KEY are set  (stock footage)
 
 Publishing uses the YouTube Data API v3 resumable upload endpoint.
 Requires env vars: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN
@@ -12,6 +16,7 @@ Requires env vars: YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOK
 import logging
 import os
 import tempfile
+from pathlib import Path
 from typing import List, Optional
 from uuid import UUID
 
@@ -56,6 +61,11 @@ def _get_yt_access_token() -> str:
     return r.json()["access_token"]
 
 
+def _is_local_path(video_url: str) -> bool:
+    """Return True if video_url is a local filesystem path (Fix Bug #3)."""
+    return video_url.startswith("/") or (len(video_url) >= 2 and video_url[1] == ":")
+
+
 async def _upload_to_youtube(
     video_url: str,
     title: str,
@@ -65,92 +75,112 @@ async def _upload_to_youtube(
 ) -> str:
     """
     Upload a video to YouTube.
-    video_url can be a local file path (/tmp/videos/…) or an HTTP/HTTPS URL (e.g. D-ID S3 link).
+    video_url can be a local file path (/tmp/videos/…) or an HTTP/HTTPS URL.
     Returns the YouTube video ID.
     """
     import json
-    import os as _os
     access_token = _get_yt_access_token()
 
-    # ── Read video bytes — local file or remote URL ──────────────────────────
-    if video_url.startswith("/") or (len(video_url) > 1 and video_url[1] == ":"):
-        from pathlib import Path
-        safe_dir = Path(_os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos")).resolve()
+    # ── Resolve to a local file path ────────────────────────────────────────
+    tmp_download: Optional[str] = None
+
+    if _is_local_path(video_url):
+        safe_dir   = Path(os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos")).resolve()
         video_path = Path(video_url).resolve()
         if not str(video_path).startswith(str(safe_dir)):
             raise ValueError(f"Video path is outside allowed directory: {video_url}")
         if not video_path.exists():
             raise FileNotFoundError(f"Video file not found on disk: {video_url}")
-        with open(video_path, "rb") as f:
-            video_bytes = f.read()
+        local_video_path = str(video_path)
     else:
-        # Remote URL (D-ID S3 pre-signed URL, etc.)
+        # Remote URL — stream to a temp file instead of reading entirely into RAM
+        # (Fix Warn #13: avoids OOM on large video files)
         logger.info("Downloading video for YouTube upload: %s", video_url[:80])
-        async with httpx.AsyncClient(timeout=180, follow_redirects=True) as client:
-            dl = await client.get(video_url)
-            dl.raise_for_status()
-            video_bytes = dl.content
-        logger.info("Downloaded %d bytes for YouTube upload", len(video_bytes))
+        tmp_fd, tmp_download = tempfile.mkstemp(suffix=".mp4")
+        os.close(tmp_fd)
+        try:
+            async with httpx.AsyncClient(timeout=300, follow_redirects=True) as client:
+                async with client.stream("GET", video_url) as resp:
+                    resp.raise_for_status()
+                    with open(tmp_download, "wb") as f:
+                        async for chunk in resp.aiter_bytes(65536):
+                            f.write(chunk)
+            logger.info("Downloaded video to temp file: %s", tmp_download)
+            local_video_path = tmp_download
+        except Exception:
+            if os.path.exists(tmp_download):
+                os.unlink(tmp_download)
+            raise
 
-    if not video_bytes:
-        raise ValueError("Video file is empty — cannot upload to YouTube")
+    try:
+        if os.path.getsize(local_video_path) == 0:
+            raise ValueError("Video file is empty — cannot upload to YouTube")
 
-    if "#Shorts" not in description:
-        description += "\n\n#Shorts"
-    if tags is None:
-        tags = []
+        # Append #Shorts only if not already present (Fix Warn #14)
+        if "#Shorts" not in description:
+            description += "\n\n#Shorts"
+        if tags is None:
+            tags = []
 
-    # ── Build metadata as proper JSON ────────────────────────────────────────
-    metadata_json = json.dumps({
-        "snippet": {
-            "title":       title[:100],
-            "description": description[:5000],
-            "tags":        tags,
-            "categoryId":  "22",   # People & Blogs
-        },
-        "status": {
-            "privacyStatus":          privacy,
-            "selfDeclaredMadeForKids": False,
-        },
-    })
-
-    # ── Multipart upload ─────────────────────────────────────────────────────
-    logger.info("Uploading %d bytes to YouTube (title: %s)", len(video_bytes), title[:60])
-    async with httpx.AsyncClient(timeout=300) as client:
-        r = await client.post(
-            YOUTUBE_UPLOAD_URL,
-            params={"part": "snippet,status", "uploadType": "multipart"},
-            headers={"Authorization": f"Bearer {access_token}"},
-            files={
-                "metadata": (None, metadata_json, "application/json"),
-                "media":    ("video.mp4", video_bytes, "video/mp4"),
+        # ── Build metadata ────────────────────────────────────────────────
+        metadata_json = json.dumps({
+            "snippet": {
+                "title":       title[:100],
+                "description": description[:5000],
+                "tags":        tags,
+                "categoryId":  "22",   # People & Blogs
             },
-        )
-        if not r.is_success:
-            logger.error("YouTube upload failed: %s %s", r.status_code, r.text[:500])
-            r.raise_for_status()
-        yt_id = r.json().get("id", "")
+            "status": {
+                "privacyStatus":          privacy,
+                "selfDeclaredMadeForKids": False,
+            },
+        })
 
-    if not yt_id:
-        raise RuntimeError(f"YouTube returned no video ID. Response: {r.text[:300]}")
+        file_size = os.path.getsize(local_video_path)
+        logger.info("Uploading %d bytes to YouTube (title: %s)", file_size, title[:60])
 
-    logger.info("YouTube upload complete: video_id=%s", yt_id)
-    return yt_id
+        # ── Multipart upload — stream the file, don't buffer into RAM ─────
+        async with httpx.AsyncClient(timeout=300) as client:
+            with open(local_video_path, "rb") as video_file:
+                r = await client.post(
+                    YOUTUBE_UPLOAD_URL,
+                    params={"part": "snippet,status", "uploadType": "multipart"},
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    files={
+                        "metadata": (None, metadata_json, "application/json"),
+                        "media":    ("video.mp4", video_file, "video/mp4"),
+                    },
+                )
+            if not r.is_success:
+                logger.error("YouTube upload failed: %s %s", r.status_code, r.text[:500])
+                r.raise_for_status()
+            yt_id = r.json().get("id", "")
+
+        if not yt_id:
+            raise RuntimeError(f"YouTube returned no video ID. Response: {r.text[:300]}")
+
+        logger.info("YouTube upload complete: video_id=%s", yt_id)
+        return yt_id
+
+    finally:
+        # Clean up the temp download file if we created one
+        if tmp_download and os.path.exists(tmp_download):
+            os.unlink(tmp_download)
 
 
 class VideoPipelineService:
     """
-    Background pipeline: D-ID or local video generation → YouTube upload.
+    Background pipeline: Veo or Local video generation → YouTube upload.
 
     Provider precedence:
-      1. D-ID  — if DID_API_KEY env var is set (talking avatar, highest quality)
-      2. Local — ElevenLabs + Pexels + FFmpeg faceless video (free tier friendly)
+      1. Veo  (GOOGLE_API_KEY set)        — AI-generated video clips
+      2. Local (ELEVENLABS + PEXELS set)  — ElevenLabs voiceover + Pexels stock footage
     """
 
     def __init__(
         self,
         db: Session,
-        video_service: Optional[LocalVideoService] = None,
+        video_service=None,   # LocalVideoService | VeoVideoService | None
     ):
         self.db = db
         self._video = video_service
@@ -171,29 +201,36 @@ class VideoPipelineService:
             self._set_failed(video)
             return
 
+        # Build full script text from the DB record (Fix Bug #6: don't rely on stale dict key)
         script_text = "\n\n".join(p for p in [script.hook, script.body, script.cta] if p)
         caption = script.hook or script_text[:100]
 
         if self._video:
-            await self._generate_local(video, script_text, caption)
+            await self._generate_with_provider(video, script_text, caption)
         else:
             logger.warning("No video provider configured — marking video %s failed", video_id)
-            self._set_failed(video, error="Video provider not configured. Set ELEVENLABS_API_KEY and PEXELS_API_KEY.")
+            self._set_failed(video, error="No video provider configured. Set GOOGLE_API_KEY (Veo) or ELEVENLABS_API_KEY + PEXELS_API_KEY (local).")
 
-    async def _generate_local(self, video: Video, script_text: str, caption: str) -> None:
-        """Generate via local ElevenLabs + Pexels + FFmpeg pipeline."""
+    async def _generate_with_provider(self, video: Video, script_text: str, caption: str) -> None:
+        """Generate video using whichever provider is active (Veo or Local)."""
         try:
+            # create_video() just returns a job token — script is passed directly to
+            # wait_for_completion() so there is no stale-data path (Fix Bug #6)
             result = await self._video.create_video(script=script_text, aspect_ratio="9:16")
             job_id = result.get("video_id")
             if not job_id:
                 raise RuntimeError("LocalVideoService returned no job id")
 
-            video.heygen_video_id = job_id
+            video.job_id = job_id
             self.db.commit()
 
             status_data = await self._video.wait_for_completion(
                 job_id, script=script_text, caption_text=caption
             )
+
+            if status_data.get("status") == "failed":
+                raise RuntimeError(status_data.get("error") or "Video assembly failed")
+
             video.video_url     = status_data.get("video_url")
             video.thumbnail_url = status_data.get("thumbnail_url")
             video.duration      = status_data.get("duration")
@@ -264,10 +301,25 @@ class VideoPipelineService:
 
 
 # ------------------------------------------------------------------
-def get_video_service() -> Optional[LocalVideoService]:
-    """Return a LocalVideoService if ElevenLabs + Pexels keys are set."""
+def get_video_service():
+    """
+    Return the best available video provider.
+
+    Priority:
+      1. Veo  — if GOOGLE_API_KEY is set
+      2. Local — if ELEVENLABS_API_KEY + PEXELS_API_KEY are set
+      3. None  — no provider; generate endpoint returns 503
+    """
+    if os.getenv("GOOGLE_API_KEY"):
+        try:
+            from app.services.veo_service import VeoVideoService   # noqa: PLC0415
+            return VeoVideoService()
+        except Exception as exc:
+            logger.warning("Veo provider init failed (%s) — falling back to local", exc)
+
     if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
         return LocalVideoService()
+
     return None
 
 

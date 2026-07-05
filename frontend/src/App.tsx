@@ -191,6 +191,10 @@ function App() {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [topicIdeas, setTopicIdeas] = useState<string[]>([]);
   const [showIdeas, setShowIdeas] = useState(false);
+  // Top Performers feedback loop
+  const [topPerfLoading, setTopPerfLoading]         = useState(false);
+  const [topPerfDataAvailable, setTopPerfDataAvailable] = useState(false);
+  const [topPerfNote, setTopPerfNote]               = useState('');
   
   // Blueprint state
   const [blueprintInput, setBlueprintInput] = useState('');
@@ -411,21 +415,42 @@ function App() {
   const renderVideos = () => (
     <div className="videos-page">
       <h1>🎬 Video Generator</h1>
-      <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
 
-      {/* ── Active provider banner ── */}
-      {videoProvider && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: `${videoProvider.color}14`, border: `1px solid ${videoProvider.color}40`, borderRadius: '0.75rem', padding: '0.85rem 1.25rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-          <span style={{ background: videoProvider.color, color: '#fff', borderRadius: '999px', padding: '0.2rem 0.75rem', fontWeight: 700, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
-            {videoProvider.provider === 'local' ? '🎞️' : '⚠️'} {videoProvider.label}
-          </span>
-          <span style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{videoProvider.detail}</span>
+      {/* ── Active provider banner — promoted to page header ── */}
+      {videoProvider ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '1rem',
+          background: `${videoProvider.color}18`,
+          border: `1px solid ${videoProvider.color}50`,
+          borderRadius: '0.875rem', padding: '1rem 1.5rem',
+          marginBottom: '1.5rem', flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <span style={{ background: videoProvider.color, color: '#fff', borderRadius: '999px', padding: '0.25rem 0.85rem', fontWeight: 700, fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+                {videoProvider.provider === 'veo' ? '🎬' : videoProvider.provider === 'local' ? '🎞️' : '⚠️'} {videoProvider.label}
+              </span>
+              {videoProvider.provider === 'veo' && (
+                <span style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                  ✨ AI-generated clips via Google AI Studio
+                </span>
+              )}
+              {videoProvider.provider === 'local' && (
+                <span style={{ background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.35)', color: '#93c5fd', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                  🗣️ Timed captions + stock footage
+                </span>
+              )}
+            </div>
+            <span style={{ color: '#94a3b8', fontSize: '0.875rem', marginTop: '0.25rem' }}>{videoProvider.detail}</span>
+          </div>
           {videoProvider.provider === 'none' && (
-            <button className="inline-link" onClick={() => setCurrentPage('diagnostics')} style={{ marginLeft: 'auto' }}>
+            <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>
               Fix in Diagnostics →
             </button>
           )}
         </div>
+      ) : (
+        <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
       )}
 
       {/* Step 1 — paste script ID */}
@@ -546,7 +571,11 @@ function App() {
               <div className="progress-bar">
                 <div className="progress-fill" />
               </div>
-              <p>Video is being assembled — voiceover + stock footage + captions. Check back in 3–8 minutes. This page auto-refreshes every 10 s.</p>
+              <p>
+                {videoProvider?.provider === 'veo'
+                  ? 'Generating AI video clips via Veo 3 (Google AI Studio), adding voiceover and captions. This takes 5–10 minutes. Auto-refreshes every 10 s.'
+                  : 'Video is being assembled — voiceover + stock footage + captions. Check back in 3–8 minutes. Auto-refreshes every 10 s.'}
+              </p>
             </div>
           )}
 
@@ -1247,17 +1276,21 @@ function App() {
 
   // ── Diagnostics state ────────────────────────────────────────────────────
   const [diagLoading, setDiagLoading]   = useState(false);
-  const [diagResult, setDiagResult]     = useState<null | { summary: { total: number; passed: number; failed: number; warned: number }; checks: Array<{ name: string; status: 'pass'|'fail'|'warn'; detail: string; hint: string }> }>(null);
+  const [diagResult, setDiagResult]     = useState<null | { summary: { total: number; passed: number; failed: number; warned: number }; checks: Array<{ name: string; status: 'pass'|'fail'|'warn'; detail: string; hint: string }>; checked_at?: string }>(null);
+  const [diagError,  setDiagError]      = useState('');
   const [restartBackendState, setRestartBackendState] = useState<'idle'|'loading'|'ok'|'error'>('idle');
   const [restartFrontendState, setRestartFrontendState] = useState<'idle'|'loading'|'ok'|'error'>('idle');
   const [restartMsg, setRestartMsg] = useState('');
 
   const runDiagnostics = async () => {
-    setDiagLoading(true); setDiagResult(null);
+    setDiagLoading(true); setDiagResult(null); setDiagError('');
     try {
       const res = await fetch(`${API_BASE}/api/v1/health/checks`);
+      if (!res.ok) throw new Error(`Backend returned ${res.status} — is the backend running?`);
       setDiagResult(await res.json());
-    } catch { setDiagResult(null); }
+    } catch (err) {
+      setDiagError(err instanceof Error ? err.message : 'Could not reach backend. Check that it is running.');
+    }
     finally { setDiagLoading(false); }
   };
 
@@ -1282,12 +1315,22 @@ function App() {
   const renderDiagnostics = () => (
     <div className="videos-page">
       <h1>🔧 System Diagnostics</h1>
-      <p className="subtitle">Run all checks to see exactly what's working and what needs fixing</p>
+      <p className="subtitle">Checks all services in parallel — backend, APIs, FFmpeg, Buffer, and more</p>
 
       <div className="generator-form">
         <button className="generate-button" onClick={runDiagnostics} disabled={diagLoading}>
           {diagLoading ? '🔍 Running checks…' : '🔧 Run All Checks'}
         </button>
+        {diagError && (
+          <div className="error-message" style={{ marginTop: '0.75rem' }}>
+            ❌ {diagError}
+          </div>
+        )}
+        {diagResult?.checked_at && !diagLoading && (
+          <p style={{ color: '#475569', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+            Last checked: {new Date(diagResult.checked_at).toLocaleString()}
+          </p>
+        )}
       </div>
 
       {/* ── Restart controls ── */}
@@ -1372,6 +1415,36 @@ function App() {
                       <a href="https://www.pexels.com/api/" target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
                         👉 Get free Pexels API key →
+                      </a>
+                    )}
+                    {c.name === 'Buffer (social posting)' && (
+                      <a href="https://buffer.com/app/account/apps" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Get Buffer access token →
+                      </a>
+                    )}
+                    {c.name === 'FFmpeg' && (
+                      <a href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Download FFmpeg →
+                      </a>
+                    )}
+                    {c.name === 'OpenAI API Key' && (
+                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Get OpenAI API key →
+                      </a>
+                    )}
+                    {c.name === 'Google Veo 3 (AI video)' && (
+                      <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Get Google AI Studio key →
+                      </a>
+                    )}
+                    {c.name === 'YouTube OAuth (upload)' && (
+                      <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-block', marginTop: '0.4rem', color: '#60a5fa', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                        👉 Google Cloud Console →
                       </a>
                     )}
                   </div>
@@ -2109,6 +2182,8 @@ function App() {
 
   const getTopicIdeas = async () => {
     setLoadingIdeas(true);
+    setTopPerfDataAvailable(false);
+    setTopPerfNote('');
     setError('');
     
     try {
@@ -2137,6 +2212,31 @@ function App() {
   const selectTopicIdea = (idea: string) => {
     setTopic(idea);
     setShowIdeas(false);
+    setTopPerfNote('');
+  };
+
+  const getTopPerformerIdeas = async () => {
+    setTopPerfLoading(true);
+    setTopPerfDataAvailable(false);
+    setTopPerfNote('');
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/generate-from-top-performers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche, count: 10 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setTopicIdeas(data.ideas ?? []);
+      setTopPerfDataAvailable(data.data_available ?? false);
+      setTopPerfNote(data.note ?? '');
+      setShowIdeas(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load top performer ideas');
+    } finally {
+      setTopPerfLoading(false);
+    }
   };
 
   const generateScript = async () => {
@@ -2562,13 +2662,28 @@ function App() {
 
       <section className="pipeline">
         <h2>🚀 Your Content Pipeline</h2>
-        <ul>
-          <li>✅ Generate AI-powered video scripts</li>
-          <li>✅ Create comprehensive video blueprints</li>
-          <li>🎨 Create videos manually (Canva) or automate with AI voiceover + stock footage</li>
-          <li>📤 Upload to YouTube automatically</li>
-          <li>📊 Track performance and monetization</li>
-        </ul>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
+          {[
+            { step: '1', icon: '🔍', label: 'Source', desc: 'Find trending topics & parrot viral videos', page: 'source' as const },
+            { step: '2', icon: '✍️', label: 'Script', desc: 'AI-powered scripts & blueprints', page: 'scripts' as const },
+            { step: '3', icon: videoProvider?.provider === 'veo' ? '🎬' : '🎞️', label: 'Video', desc: videoProvider?.provider === 'veo' ? 'Veo 3 AI-generated clips ✨' : videoProvider?.provider === 'local' ? 'Voiceover + stock footage' : 'Generate video', page: 'videos' as const },
+            { step: '4', icon: '📤', label: 'Publish', desc: 'Upload to YouTube automatically', page: 'videos' as const },
+          ].map(s => (
+            <button key={s.step} onClick={() => setCurrentPage(s.page)}
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1rem', textAlign: 'left', cursor: 'pointer', transition: 'border-color 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(59,130,246,0.5)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}>
+              <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{s.icon}</div>
+              <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.9rem' }}>Step {s.step} — {s.label}</div>
+              <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>{s.desc}</div>
+              {s.step === '3' && videoProvider?.provider === 'veo' && (
+                <span style={{ display: 'inline-block', marginTop: '0.4rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700 }}>
+                  Active
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       </section>
 
       <div className="quick-start-box" style={{
@@ -2653,19 +2768,38 @@ function App() {
           </small>
         </div>
 
-        <button
-          className="idea-button"
-          onClick={getTopicIdeas}
-          disabled={loadingIdeas || loading}
-          type="button"
-        >
-          {loadingIdeas ? '🤔 Getting Ideas...' : '💡 Get AI Topic Ideas'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button
+            className="idea-button"
+            onClick={getTopicIdeas}
+            disabled={loadingIdeas || loading || topPerfLoading}
+            type="button"
+            style={{ flex: '1 1 200px' }}
+          >
+            {loadingIdeas ? '🤔 Getting Ideas...' : '💡 Get AI Topic Ideas'}
+          </button>
+          <button
+            className="idea-button"
+            onClick={getTopPerformerIdeas}
+            disabled={topPerfLoading || loadingIdeas || loading}
+            type="button"
+            title="Generate ideas based on your best-performing videos"
+            style={{ flex: '1 1 200px', background: 'rgba(16,185,129,0.12)', borderColor: '#10b981', color: '#34d399' }}
+          >
+            {topPerfLoading ? '📊 Analysing...' : '🏆 Ideas from Top Performers'}
+          </button>
+        </div>
 
         {showIdeas && topicIdeas.length > 0 && (
           <div className="topic-ideas">
-            <h3>💡 Recommended Topics for {niche}</h3>
-            <p className="ideas-subtitle">Click any topic to use it:</p>
+            <h3>{topPerfDataAvailable ? '🏆 Topics Based on Your Best Performers' : '💡 Recommended Topics for ' + niche}</h3>
+            {topPerfDataAvailable && topPerfNote && (
+              <p className="ideas-subtitle" style={{ color: '#34d399' }}>✅ {topPerfNote}</p>
+            )}
+            {!topPerfDataAvailable && topPerfNote && (
+              <p className="ideas-subtitle" style={{ color: '#f59e0b' }}>⚠️ {topPerfNote}</p>
+            )}
+            {!topPerfNote && <p className="ideas-subtitle">Click any topic to use it:</p>}
             <div className="ideas-list">
               {topicIdeas.map((idea, index) => (
                 <button
@@ -3225,7 +3359,8 @@ Example:
           <li>Use the Blueprint generator for longer, more detailed videos</li>
           <li>Keep videos 3-8 minutes for best engagement</li>
           <li>Add captions in Canva for better accessibility</li>
-          <li>Use ElevenLabs + Pexels automation once you're creating 5+ videos/week</li>
+          <li>Use ElevenLabs + Pexels for voiceover + stock footage automation (5+ videos/week)</li>
+          <li>🎬 <strong>Upgrade to Veo 3</strong> (Google AI Studio) for fully AI-generated video clips — no stock footage needed. Set <code>GOOGLE_API_KEY</code> in Azure.</li>
         </ul>
       </div>
 
@@ -3243,7 +3378,14 @@ Example:
   return (
     <div className="app">
       <nav className="navbar">
-        <div className="nav-brand">AI Content Publisher</div>
+        <div className="nav-brand">
+          AI Content Publisher
+          {videoProvider?.provider === 'veo' && (
+            <span style={{ marginLeft: '0.6rem', background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
+              ✨ Veo 3 Active
+            </span>
+          )}
+        </div>
         
         <div className="nav-workflow">
           <div className="nav-step">

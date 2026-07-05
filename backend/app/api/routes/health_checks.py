@@ -24,23 +24,24 @@ async def _check(name: str, hint: str, coro) -> Dict[str, Any]:
         return {"name": name, "status": "fail", "detail": str(exc), "hint": hint}
 
 
+async def _warn_check(name: str, hint: str, coro) -> Dict[str, Any]:
+    """Like _check but downgrades failures to warnings (non-critical services)."""
+    result = await _check(name, hint, coro)
+    if result["status"] == "fail":
+        result["status"] = "warn"
+    return result
+
+
 @router.get("/checks")
 async def run_checks() -> Dict[str, Any]:
     """
-    Run all system health checks and return their results.
+    Run all system health checks in parallel and return their results.
     Called by the Diagnostics page on the frontend.
     """
-    checks: List[Dict[str, Any]] = []
+    from datetime import timezone
 
-    # ── 1. Backend reachable ─────────────────────────────────────────────────
-    checks.append({
-        "name": "Backend API",
-        "status": "pass",
-        "detail": "Backend is responding",
-        "hint": "",
-    })
+    # ── Define all individual checks ─────────────────────────────────────────
 
-    # ── 2. Database ──────────────────────────────────────────────────────────
     async def _db():
         from app.core.database import SessionLocal
         from app.models.content_script import ContentScript
@@ -50,13 +51,7 @@ async def run_checks() -> Dict[str, Any]:
             return f"Connected — {count} scripts in DB"
         finally:
             db.close()
-    checks.append(await _check(
-        "Database",
-        "Set DATABASE_URL env var and restart. Check Azure PostgreSQL firewall rules.",
-        _db()
-    ))
 
-    # ── 3. OpenAI API key ────────────────────────────────────────────────────
     async def _openai():
         key = os.getenv("OPENAI_API_KEY", "")
         if not key:
@@ -70,17 +65,11 @@ async def run_checks() -> Dict[str, Any]:
                 raise ValueError("Invalid API key (401 Unauthorized)")
             r.raise_for_status()
         return "OpenAI key is valid"
-    checks.append(await _check(
-        "OpenAI API Key",
-        "Set OPENAI_API_KEY env var. Get a key at platform.openai.com/api-keys",
-        _openai()
-    ))
 
-    # ── 4. ElevenLabs API key ────────────────────────────────────────────────
     async def _elevenlabs():
         key = os.getenv("ELEVENLABS_API_KEY", "")
         if not key:
-            raise ValueError("ELEVENLABS_API_KEY is not set")
+            raise ValueError("ELEVENLABS_API_KEY is not set — video voiceover disabled")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://api.elevenlabs.io/v1/user/subscription",
@@ -92,17 +81,11 @@ async def run_checks() -> Dict[str, Any]:
             data = r.json()
         chars_left = data.get("character_limit", 0) - data.get("character_count", 0)
         return f"ElevenLabs key valid — {chars_left:,} characters remaining"
-    checks.append(await _check(
-        "ElevenLabs API Key",
-        "Set ELEVENLABS_API_KEY. Get a free key at elevenlabs.io (10,000 chars/mo free).",
-        _elevenlabs()
-    ))
 
-    # ── 4b. Pexels API key ───────────────────────────────────────────────────
     async def _pexels():
         key = os.getenv("PEXELS_API_KEY", "")
         if not key:
-            raise ValueError("PEXELS_API_KEY is not set")
+            raise ValueError("PEXELS_API_KEY is not set — video backgrounds disabled")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://api.pexels.com/videos/search",
@@ -113,13 +96,7 @@ async def run_checks() -> Dict[str, Any]:
                 raise ValueError("Invalid Pexels API key (401)")
             r.raise_for_status()
         return "Pexels API key is valid"
-    checks.append(await _check(
-        "Pexels API Key",
-        "Set PEXELS_API_KEY. Get a free key at pexels.com/api (free, unlimited).",
-        _pexels()
-    ))
 
-    # ── 5. YouTube OAuth credentials ────────────────────────────────────────
     async def _yt_oauth():
         client_id     = os.getenv("YOUTUBE_CLIENT_ID", "")
         client_secret = os.getenv("YOUTUBE_CLIENT_SECRET", "")
@@ -130,7 +107,7 @@ async def run_checks() -> Dict[str, Any]:
             ("YOUTUBE_REFRESH_TOKEN", refresh_token),
         ] if not v]
         if missing:
-            raise ValueError(f"Missing env vars: {', '.join(missing)}")
+            raise ValueError(f"Missing: {', '.join(missing)}")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.post(
                 "https://oauth2.googleapis.com/token",
@@ -142,85 +119,101 @@ async def run_checks() -> Dict[str, Any]:
                 },
             )
             if r.status_code == 400:
-                raise ValueError(f"Token refresh failed: {r.json().get('error_description','bad request')}")
+                raise ValueError(f"Token refresh failed: {r.json().get('error_description', 'bad request')}")
             r.raise_for_status()
         return "YouTube OAuth credentials valid — upload ready"
-    checks.append(await _check(
-        "YouTube OAuth (upload)",
-        "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN. "
-        "Create OAuth credentials at console.cloud.google.com → APIs → Credentials → OAuth 2.0 Client ID",
-        _yt_oauth()
-    ))
 
-    # ── 6. YouTube Data API key ──────────────────────────────────────────────
-    async def _yt():
+    async def _yt_data():
         key = os.getenv("YOUTUBE_DATA_API_KEY", "")
         if not key:
-            raise ValueError("YOUTUBE_DATA_API_KEY is not set — Parrot and live Trending will use AI fallback")
+            raise ValueError("Not set — Parrot and live Trending will use AI fallback")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
                 "https://www.googleapis.com/youtube/v3/videos",
                 params={"part": "id", "chart": "mostPopular", "maxResults": "1", "key": key},
             )
-            if r.status_code == 400:
-                raise ValueError("Invalid YouTube API key")
+            if r.status_code in (400, 403):
+                raise ValueError(f"Invalid YouTube Data API key ({r.status_code})")
             r.raise_for_status()
         return "YouTube Data API key is valid"
-    checks.append(await _check(
-        "YouTube Data API Key",
-        "Set YOUTUBE_DATA_API_KEY. Create at console.cloud.google.com → APIs → Credentials",
-        _yt()
-    ))
 
-    # ── 7. AI Image Generation (DALL·E 3) ───────────────────────────────────
+    async def _buffer():
+        token = os.getenv("BUFFER_ACCESS_TOKEN", "")
+        if not token:
+            raise ValueError("BUFFER_ACCESS_TOKEN is not set — social scheduling disabled")
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://api.buffer.com/1/user.json",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if r.status_code == 401:
+                raise ValueError("Invalid Buffer access token (401)")
+            r.raise_for_status()
+            data = r.json()
+        return f"Buffer connected — account: {data.get('name', 'unknown')}"
+
+    async def _ffmpeg():
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                raise ValueError("ffmpeg returned non-zero exit code")
+            first_line = result.stdout.splitlines()[0] if result.stdout else "ffmpeg found"
+            return first_line[:80]
+        except FileNotFoundError:
+            raise ValueError(
+                "ffmpeg not found on PATH — video rendering will fail. "
+                "On Linux: apt-get install ffmpeg  On Windows: winget install Gyan.FFmpeg"
+            )
+
     async def _dalle():
-        openai_key = os.getenv("OPENAI_API_KEY", "")
-        if openai_key:
-            return "DALL·E 3 ready — thumbnail & social-pack generation active (uses OPENAI_API_KEY)"
+        if os.getenv("OPENAI_API_KEY"):
+            return "DALL·E 3 ready — thumbnail & social-pack generation active"
         raise ValueError("OPENAI_API_KEY not set — image generation disabled")
-    checks.append(await _check(
-        "AI Image Generation (DALL·E 3)",
-        "Set OPENAI_API_KEY — same key used for scripts. No extra key needed.",
-        _dalle()
-    ))
 
-    # ── 8. CORS ───────────────────────────────────────────────────────────────
-    checks.append({
-        "name": "CORS Configuration",
-        "status": "pass",
-        "detail": "CORS allows all *.azurecontainerapps.io origins",
-        "hint": "",
-    })
+    async def _veo():
+        key = os.getenv("GOOGLE_API_KEY", "")
+        if not key:
+            raise ValueError("GOOGLE_API_KEY not set — Veo AI video generation inactive (Pexels stock footage used instead)")
+        try:
+            import importlib
+            importlib.import_module("google.genai")
+        except ImportError:
+            raise ValueError("google-genai package not installed — run: pip install google-genai")
+        return "Google API key configured — Veo 3 AI video generation active"
 
-    # ── 9. YouTube channel check ─────────────────────────────────────────────
-    yt_key = os.getenv("YOUTUBE_DATA_API_KEY", "")
-    yt_oauth_ok = all([
-        os.getenv("YOUTUBE_CLIENT_ID"),
-        os.getenv("YOUTUBE_CLIENT_SECRET"),
-        os.getenv("YOUTUBE_REFRESH_TOKEN"),
-    ])
-    checks.append({
-        "name": "YouTube Publishing",
-        "status": "pass" if yt_oauth_ok else "warn",
-        "detail": (
-            "OAuth credentials set — direct upload enabled"
-            if yt_oauth_ok
-            else "OAuth credentials not set — upload will fail. Data API key is set for trending/parrot."
-        ),
-        "hint": (
-            ""
-            if yt_oauth_ok
-            else "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN for upload support."
-        ),
-    })
+    # ── Run ALL checks concurrently ───────────────────────────────────────────
+    results = await asyncio.gather(
+        # Critical — these block core features
+        _check("Database",               "Set DATABASE_URL and restart. Check firewall rules.", _db()),
+        _check("OpenAI API Key",         "Set OPENAI_API_KEY. Get a key at platform.openai.com/api-keys", _openai()),
+        _check("ElevenLabs API Key",     "Set ELEVENLABS_API_KEY. Get a free key at elevenlabs.io (10,000 chars/mo free).", _elevenlabs()),
+        _check("Pexels API Key",         "Set PEXELS_API_KEY. Get a free key at pexels.com/api (free, unlimited).", _pexels()),
+        _check("FFmpeg",                 "On Linux: apt-get install ffmpeg  On Windows: winget install Gyan.FFmpeg", _ffmpeg()),
+        # Important but non-critical
+        _warn_check("YouTube OAuth (upload)",  "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN via console.cloud.google.com", _yt_oauth()),
+        _warn_check("YouTube Data API Key",    "Set YOUTUBE_DATA_API_KEY at console.cloud.google.com → APIs → Credentials", _yt_data()),
+        _warn_check("Buffer (social posting)", "Set BUFFER_ACCESS_TOKEN at buffer.com → Settings → Apps & Integrations", _buffer()),
+        _warn_check("AI Image Generation",     "Set OPENAI_API_KEY — same key used for scripts.", _dalle()),
+    )
 
-    passed  = sum(1 for c in checks if c["status"] == "pass")
-    failed  = sum(1 for c in checks if c["status"] == "fail")
-    warned  = sum(1 for c in checks if c["status"] == "warn")
+    checks: List[Dict[str, Any]] = [
+        # Always-pass static checks
+        {"name": "Backend API",        "status": "pass", "detail": "Backend is responding",                             "hint": ""},
+        {"name": "CORS Configuration", "status": "pass", "detail": "CORS allows all *.azurecontainerapps.io origins",   "hint": ""},
+        *results,
+    ]
+
+    passed = sum(1 for c in checks if c["status"] == "pass")
+    failed = sum(1 for c in checks if c["status"] == "fail")
+    warned = sum(1 for c in checks if c["status"] == "warn")
 
     return {
-        "summary": {"total": len(checks), "passed": passed, "failed": failed, "warned": warned},
-        "checks": checks,
+        "summary":    {"total": len(checks), "passed": passed, "failed": failed, "warned": warned},
+        "checks":     checks,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -228,8 +221,15 @@ async def run_checks() -> Dict[str, Any]:
 async def get_video_provider() -> Dict[str, str]:
     """
     Returns which video generation provider is currently active.
-    Frontend uses this to show the correct badge on the Videos page.
+    Priority: Veo (GOOGLE_API_KEY) > Local (ELEVENLABS + PEXELS) > none
     """
+    if os.getenv("GOOGLE_API_KEY"):
+        return {
+            "provider": "veo",
+            "label":    "Google Veo 3",
+            "detail":   "AI-generated video clips via Google DeepMind Veo",
+            "color":    "#10b981",
+        }
     if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
         return {
             "provider": "local",
@@ -240,7 +240,7 @@ async def get_video_provider() -> Dict[str, str]:
     return {
         "provider": "none",
         "label":    "No video provider configured",
-        "detail":   "Set ELEVENLABS_API_KEY and PEXELS_API_KEY",
+        "detail":   "Set GOOGLE_API_KEY (Veo) or ELEVENLABS_API_KEY + PEXELS_API_KEY",
         "color":    "#ef4444",
     }
 

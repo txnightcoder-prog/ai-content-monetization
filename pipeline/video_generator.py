@@ -25,11 +25,18 @@ logger = logging.getLogger(__name__)
 
 # Where to save rendered videos
 # On Azure Linux the pipeline dir is read-only (file share mount) — use /tmp instead
-if os.path.exists("/tmp") and not os.access(Path(__file__).parent, os.W_OK):
+# Use /tmp/videos when /tmp exists AND the local dir is not writable.
+_local_dir = Path(__file__).parent / "videos"
+if os.path.exists("/tmp") and not os.access(_local_dir.parent, os.W_OK):
     VIDEO_DIR = Path("/tmp/videos")
 else:
-    VIDEO_DIR = Path(__file__).parent / "videos"
-VIDEO_DIR.mkdir(exist_ok=True)
+    VIDEO_DIR = _local_dir
+try:
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    # Fallback: if chosen dir can't be created (e.g. permissions), use /tmp
+    VIDEO_DIR = Path("/tmp/videos")
+    VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 
@@ -187,11 +194,15 @@ def _search_pexels_video(query: str) -> str | None:
         # Pick the first video that has an HD or SD file
         for video in videos:
             files = video.get("video_files", [])
+            if not files:
+                continue
             # Prefer HD portrait, fallback to any
             for f in sorted(files, key=lambda x: x.get("width", 0), reverse=True):
                 if f.get("width", 0) <= 1080:  # don't grab 4K files
                     return f["link"]
-        return files[0]["link"] if files else None
+            # All files were >1080 wide — fall back to the smallest available
+            return min(files, key=lambda x: x.get("width", 0))["link"]
+        return None
     except Exception as e:
         logger.warning(f"    Pexels search failed: {e}")
         return None

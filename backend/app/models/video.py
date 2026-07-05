@@ -22,7 +22,7 @@ class Video(Base, TimestampMixin):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     script_id = Column(UUID(as_uuid=True), ForeignKey("content_scripts.id"), nullable=True)
-    heygen_video_id = Column(String(255), nullable=True)
+    job_id = Column(String(255), nullable=True)   # local pipeline job token (renamed from heygen_video_id)
     video_url = Column(String(500), nullable=True)
     thumbnail_url = Column(String(500), nullable=True)
     duration = Column(Integer, nullable=True)  # Duration in seconds
