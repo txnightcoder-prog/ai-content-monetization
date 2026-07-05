@@ -3154,7 +3154,7 @@ Example:
               <h3>🧲 Thumbnail Ideas</h3>
               <ul className="thumbnail-ideas">
                 {generatedBlueprint.thumbnail_ideas.map((idea, index) => (
-                  <li key={index}>{idea}</li>
+                  <li key={index}>{typeof idea === 'string' ? idea : `${idea.headline ?? ''}${idea.visual ? ` — ${idea.visual}` : ''}${idea.style ? ` (${idea.style})` : ''}`}</li>
                 ))}
               </ul>
             </div>
