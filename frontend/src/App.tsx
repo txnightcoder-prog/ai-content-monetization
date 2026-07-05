@@ -453,6 +453,48 @@ function App() {
         <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
       )}
 
+      {/* ── Import Video from external source ── */}
+      <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: '0.875rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h3 style={{ color: '#a78bfa', margin: 0, fontSize: '1rem' }}>📥 Import Video</h3>
+          <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Upload a video file from your device, HeyGen, CapCut, or any other source</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input
+            type="text"
+            value={uploadTitle}
+            onChange={e => setUploadTitle(e.target.value)}
+            placeholder="Video title (optional)"
+            disabled={uploadLoading}
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.65rem 0.85rem', fontSize: '0.875rem' }}
+          />
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <label style={{
+              flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: '0.6rem',
+              background: 'rgba(139,92,246,0.1)', border: '2px dashed rgba(139,92,246,0.4)',
+              borderRadius: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer', color: '#a78bfa', fontWeight: 600, fontSize: '0.875rem'
+            }}>
+              <input type="file" accept="video/*" style={{ display: 'none' }}
+                onChange={e => setUploadFile(e.target.files?.[0] ?? null)} disabled={uploadLoading} />
+              📂 {uploadFile ? uploadFile.name : 'Choose video file (MP4, MOV, WebM)'}
+            </label>
+            <button
+              onClick={uploadIphoneVideo}
+              disabled={uploadLoading || !uploadFile}
+              style={{ flex: '0 0 auto', background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: uploadLoading || !uploadFile ? 'not-allowed' : 'pointer', opacity: uploadLoading || !uploadFile ? 0.6 : 1 }}>
+              {uploadLoading ? `⏳ Uploading ${uploadProgress}%…` : '📥 Import'}
+            </button>
+          </div>
+          {uploadError && <div className="error-message">{uploadError}</div>}
+          {uploadSuccess && <div className="publish-success">{uploadSuccess} — find it in My Videos below to publish to YouTube.</div>}
+          {uploadLoading && uploadProgress > 0 && (
+            <div style={{ background: 'rgba(139,92,246,0.1)', borderRadius: '999px', height: '6px', overflow: 'hidden' }}>
+              <div style={{ background: '#a78bfa', height: '100%', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Step 1 — paste script ID */}
       <div className="generator-form">
         <p className="videos-tip">
