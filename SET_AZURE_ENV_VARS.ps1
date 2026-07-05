@@ -22,18 +22,16 @@ $CONTAINER_APP  = "ai-content-backend"
 # Or paste values directly here (DO NOT commit this file with real keys).
 # ─────────────────────────────────────────────────────────────────────────────
 $OPENAI_API_KEY         = $env:OPENAI_API_KEY
-$GOOGLE_API_KEY         = $env:GOOGLE_API_KEY          # Veo 3 AI video (optional)
-$ELEVENLABS_API_KEY     = $env:ELEVENLABS_API_KEY
-$ELEVENLABS_VOICE_ID    = $env:ELEVENLABS_VOICE_ID     # leave blank for default Rachel voice
-$PEXELS_API_KEY         = $env:PEXELS_API_KEY
+$GOOGLE_API_KEY         = $env:GOOGLE_API_KEY          # Veo 3 AI video generation
 $YOUTUBE_DATA_API_KEY   = $env:YOUTUBE_DATA_API_KEY
 $YOUTUBE_CLIENT_ID      = $env:YOUTUBE_CLIENT_ID
 $YOUTUBE_CLIENT_SECRET  = $env:YOUTUBE_CLIENT_SECRET
 $YOUTUBE_REFRESH_TOKEN  = $env:YOUTUBE_REFRESH_TOKEN
 $BUFFER_ACCESS_TOKEN    = $env:BUFFER_ACCESS_TOKEN
-$BUFFER_INSTAGRAM_PROFILE_ID = $env:BUFFER_INSTAGRAM_PROFILE_ID
-$BUFFER_FACEBOOK_PROFILE_ID  = $env:BUFFER_FACEBOOK_PROFILE_ID
-$BUFFER_YOUTUBE_PROFILE_ID   = $env:BUFFER_YOUTUBE_PROFILE_ID
+# Buffer profile IDs — hardcoded (these don't change)
+$BUFFER_INSTAGRAM_PROFILE_ID = "6a40210c5ab6d2f1067c3b38"   # txnightcoder Instagram
+$BUFFER_FACEBOOK_PROFILE_ID  = "6a3f042c5ab6d2f10677b34a"   # TXNightCoder Facebook
+$BUFFER_YOUTUBE_PROFILE_ID   = "6a3eee185ab6d2f10677589b"   # John Kirshy YouTube
 $BUFFER_TIKTOK_PROFILE_ID    = $env:BUFFER_TIKTOK_PROFILE_ID
 $DATABASE_URL           = $env:DATABASE_URL
 $AZURE_TENANT_ID        = $env:AZURE_TENANT_ID

@@ -103,6 +103,45 @@ class VeoVideoService:
             )
 
     # ------------------------------------------------------------------
+    async def _google_tts(self, text: str, output_path: str) -> None:
+        """
+        Generate voiceover MP3 using Google Cloud Text-to-Speech REST API.
+        Uses the same GOOGLE_API_KEY — no extra billing setup needed.
+        Free tier: 1 million characters/month (WaveNet), 4M standard.
+        """
+        import base64
+        import httpx as _httpx
+
+        # Truncate to 5000 chars (API limit per request)
+        text = text[:5000]
+        url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self._api_key}"
+        payload = {
+            "input": {"text": text},
+            "voice": {
+                "languageCode": "en-US",
+                "name": "en-US-Neural2-D",   # natural male voice, free tier
+                "ssmlGender": "MALE",
+            },
+            "audioConfig": {
+                "audioEncoding": "MP3",
+                "speakingRate": 1.0,
+                "pitch": 0.0,
+            },
+        }
+        async with _httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(url, json=payload)
+            if resp.status_code != 200:
+                raise RuntimeError(
+                    f"Google TTS failed ({resp.status_code}): {resp.text[:200]}"
+                )
+            audio_b64 = resp.json().get("audioContent", "")
+            if not audio_b64:
+                raise RuntimeError("Google TTS returned empty audio")
+            with open(output_path, "wb") as f:
+                f.write(base64.b64decode(audio_b64))
+        logger.info("VeoService: voiceover written to %s", output_path)
+
+    # ------------------------------------------------------------------
     async def create_video(
         self,
         script: str,
@@ -130,23 +169,21 @@ class VeoVideoService:
     ) -> Dict[str, Any]:
         """
         Run the full Veo pipeline:
-          1. Split script → scene prompts
-          2. Generate each clip via Veo (concurrent)
-          3. Download / save each clip
-          4. Assemble clips + ElevenLabs voiceover → final MP4 via FFmpeg
+          1. Generate voiceover via Google Cloud TTS (free, uses GOOGLE_API_KEY)
+          2. Split script → scene prompts
+          3. Generate each clip via Veo (concurrent)
+          4. Assemble clips + voiceover → final MP4 via FFmpeg
         """
         from app.services.video_assembler import VideoAssembler, _get_ffmpeg
-        from app.services.elevenlabs_service import ElevenLabsService
 
         output_path = os.path.join(self._output_dir, f"{video_id}.mp4")
         voice_path  = os.path.join(self._output_dir, f"{video_id}_voice.mp3")
         thumb_path  = os.path.join(self._output_dir, f"{video_id}_thumb.jpg")
 
         try:
-            # ── 1. Generate voiceover ──────────────────────────────────────────
-            logger.info("VeoService: generating voiceover for job %s", video_id)
-            tts = ElevenLabsService()
-            await tts.text_to_speech(text=script, output_path=voice_path)
+            # ── 1. Generate voiceover via Google Cloud TTS (free) ─────────────
+            logger.info("VeoService: generating voiceover via Google TTS for job %s", video_id)
+            await self._google_tts(script, voice_path)
 
             # ── 2. Generate Veo clips concurrently ────────────────────────────
             scenes = _split_into_scenes(script, max_scenes=4)

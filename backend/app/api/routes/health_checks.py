@@ -144,14 +144,16 @@ async def run_checks() -> Dict[str, Any]:
             raise ValueError("BUFFER_ACCESS_TOKEN is not set — social scheduling disabled")
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(
-                "https://api.buffer.com/1/user.json",
-                headers={"Authorization": f"Bearer {token}"},
+                "https://api.buffer.com/1/profiles.json",
+                params={"access_token": token},
             )
             if r.status_code == 401:
-                raise ValueError("Invalid Buffer access token (401)")
-            r.raise_for_status()
-            data = r.json()
-        return f"Buffer connected — account: {data.get('name', 'unknown')}"
+                raise ValueError("Invalid Buffer access token — regenerate at buffer.com/app/account/apps")
+            if r.status_code not in (200, 400):
+                r.raise_for_status()
+            profiles = r.json() if r.status_code == 200 else []
+            count = len(profiles) if isinstance(profiles, list) else 0
+        return f"Buffer connected — {count} channel(s) linked"
 
     async def _ffmpeg():
         import subprocess
