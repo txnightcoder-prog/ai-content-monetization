@@ -7,6 +7,7 @@ Each check hits a real dependency and reports pass/fail/warning + a fix hint.
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import httpx
