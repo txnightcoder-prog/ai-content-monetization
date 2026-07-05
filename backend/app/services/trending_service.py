@@ -34,33 +34,30 @@ logger = logging.getLogger(__name__)
 
 _YT_API_BASE = "https://www.googleapis.com/youtube/v3"
 
-# YouTube category IDs — full mapping for every niche the frontend offers.
-# Reference: https://developers.google.com/youtube/v3/docs/videoCategories/list
-_YT_CATEGORY_IDS = {
-    # High-CPM niches
-    "AI tools":     "28",   # Science & Technology
-    "technology":   "28",   # Science & Technology
-    "education":    "27",   # Education
-    "finance":      "25",   # News & Politics (closest proxy for finance)
-    "side hustles": "22",   # People & Blogs (best proxy for side hustles/business)
-    "health":       "26",   # Howto & Style (wellness/fitness tutorials)
-    # Entertainment / lifestyle niches
-    "gaming":       "20",   # Gaming
-    "music":        "10",   # Music
-    "beauty":       "26",   # Howto & Style (beauty tutorials live here)
-    "food":         "26",   # Howto & Style (cooking/food channels)
-    "travel":       "19",   # Travel & Events
-    "sports":       "17",   # Sports
-    "comedy":       "23",   # Comedy
-    "kids":         "20",   # Film & Animation (closest; Family & Kids is 25/28 region-dependent)
-    "motivation":   "22",   # People & Blogs
-    "news":         "25",   # News & Politics
-    "pets":         "15",   # Pets & Animals
-    "diy":          "26",   # Howto & Style
-    "cars":         "2",    # Autos & Vehicles
-    "paranormal":   "22",   # People & Blogs (true crime/paranormal)
-    # Fallback
-    "default":      "28",
+# YouTube search keywords — used for the search/list endpoint which actually
+# respects niche filtering (the mostPopular+categoryId combo is unreliable).
+_YT_SEARCH_QUERIES = {
+    "AI tools":     "AI tools automation ChatGPT productivity",
+    "technology":   "tech review gadgets 2025",
+    "education":    "how to learn tutorial skills",
+    "finance":      "investing personal finance money 2025",
+    "side hustles": "side hustle make money online 2025",
+    "health":       "fitness workout health tips",
+    "gaming":       "gaming highlights gameplay 2025",
+    "music":        "new music release 2025",
+    "beauty":       "makeup tutorial skincare routine",
+    "food":         "recipe cooking food challenge",
+    "travel":       "travel vlog destination tips",
+    "sports":       "sports highlights training fitness",
+    "comedy":       "funny comedy sketch viral",
+    "kids":         "kids educational family friendly",
+    "motivation":   "motivation mindset self improvement",
+    "news":         "news current events 2025",
+    "pets":         "cute pets dogs cats animals viral",
+    "diy":          "DIY home improvement crafts",
+    "cars":         "car review automotive EV 2025",
+    "paranormal":   "true crime paranormal mystery unsolved",
+    "default":      "trending viral videos 2025",
 }
 
 # Human-readable niche descriptions used to sharpen the AI trending prompt
@@ -140,37 +137,61 @@ class TrendingService:
             logger.info("Trending/YouTube: no API key — using AI")
             return await self._ai_trending("YouTube", niche, count)
 
-        category_id = _YT_CATEGORY_IDS.get(niche, _YT_CATEGORY_IDS["default"])
-        params = {
-            "part":             "snippet,statistics",
-            "chart":            "mostPopular",
-            "regionCode":       "US",
-            "videoCategoryId":  category_id,
-            "maxResults":       count,
-            "key":              self._yt_key,
+        query = _YT_SEARCH_QUERIES.get(niche, _YT_SEARCH_QUERIES["default"])
+
+        # Step 1: search for niche-relevant video IDs sorted by view count
+        search_params = {
+            "part":       "snippet",
+            "q":          query,
+            "type":       "video",
+            "order":      "viewCount",
+            "regionCode": "US",
+            "maxResults": count,
+            "key":        self._yt_key,
         }
 
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.get(f"{_YT_API_BASE}/videos", params=params)
-                resp.raise_for_status()
-                data = resp.json()
+                search_resp = await client.get(f"{_YT_API_BASE}/search", params=search_params)
+                search_resp.raise_for_status()
+                search_data = search_resp.json()
+
+                # Step 2: fetch statistics for those video IDs
+                vid_ids = ",".join(
+                    item["id"]["videoId"]
+                    for item in search_data.get("items", [])
+                    if item.get("id", {}).get("videoId")
+                )
+                if not vid_ids:
+                    raise ValueError("No video IDs returned from search")
+
+                stats_resp = await client.get(f"{_YT_API_BASE}/videos", params={
+                    "part": "statistics",
+                    "id":   vid_ids,
+                    "key":  self._yt_key,
+                })
+                stats_resp.raise_for_status()
+                stats_by_id = {
+                    v["id"]: v.get("statistics", {})
+                    for v in stats_resp.json().get("items", [])
+                }
+
         except Exception as exc:
             logger.warning("Trending/YouTube API error: %s — falling back to AI", exc)
             return await self._ai_trending("YouTube", niche, count)
 
         items = []
-        for rank, item in enumerate(data.get("items", []), 1):
-            s  = item.get("snippet", {})
-            st = item.get("statistics", {})
-            vid_id = item.get("id", "")
+        for rank, item in enumerate(search_data.get("items", []), 1):
+            s      = item.get("snippet", {})
+            vid_id = item["id"]["videoId"]
+            st     = stats_by_id.get(vid_id, {})
             items.append({
                 "rank":          rank,
                 "title":         s.get("title", ""),
                 "creator":       s.get("channelTitle", ""),
                 "views":         _fmt_count(st.get("viewCount")),
-                "tags":          s.get("tags", [])[:6],
-                "why_trending":  "Currently in YouTube's Most Popular chart",
+                "tags":          [],
+                "why_trending":  f"Top viewed {niche} video on YouTube",
                 "use_for_niche": await self._suggest_angle(s.get("title", ""), niche),
                 "url":           f"https://www.youtube.com/watch?v={vid_id}",
             })
