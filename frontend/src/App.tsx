@@ -3346,6 +3346,68 @@ Example:
         </div>
       </div>
 
+      <div className="help-section" style={{ marginTop: '2rem', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '0.75rem', padding: '1.5rem' }}>
+        <h2 style={{ color: '#f1f5f9', marginBottom: '0.25rem' }}>💻 PowerShell Command Reference</h2>
+        <p style={{ color: '#64748b', fontSize: '0.875rem', marginBottom: '1.25rem' }}>Commonly used commands for managing this platform. Run from <code>C:\Users\JohnKirshy\Desktop\ai-content-monetization</code></p>
+
+        {[
+          {
+            category: '🚀 Deploy & Keys',
+            color: '#3b82f6',
+            commands: [
+              { cmd: '.\\SET_AZURE_ENV_VARS.ps1', desc: 'Push all API keys to Azure and restart the container' },
+              { cmd: 'git add -A && git commit -m "msg" && git push origin main', desc: 'Save all changes to GitHub — triggers auto-deploy to Azure' },
+              { cmd: 'git commit --allow-empty -m "Trigger deployment" && git push origin main', desc: 'Force a redeploy without any code changes' },
+            ]
+          },
+          {
+            category: '🔍 Diagnostics',
+            color: '#a78bfa',
+            commands: [
+              { cmd: 'Invoke-RestMethod -Uri "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/api/v1/health/video-provider"', desc: 'Check which video provider is active (Veo 3 or local)' },
+              { cmd: 'az containerapp logs show --name ai-content-backend --resource-group ai-video-pipeline --tail 50', desc: 'View live backend error logs from Azure' },
+              { cmd: 'az containerapp revision list --name ai-content-backend --resource-group ai-video-pipeline -o table', desc: 'Check which version is currently deployed' },
+            ]
+          },
+          {
+            category: '🗄️ Database',
+            color: '#10b981',
+            commands: [
+              { cmd: 'az containerapp exec --name ai-content-backend --resource-group ai-video-pipeline --command "alembic upgrade head"', desc: 'Run database migrations on the live Azure database' },
+            ]
+          },
+          {
+            category: '🔑 Test API Keys',
+            color: '#f59e0b',
+            commands: [
+              { cmd: 'Invoke-RestMethod -Uri "https://generativelanguage.googleapis.com/v1beta/models?key=$env:GOOGLE_API_KEY" | ConvertTo-Json -Depth 3', desc: 'Verify Google AI Studio key works and list available models' },
+              { cmd: '$h=@{"Authorization"="Bearer $env:OPENAI_API_KEY";"Content-Type"="application/json"}; Invoke-RestMethod -Uri "https://api.openai.com/v1/models" -Headers $h', desc: 'Verify OpenAI API key is valid' },
+            ]
+          },
+          {
+            category: '☁️ Azure',
+            color: '#0ea5e9',
+            commands: [
+              { cmd: 'az containerapp show --name ai-content-frontend --resource-group ai-video-pipeline --query "properties.configuration.ingress.fqdn" -o tsv', desc: 'Get the live frontend URL' },
+              { cmd: 'az containerapp show --name ai-content-backend --resource-group ai-video-pipeline --query "properties.configuration.ingress.fqdn" -o tsv', desc: 'Get the live backend API URL' },
+              { cmd: 'Start-Process "https://github.com/txnightcoder-prog/ai-content-monetization/actions"', desc: 'Open GitHub Actions to watch deployment progress' },
+            ]
+          },
+        ].map(group => (
+          <div key={group.category} style={{ marginBottom: '1.25rem' }}>
+            <h3 style={{ color: group.color, fontSize: '0.9rem', marginBottom: '0.6rem', fontWeight: 700 }}>{group.category}</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {group.commands.map((c, i) => (
+                <div key={i} style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '0.5rem', padding: '0.65rem 0.85rem' }}>
+                  <code style={{ color: '#7dd3fc', fontSize: '0.78rem', display: 'block', marginBottom: '0.25rem', wordBreak: 'break-all' }}>{c.cmd}</code>
+                  <span style={{ color: '#64748b', fontSize: '0.8rem' }}>{c.desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
       <div className="help-section" style={{
         marginTop: '2rem',
         background: 'rgba(34, 197, 94, 0.1)',
