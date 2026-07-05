@@ -2663,12 +2663,12 @@ function App() {
       <section className="pipeline">
         <h2>🚀 Your Content Pipeline</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
-          {[
+          {([
             { step: '1', icon: '🔍', label: 'Source', desc: 'Find trending topics & parrot viral videos', page: 'source' as const },
             { step: '2', icon: '✍️', label: 'Script', desc: 'AI-powered scripts & blueprints', page: 'scripts' as const },
             { step: '3', icon: videoProvider?.provider === 'veo' ? '🎬' : '🎞️', label: 'Video', desc: videoProvider?.provider === 'veo' ? 'Veo 3 AI-generated clips ✨' : videoProvider?.provider === 'local' ? 'Voiceover + stock footage' : 'Generate video', page: 'videos' as const },
             { step: '4', icon: '📤', label: 'Publish', desc: 'Upload to YouTube automatically', page: 'videos' as const },
-          ].map(s => (
+          ] as { step: string; icon: string; label: string; desc: string; page: 'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' }[]).map(s => (
             <button key={s.step} onClick={() => setCurrentPage(s.page)}
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1rem', textAlign: 'left', cursor: 'pointer', transition: 'border-color 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(59,130,246,0.5)')}
