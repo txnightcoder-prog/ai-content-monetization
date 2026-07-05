@@ -190,9 +190,7 @@ async def run_checks() -> Dict[str, Any]:
         # Critical — these block core features
         _check("Database",               "Set DATABASE_URL and restart. Check firewall rules.", _db()),
         _check("OpenAI API Key",         "Set OPENAI_API_KEY. Get a key at platform.openai.com/api-keys", _openai()),
-        _check("ElevenLabs API Key",     "Set ELEVENLABS_API_KEY. Get a free key at elevenlabs.io (10,000 chars/mo free).", _elevenlabs()),
-        _check("Pexels API Key",         "Set PEXELS_API_KEY. Get a free key at pexels.com/api (free, unlimited).", _pexels()),
-        _check("FFmpeg",                 "On Linux: apt-get install ffmpeg  On Windows: winget install Gyan.FFmpeg", _ffmpeg()),
+        _check("Google Veo 3 (AI video)", "Set GOOGLE_API_KEY. Get a key at aistudio.google.com/apikey", _veo()),
         # Important but non-critical
         _warn_check("YouTube OAuth (upload)",  "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN via console.cloud.google.com", _yt_oauth()),
         _warn_check("YouTube Data API Key",    "Set YOUTUBE_DATA_API_KEY at console.cloud.google.com → APIs → Credentials", _yt_data()),
@@ -222,7 +220,7 @@ async def run_checks() -> Dict[str, Any]:
 async def get_video_provider() -> Dict[str, str]:
     """
     Returns which video generation provider is currently active.
-    Priority: Veo (GOOGLE_API_KEY) > Local (ELEVENLABS + PEXELS) > none
+    Veo 3 is the only supported provider.
     """
     if os.getenv("GOOGLE_API_KEY"):
         return {
@@ -231,17 +229,10 @@ async def get_video_provider() -> Dict[str, str]:
             "detail":   "AI-generated video clips via Google DeepMind Veo",
             "color":    "#10b981",
         }
-    if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
-        return {
-            "provider": "local",
-            "label":    "Faceless Video",
-            "detail":   "ElevenLabs voiceover + Pexels stock footage + FFmpeg",
-            "color":    "#3b82f6",
-        }
     return {
         "provider": "none",
         "label":    "No video provider configured",
-        "detail":   "Set GOOGLE_API_KEY (Veo) or ELEVENLABS_API_KEY + PEXELS_API_KEY",
+        "detail":   "Set GOOGLE_API_KEY to enable Veo 3 AI video generation. Get a key at aistudio.google.com/apikey",
         "color":    "#ef4444",
     }
 
