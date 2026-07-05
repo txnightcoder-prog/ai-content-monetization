@@ -1089,7 +1089,7 @@ function App() {
                       ...(blueprint.structure.sections?.flatMap(s => [``, `## ${s.title}`, s.content]) ?? []),
                       ``, `OUTRO / CTA`, blueprint.structure.outro ?? '',
                       ``, `THUMBNAIL IDEAS`,
-                      ...(blueprint.thumbnail_ideas?.map(t => `• ${t}`) ?? []),
+                      ...(blueprint.thumbnail_ideas?.map(t => `• ${typeof t === 'string' ? t : `${t.headline ?? ''}${t.visual ? ` — ${t.visual}` : ''}${t.style ? ` (${t.style})` : ''}`}`) ?? []),
                     ].join('\n');
                     const blob = new Blob([lines], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
@@ -3154,7 +3154,7 @@ Example:
               <h3>🧲 Thumbnail Ideas</h3>
               <ul className="thumbnail-ideas">
                 {generatedBlueprint.thumbnail_ideas.map((idea, index) => (
-                  <li key={index}>{typeof idea === 'string' ? idea : `${idea.headline ?? ''}${idea.visual ? ` — ${idea.visual}` : ''}${idea.style ? ` (${idea.style})` : ''}`}</li>
+                  <li key={index}>{idea}</li>
                 ))}
               </ul>
             </div>
