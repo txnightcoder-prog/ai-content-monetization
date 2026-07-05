@@ -3217,10 +3217,11 @@ Example:
             <li><strong>CapCut:</strong> Add voiceover, edit, and export as MP4</li>
             <li><strong>Pexels:</strong> Free stock footage and images</li>
           </ul>
-          <p style={{ marginTop: '1rem' }}><strong>Automated Creation (Coming Soon):</strong></p>
+          <p style={{ marginTop: '1rem' }}><strong>Automated Creation (Active — Veo 3):</strong></p>
           <ul>
-            <li>Set ELEVENLABS_API_KEY + PEXELS_API_KEY to automate video generation (free tier available)</li>
-            <li>Videos created automatically: AI voiceover + stock footage + captions</li>
+            <li>Set <code>GOOGLE_API_KEY</code> from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{color:'#60a5fa'}}>aistudio.google.com/apikey</a></li>
+            <li>Veo 3 generates the full video — AI clips, voiceover, and captions automatically</li>
+            <li>No ElevenLabs or Pexels needed</li>
           </ul>
         </div>
 
@@ -3355,9 +3356,11 @@ Example:
             category: '🚀 Deploy & Keys',
             color: '#3b82f6',
             commands: [
-              { cmd: '.\\SET_AZURE_ENV_VARS.ps1', desc: 'Push all API keys to Azure and restart the container' },
-              { cmd: 'git add -A && git commit -m "msg" && git push origin main', desc: 'Save all changes to GitHub — triggers auto-deploy to Azure' },
-              { cmd: 'git commit --allow-empty -m "Trigger deployment" && git push origin main', desc: 'Force a redeploy without any code changes' },
+              { cmd: 'cd "C:\\Users\\JohnKirshy\\Desktop\\ai-content-monetization"', desc: 'Navigate to the project folder — always do this first before running any command' },
+              { cmd: '$env:OPENAI_API_KEY = "sk-..."; $env:GOOGLE_API_KEY = "AQ...."; $env:ELEVENLABS_API_KEY = "sk_..."; .\\SET_AZURE_ENV_VARS.ps1', desc: 'Set all API keys in current shell then push to Azure in one shot' },
+              { cmd: '.\\SET_AZURE_ENV_VARS.ps1', desc: 'Push all API keys already set in shell to Azure and restart the container' },
+              { cmd: 'git add -A; git commit -m "msg"; git push origin main', desc: 'Save all changes to GitHub — triggers auto-deploy to Azure (~3-5 min)' },
+              { cmd: 'git commit --allow-empty -m "Trigger deployment"; git push origin main', desc: 'Force a redeploy to Azure without any code changes' },
             ]
           },
           {
@@ -3365,6 +3368,7 @@ Example:
             color: '#a78bfa',
             commands: [
               { cmd: 'Invoke-RestMethod -Uri "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/api/v1/health/video-provider"', desc: 'Check which video provider is active (Veo 3 or local)' },
+              { cmd: 'Invoke-RestMethod -Uri "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/api/v1/health/checks" | ConvertTo-Json -Depth 10', desc: 'Run all system health checks and see pass/fail for every service' },
               { cmd: 'az containerapp logs show --name ai-content-backend --resource-group ai-video-pipeline --tail 50', desc: 'View live backend error logs from Azure' },
               { cmd: 'az containerapp revision list --name ai-content-backend --resource-group ai-video-pipeline -o table', desc: 'Check which version is currently deployed' },
             ]
@@ -3373,15 +3377,16 @@ Example:
             category: '🗄️ Database',
             color: '#10b981',
             commands: [
-              { cmd: 'az containerapp exec --name ai-content-backend --resource-group ai-video-pipeline --command "alembic upgrade head"', desc: 'Run database migrations on the live Azure database' },
+              { cmd: 'az containerapp exec --name ai-content-backend --resource-group ai-video-pipeline --command "alembic upgrade head"', desc: 'Run database migrations on the live Azure database — do this after schema changes' },
             ]
           },
           {
             category: '🔑 Test API Keys',
             color: '#f59e0b',
             commands: [
-              { cmd: 'Invoke-RestMethod -Uri "https://generativelanguage.googleapis.com/v1beta/models?key=$env:GOOGLE_API_KEY" | ConvertTo-Json -Depth 3', desc: 'Verify Google AI Studio key works and list available models' },
-              { cmd: '$h=@{"Authorization"="Bearer $env:OPENAI_API_KEY";"Content-Type"="application/json"}; Invoke-RestMethod -Uri "https://api.openai.com/v1/models" -Headers $h', desc: 'Verify OpenAI API key is valid' },
+              { cmd: 'Invoke-RestMethod -Uri "https://generativelanguage.googleapis.com/v1beta/models?key=$env:GOOGLE_API_KEY" | ConvertTo-Json -Depth 3', desc: 'Verify Google AI Studio / Veo 3 key works and list available models' },
+              { cmd: '$h=@{"Authorization"="Bearer $env:OPENAI_API_KEY";"Content-Type"="application/json"}; $b=\'{"model":"gpt-4o-mini","messages":[{"role":"user","content":"ping"}],"max_tokens":5}\'; Invoke-RestMethod -Uri "https://api.openai.com/v1/chat/completions" -Method Post -Headers $h -Body $b', desc: 'Verify OpenAI API key works — should return a chat completion response' },
+              { cmd: '$h=@{"xi-api-key"="sk_..."}; Invoke-RestMethod -Uri "https://api.elevenlabs.io/v1/user" -Headers $h', desc: 'Check ElevenLabs account status and remaining credits' },
             ]
           },
           {
@@ -3390,7 +3395,18 @@ Example:
             commands: [
               { cmd: 'az containerapp show --name ai-content-frontend --resource-group ai-video-pipeline --query "properties.configuration.ingress.fqdn" -o tsv', desc: 'Get the live frontend URL' },
               { cmd: 'az containerapp show --name ai-content-backend --resource-group ai-video-pipeline --query "properties.configuration.ingress.fqdn" -o tsv', desc: 'Get the live backend API URL' },
+              { cmd: 'az containerapp auth update --name ai-content-frontend --resource-group ai-video-pipeline --enabled false', desc: 'Disable Easy Auth if locked out of the frontend' },
+              { cmd: 'az containerapp auth update --name ai-content-backend --resource-group ai-video-pipeline --enabled false', desc: 'Disable Easy Auth if locked out of the backend' },
+              { cmd: 'az account show --query "{tenantId:tenantId}" -o tsv', desc: 'Get your Azure tenant ID' },
               { cmd: 'Start-Process "https://github.com/txnightcoder-prog/ai-content-monetization/actions"', desc: 'Open GitHub Actions to watch deployment progress' },
+              { cmd: 'Start-Process "https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"', desc: 'Open the live frontend app in browser' },
+            ]
+          },
+          {
+            category: '🧪 Test Video Generation',
+            color: '#f472b6',
+            commands: [
+              { cmd: '$h=@{"Content-Type"="application/json"}; $b=\'{"topic":"how to save money","style":"educational","duration":30}\'; Invoke-RestMethod -Uri "https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/api/v1/videos/generate" -Method Post -Headers $h -Body $b | ConvertTo-Json -Depth 10', desc: 'Trigger a test video generation directly via API' },
             ]
           },
         ].map(group => (
