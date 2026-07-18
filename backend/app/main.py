@@ -34,14 +34,24 @@ from sqlalchemy import text
 def _migrate_add_columns():
     """
     Safe, idempotent schema migrations — adds new columns to existing tables.
-    Uses IF NOT EXISTS (PostgreSQL 9.6+) so it's safe to run on every startup.
+    Dialect-aware: uses PostgreSQL IF NOT EXISTS syntax where available,
+    falls back to a try/except for SQLite (which has no IF NOT EXISTS on ALTER).
     """
     from app.core.database import engine
-    migrations = [
-        "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",
-        # Make script_id nullable to support manually uploaded videos
-        "ALTER TABLE videos ALTER COLUMN script_id DROP NOT NULL",
-    ]
+    is_sqlite = engine.dialect.name == "sqlite"
+
+    if is_sqlite:
+        # SQLite: attempt each ALTER and silently skip if column already exists
+        migrations = [
+            "ALTER TABLE videos ADD COLUMN error_message VARCHAR(1000)",
+        ]
+    else:
+        # PostgreSQL: IF NOT EXISTS is safe to run every startup
+        migrations = [
+            "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",
+            "ALTER TABLE videos ALTER COLUMN script_id DROP NOT NULL",
+        ]
+
     with engine.connect() as conn:
         for sql in migrations:
             try:

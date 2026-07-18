@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -228,6 +228,28 @@ function App() {
   const [publishLoading, setPublishLoading]     = useState(false);
   const [publishSuccess, setPublishSuccess]     = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── AI Video Editor state ─────────────────────────────────────────────────
+  type VoiceOption  = { id: string; label: string };
+  type MusicTrack   = { id: string; label: string; url: string | null };
+  type CaptionStyle = { id: string; label: string };
+  const [editorOpen, setEditorOpen]           = useState(false);
+  const [editorVideoId, setEditorVideoId]     = useState('');
+  const [editorVoiceId, setEditorVoiceId]     = useState('');
+  const [editorBroll, setEditorBroll]         = useState('');
+  const [editorMusicId, setEditorMusicId]     = useState('none');
+  const [editorMusicVol, setEditorMusicVol]   = useState(0.15);
+  const [editorCaptionStyle, setEditorCaptionStyle] = useState('timed');
+  const [editorLoading, setEditorLoading]     = useState(false);
+  const [editorError, setEditorError]         = useState('');
+  const [voices, setVoices]                   = useState<VoiceOption[]>([]);
+  const [musicTracks, setMusicTracks]         = useState<MusicTrack[]>([]);
+  const [captionStyles, setCaptionStyles]     = useState<CaptionStyle[]>([]);
+
+  // ── Trending auto-queue state ─────────────────────────────────────────────
+  const [autoQueueLoading, setAutoQueueLoading] = useState(false);
+  const [autoQueueResult, setAutoQueueResult]   = useState<{count:number;topics:string[];scripts:{id:string;topic:string;hook:string}[]} | null>(null);
+  const [autoQueueError, setAutoQueueError]     = useState('');
   // Script preview + edit
   const [previewScript, setPreviewScript]       = useState<Script | null>(null);
   const [scriptPreviewLoading, setScriptPreviewLoading] = useState(false);
@@ -298,6 +320,86 @@ function App() {
       }
     } catch { /* ignore */ }
     finally { setAllVideosLoading(false); }
+  };
+
+  // Load editor reference data once
+  const loadEditorOptions = async () => {
+    try {
+      const [vRes, mRes, cRes] = await Promise.all([
+        fetch(`${API_BASE}/api/v1/videos/voices`),
+        fetch(`${API_BASE}/api/v1/videos/music-tracks`),
+        fetch(`${API_BASE}/api/v1/videos/caption-styles`),
+      ]);
+      if (vRes.ok) setVoices((await vRes.json()).voices ?? []);
+      if (mRes.ok) setMusicTracks((await mRes.json()).tracks ?? []);
+      if (cRes.ok) setCaptionStyles((await cRes.json()).styles ?? []);
+    } catch { /* silently ignore — editor still works with defaults */ }
+  };
+
+  const openEditor = (videoId: string) => {
+    setEditorVideoId(videoId);
+    setEditorVoiceId('');
+    setEditorBroll('');
+    setEditorMusicId('none');
+    setEditorMusicVol(0.15);
+    setEditorCaptionStyle('timed');
+    setEditorError('');
+    setEditorOpen(true);
+    if (voices.length === 0) loadEditorOptions();
+  };
+
+  const submitEdit = async () => {
+    if (!editorVideoId) return;
+    setEditorLoading(true); setEditorError('');
+    try {
+      const body: Record<string, unknown> = {};
+      if (editorVoiceId)  body.voice_id = editorVoiceId;
+      if (editorBroll.trim()) body.broll_keywords = editorBroll.trim();
+      if (editorMusicId !== 'none') body.music_id = editorMusicId;
+      body.caption_style = editorCaptionStyle;
+      body.music_volume = editorMusicVol;
+
+      const res = await fetch(`${API_BASE}/api/v1/videos/${editorVideoId}/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const video: VideoRecord = await res.json();
+      setActiveVideo(video);
+      setAllVideos(prev => prev.map(v => v.id === video.id ? video : v));
+      setEditorOpen(false);
+      // Start polling
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(() => pollVideo(video.id), 10_000);
+    } catch (err) {
+      setEditorError(err instanceof Error ? err.message : 'Edit failed');
+    } finally {
+      setEditorLoading(false);
+    }
+  };
+
+  // Auto-queue: fetch trending → generate scripts for all in one click
+  const runAutoQueue = async () => {
+    setAutoQueueLoading(true); setAutoQueueError(''); setAutoQueueResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/scripts/trending-to-queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: trendNiche, count: 5 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const data = await res.json();
+      setAutoQueueResult(data);
+      // Add generated scripts to the scripts list
+      if (data.scripts?.length) {
+        setScripts(prev => [...(data.scripts as Script[]), ...prev]);
+      }
+    } catch (err) {
+      setAutoQueueError(err instanceof Error ? err.message : 'Auto-queue failed');
+    } finally {
+      setAutoQueueLoading(false);
+    }
   };
 
   const startGenerate = async () => {
@@ -494,6 +596,18 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* ── Creatify AI Avatar Video Creator ── */}
+      <CreatifyPanel
+        apiBase={API_BASE}
+        onVideoCreated={(video: VideoRecord) => {
+          setActiveVideo(video);
+          setAllVideos(prev => [video, ...prev.filter(v => v.id !== video.id)]);
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = setInterval(() => pollVideo(video.id), 10_000);
+        }}
+        onNavigateScripts={() => setCurrentPage('scripts')}
+      />
 
       {/* Step 1 — paste script ID */}
       <div className="generator-form">
@@ -738,6 +852,94 @@ function App() {
       {/* Viral Variations section */}
       {renderVariations()}
 
+      {/* ── AI Video Editor modal ── */}
+      {editorOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+          onClick={() => setEditorOpen(false)}>
+          <div style={{ background: '#0f172a', border: '1px solid rgba(167,139,250,0.35)', borderRadius: '1rem', padding: '1.75rem', maxWidth: '480px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h2 style={{ color: '#a78bfa', margin: 0, fontSize: '1.1rem' }}>✏️ AI Video Editor</h2>
+              <button onClick={() => setEditorOpen(false)}
+                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.25rem', lineHeight: 1 }}>✕</button>
+            </div>
+            <p style={{ color: '#64748b', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
+              Editing video <code style={{ color: '#a78bfa' }}>{editorVideoId.slice(0, 12)}…</code> — choose new voice, B-roll keywords, music and caption style. A new version will be generated.
+            </p>
+
+            {/* Voice picker */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.4rem' }}>Voice (ElevenLabs)</label>
+              <select value={editorVoiceId} onChange={e => setEditorVoiceId(e.target.value)}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}>
+                <option value="">Keep current voice</option>
+                {voices.map(v => <option key={v.id} value={v.id}>{v.label}</option>)}
+              </select>
+            </div>
+
+            {/* B-roll keywords */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.4rem' }}>B-Roll Keywords (Pexels)</label>
+              <input type="text" value={editorBroll} onChange={e => setEditorBroll(e.target.value)}
+                placeholder="e.g. technology, office, coding"
+                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+              <p style={{ color: '#475569', fontSize: '0.75rem', margin: '0.3rem 0 0' }}>Comma-separated. Leave blank to keep existing footage.</p>
+            </div>
+
+            {/* Music picker */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.4rem' }}>Background Music</label>
+              <select value={editorMusicId} onChange={e => setEditorMusicId(e.target.value)}
+                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}>
+                {musicTracks.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+              {editorMusicId !== 'none' && (
+                <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <label style={{ color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>Volume: {Math.round(editorMusicVol * 100)}%</label>
+                  <input type="range" min={0} max={1} step={0.05} value={editorMusicVol}
+                    onChange={e => setEditorMusicVol(parseFloat(e.target.value))}
+                    style={{ flex: 1 }} />
+                </div>
+              )}
+            </div>
+
+            {/* Caption style */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.4rem' }}>Caption Style</label>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {captionStyles.length > 0
+                  ? captionStyles.map(c => (
+                      <button key={c.id} onClick={() => setEditorCaptionStyle(c.id)}
+                        style={{ flex: 1, background: editorCaptionStyle === c.id ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${editorCaptionStyle === c.id ? '#a78bfa' : 'rgba(148,163,184,0.2)'}`, color: editorCaptionStyle === c.id ? '#a78bfa' : '#94a3b8', borderRadius: '0.375rem', padding: '0.5rem 0', cursor: 'pointer', fontWeight: editorCaptionStyle === c.id ? 700 : 400, fontSize: '0.8rem' }}>
+                        {c.label}
+                      </button>
+                    ))
+                  : [['timed','Timed'],['none','None']].map(([id, label]) => (
+                      <button key={id} onClick={() => setEditorCaptionStyle(id)}
+                        style={{ flex: 1, background: editorCaptionStyle === id ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${editorCaptionStyle === id ? '#a78bfa' : 'rgba(148,163,184,0.2)'}`, color: editorCaptionStyle === id ? '#a78bfa' : '#94a3b8', borderRadius: '0.375rem', padding: '0.5rem 0', cursor: 'pointer', fontWeight: editorCaptionStyle === id ? 700 : 400, fontSize: '0.8rem' }}>
+                        {label}
+                      </button>
+                    ))
+                }
+              </div>
+            </div>
+
+            {editorError && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#fca5a5', fontSize: '0.875rem', marginBottom: '1rem' }}>{editorError}</div>}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={submitEdit} disabled={editorLoading}
+                style={{ flex: 1, background: editorLoading ? 'rgba(167,139,250,0.25)' : 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem', fontWeight: 800, fontSize: '0.95rem', cursor: editorLoading ? 'not-allowed' : 'pointer' }}>
+                {editorLoading ? '⏳ Regenerating…' : '🎬 Regenerate Video'}
+              </button>
+              <button onClick={() => setEditorOpen(false)}
+                style={{ background: 'rgba(100,116,139,0.15)', border: '1px solid rgba(100,116,139,0.3)', color: '#94a3b8', borderRadius: '0.6rem', padding: '0.85rem 1.25rem', cursor: 'pointer', fontWeight: 600 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── All videos from DB ── */}
       <div className="scripts-history" style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -798,6 +1000,20 @@ function App() {
                       onClick={e => { e.stopPropagation(); setActiveVideo(v); setPublishSuccess(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                       style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
                       ▶ Upload to YouTube
+                    </button>
+                  )}
+                  {v.status === 'ready' && (
+                    <a href={`${API_BASE}/api/v1/videos/${v.id}/srt`} download
+                      onClick={e => e.stopPropagation()}
+                      style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'none', display: 'inline-block' }}>
+                      📝 SRT
+                    </a>
+                  )}
+                  {(v.status === 'ready' || v.status === 'failed') && (
+                    <button
+                      onClick={e => { e.stopPropagation(); openEditor(v.id); }}
+                      style={{ background: 'rgba(167,139,250,0.12)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.8125rem', fontWeight: 600, cursor: 'pointer' }}>
+                      ✏️ Edit
                     </button>
                   )}
                   {v.status === 'failed' && (
@@ -1290,9 +1506,40 @@ function App() {
           </select>
         </div>
         {trendError && <div className="error-message">{trendError}</div>}
-        <button className="generate-button" onClick={fetchTrending} disabled={trendLoading}>
-          {trendLoading ? '🔍 Fetching trends…' : '🔥 Fetch Trending Now'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button className="generate-button" onClick={fetchTrending} disabled={trendLoading} style={{ flex: '1 1 200px', margin: 0 }}>
+            {trendLoading ? '🔍 Fetching trends…' : '🔥 Fetch Trending Now'}
+          </button>
+          <button
+            onClick={runAutoQueue}
+            disabled={autoQueueLoading || trendLoading}
+            style={{ flex: '1 1 200px', background: autoQueueLoading ? 'rgba(245,158,11,0.25)' : 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 800, fontSize: '0.9375rem', cursor: autoQueueLoading ? 'not-allowed' : 'pointer', opacity: autoQueueLoading ? 0.7 : 1 }}>
+            {autoQueueLoading ? '⏳ Generating scripts…' : '⚡ Auto-Script All Trends'}
+          </button>
+        </div>
+
+        {autoQueueError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{autoQueueError}</div>}
+        {autoQueueResult && (
+          <div style={{ marginTop: '1rem', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+            <p style={{ color: '#fbbf24', fontWeight: 700, margin: '0 0 0.5rem' }}>
+              ✅ {autoQueueResult.count} scripts generated and saved!
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+              {autoQueueResult.scripts.map(s => (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '0.375rem', padding: '0.4rem 0.75rem' }}>
+                  <span style={{ color: '#e2e8f0', fontSize: '0.8125rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.topic}</span>
+                  <button onClick={() => copyId(s.id)}
+                    style={{ background: copiedId === s.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', border: `1px solid ${copiedId === s.id ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.25)'}`, color: copiedId === s.id ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.2rem 0.55rem', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', flexShrink: 0 }}>
+                    {copiedId === s.id ? '✓ Copied' : '📋 Copy ID'}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: '0.75rem', marginBottom: 0 }}>
+              Go to <button className="inline-link" onClick={() => setCurrentPage('videos')}>🎬 Videos</button> and paste a Script ID to generate a video from any of these.
+            </p>
+          </div>
+        )}
       </div>
 
       {trendResult && (
@@ -3500,9 +3747,15 @@ Example:
       <nav className="navbar">
         <div className="nav-brand">
           AI Content Publisher
+          <span style={{ marginLeft: '0.5rem', color: '#475569', fontSize: '0.7rem', fontWeight: 400, verticalAlign: 'middle' }}>v1.0</span>
           {videoProvider?.provider === 'veo' && (
             <span style={{ marginLeft: '0.6rem', background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
               ✨ Veo 3 Active
+            </span>
+          )}
+          {videoProvider?.provider === 'local' && (
+            <span style={{ marginLeft: '0.6rem', background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
+              🎞️ Local Pipeline
             </span>
           )}
         </div>
@@ -3623,5 +3876,356 @@ Example:
 }
 
 export default App;
+
+
+// ── CreatifyPanel — self-contained Creatify AI Avatar Video creator ──────────
+
+interface CreatifyAvatar { id: string; avatar_name?: string; name?: string; gender?: string; preview_image_url?: string; preview_video_url?: string; }
+interface CreatifyVoice  { id: string; name: string; language?: string; gender?: string; preview_audio_url?: string; }
+
+interface CreatifyPanelProps {
+  apiBase: string;
+  onVideoCreated: (video: VideoRecord) => void;
+  onNavigateScripts: () => void;
+}
+
+function CreatifyPanel({ apiBase, onVideoCreated, onNavigateScripts }: CreatifyPanelProps) {
+  const [open, setOpen]               = React.useState(false);
+  const [tab, setTab]                 = React.useState<'script' | 'url'>('script');
+  // ── Script → Avatar Video ─────────────────────────────────────────────────
+  const [scriptId, setScriptId]       = React.useState('');
+  const [avatarId, setAvatarId]       = React.useState('');
+  const [voiceId, setVoiceId]         = React.useState('');
+  const [aspect, setAspect]           = React.useState('9:16');
+  const [captionStyle, setCaptionStyle] = React.useState('normal');
+  // ── URL → Video Ad ────────────────────────────────────────────────────────
+  const [adUrl, setAdUrl]             = React.useState('');
+  const [visualStyle, setVisualStyle] = React.useState('dynamic');
+  const [scriptStyle, setScriptStyle] = React.useState('engaging');
+  const [adAspect, setAdAspect]       = React.useState('9:16');
+  const [adAvatarId, setAdAvatarId]   = React.useState('');
+  // ── Shared ────────────────────────────────────────────────────────────────
+  const [avatars, setAvatars]         = React.useState<CreatifyAvatar[]>([]);
+  const [voices, setVoices]           = React.useState<CreatifyVoice[]>([]);
+  const [refLoading, setRefLoading]   = React.useState(false);
+  const [refError, setRefError]       = React.useState('');
+  const [loading, setLoading]         = React.useState(false);
+  const [error, setError]             = React.useState('');
+  const [success, setSuccess]         = React.useState('');
+  const [configured, setConfigured]   = React.useState<boolean | null>(null);
+
+  // Check if Creatify is configured by attempting to load avatars
+  const checkAndLoad = async () => {
+    if (avatars.length > 0) { setOpen(true); return; }
+    setRefLoading(true); setRefError(''); setOpen(true);
+    try {
+      const [aRes, vRes] = await Promise.all([
+        fetch(`${apiBase}/api/v1/videos/creatify/avatars`),
+        fetch(`${apiBase}/api/v1/videos/creatify/voices`),
+      ]);
+      if (aRes.status === 503) {
+        const e = await aRes.json();
+        setRefError(e.detail ?? 'Creatify not configured');
+        setConfigured(false);
+        return;
+      }
+      if (aRes.ok) { setAvatars((await aRes.json()).avatars ?? []); setConfigured(true); }
+      if (vRes.ok) { setVoices((await vRes.json()).voices ?? []); }
+    } catch { setRefError('Could not reach backend'); }
+    finally { setRefLoading(false); }
+  };
+
+  // Submit: Script → Avatar Video
+  const submit = async () => {
+    if (!scriptId.trim()) { setError('Paste a Script ID first'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const res = await fetch(`${apiBase}/api/v1/videos/creatify/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          script_id:     scriptId.trim(),
+          avatar_id:     avatarId   || undefined,
+          voice_id:      voiceId    || undefined,
+          aspect_ratio:  aspect,
+          caption_style: captionStyle,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const video: VideoRecord = await res.json();
+      setSuccess(`✅ Creatify avatar video started! ID: ${video.id.slice(0,8)}… — ready in ~2 min`);
+      onVideoCreated(video);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Creatify create failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Submit: URL → Video Ad
+  const submitUrl = async () => {
+    if (!adUrl.trim()) { setError('Enter a URL first'); return; }
+    setLoading(true); setError(''); setSuccess('');
+    try {
+      const res = await fetch(`${apiBase}/api/v1/videos/creatify/link-to-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url:          adUrl.trim(),
+          aspect_ratio: adAspect,
+          visual_style: visualStyle,
+          script_style: scriptStyle,
+          avatar_id:    adAvatarId || undefined,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const video: VideoRecord = await res.json();
+      setSuccess(`✅ Link-to-Video started! ID: ${video.id.slice(0,8)}… — Creatify is building your ad (~2–4 min)`);
+      onVideoCreated(video);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Link-to-video failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const avatarName = (a: CreatifyAvatar) => a.avatar_name || a.name || a.id.slice(0, 12);
+  const voiceName  = (v: CreatifyVoice)  => `${v.name}${v.language ? ` (${v.language})` : ''}${v.gender ? ` · ${v.gender}` : ''}`;
+
+  return (
+    <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.28)', borderRadius: '0.875rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <h3 style={{ color: '#34d399', margin: 0, fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            🎭 Creatify AI Avatar Video
+            <span style={{ background: 'rgba(16,185,129,0.18)', border: '1px solid rgba(16,185,129,0.35)', color: '#6ee7b7', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>CONNECTED</span>
+          </h3>
+          <p style={{ color: '#64748b', fontSize: '0.8125rem', margin: '0.2rem 0 0' }}>
+            Create a talking AI avatar video from any script — using your Creatify subscription
+          </p>
+        </div>
+        <button
+          onClick={checkAndLoad}
+          style={{ background: 'linear-gradient(135deg,#34d399,#059669)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {open ? '▲ Collapse' : '🎭 Create with Creatify'}
+        </button>
+      </div>
+
+      {success && <div style={{ marginTop: '0.75rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#6ee7b7', fontSize: '0.875rem' }}>{success}</div>}
+
+      {open && (
+        <div style={{ marginTop: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+          {/* Mode tabs */}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={() => { setTab('script'); setError(''); }}
+              style={{ flex: 1, padding: '0.55rem 0', borderRadius: '0.5rem', border: `2px solid ${tab === 'script' ? '#34d399' : 'rgba(148,163,184,0.2)'}`, background: tab === 'script' ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)', color: tab === 'script' ? '#34d399' : '#64748b', fontWeight: tab === 'script' ? 700 : 400, cursor: 'pointer', fontSize: '0.875rem' }}>
+              🎭 Script → Avatar Video
+            </button>
+            <button onClick={() => { setTab('url'); setError(''); }}
+              style={{ flex: 1, padding: '0.55rem 0', borderRadius: '0.5rem', border: `2px solid ${tab === 'url' ? '#34d399' : 'rgba(148,163,184,0.2)'}`, background: tab === 'url' ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.03)', color: tab === 'url' ? '#34d399' : '#64748b', fontWeight: tab === 'url' ? 700 : 400, cursor: 'pointer', fontSize: '0.875rem' }}>
+              🔗 URL → Video Ad
+            </button>
+          </div>
+
+          {refLoading && <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>⏳ Loading avatars and voices…</p>}
+
+          {refError && (
+            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+              <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: 0 }}>⚠️ {refError}</p>
+              {configured === false && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <p style={{ color: '#94a3b8', fontSize: '0.8125rem', margin: 0 }}>
+                    To connect Creatify: add <code style={{ background: 'rgba(255,255,255,0.08)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>CREATIFY_API_ID</code> and{' '}
+                    <code style={{ background: 'rgba(255,255,255,0.08)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>CREATIFY_API_KEY</code> to your <code>.env</code> file.
+                  </p>
+                  <a href="https://app.creatify.ai" target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: '0.4rem', color: '#34d399', fontSize: '0.8125rem', textDecoration: 'underline' }}>
+                    👉 Get API keys at app.creatify.ai → Settings → API →
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
+          {configured !== false && !refLoading && (
+            <>
+              {/* ── URL → Video Ad tab ── */}
+              {tab === 'url' && (
+                <>
+                  <div style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '0.5rem', padding: '0.75rem 1rem' }}>
+                    <p style={{ color: '#6ee7b7', fontSize: '0.8125rem', margin: 0 }}>
+                      Paste any URL — product page, landing page, App Store listing, or website. Creatify automatically reads it, writes an ad script, and creates a video with an AI avatar.
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Product / Page URL *</label>
+                    <input type="url" value={adUrl} onChange={e => setAdUrl(e.target.value)} disabled={loading}
+                      placeholder="https://yoursite.com/product or App Store URL"
+                      style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 160px' }}>
+                      <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Visual Style</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {['dynamic','minimalist','cinematic','social'].map(s => (
+                          <button key={s} onClick={() => setVisualStyle(s)}
+                            style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${visualStyle === s ? '#34d399' : 'rgba(148,163,184,0.2)'}`, background: visualStyle === s ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.03)', color: visualStyle === s ? '#34d399' : '#94a3b8', fontWeight: visualStyle === s ? 700 : 400, cursor: 'pointer', fontSize: '0.78rem' }}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ flex: '1 1 160px' }}>
+                      <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Script Style</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {['engaging','informative','storytelling','direct'].map(s => (
+                          <button key={s} onClick={() => setScriptStyle(s)}
+                            style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${scriptStyle === s ? '#34d399' : 'rgba(148,163,184,0.2)'}`, background: scriptStyle === s ? 'rgba(16,185,129,0.18)' : 'rgba(255,255,255,0.03)', color: scriptStyle === s ? '#34d399' : '#94a3b8', fontWeight: scriptStyle === s ? 700 : 400, cursor: 'pointer', fontSize: '0.78rem' }}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Aspect Ratio</label>
+                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                      {['9:16', '16:9', '1:1'].map(r => (
+                        <button key={r} onClick={() => setAdAspect(r)}
+                          style={{ flex: 1, background: adAspect === r ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${adAspect === r ? '#34d399' : 'rgba(148,163,184,0.2)'}`, color: adAspect === r ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.45rem 0', cursor: 'pointer', fontWeight: adAspect === r ? 700 : 400, fontSize: '0.8rem' }}>
+                          {r === '9:16' ? '📱 9:16' : r === '16:9' ? '🖥 16:9' : '⬜ 1:1'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {error && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#fca5a5', fontSize: '0.875rem' }}>{error}</div>}
+                  <button onClick={submitUrl} disabled={loading || !adUrl.trim()}
+                    style={{ background: loading || !adUrl.trim() ? 'rgba(16,185,129,0.25)' : 'linear-gradient(135deg,#34d399,#059669)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem 1.5rem', fontWeight: 800, fontSize: '1rem', cursor: loading || !adUrl.trim() ? 'not-allowed' : 'pointer', opacity: loading || !adUrl.trim() ? 0.7 : 1 }}>
+                    {loading ? '⏳ Creating ad…' : '🔗 Generate Video Ad from URL'}
+                  </button>
+                  <p style={{ color: '#475569', fontSize: '0.78rem', margin: 0 }}>⏱ Creatify scrapes the page, writes the script, and renders — typically 2–4 minutes.</p>
+                </>
+              )}
+
+              {/* ── Script → Avatar Video tab ── */}
+              {tab === 'script' && <>
+              {/* Script ID */}
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>
+                  Script ID *
+                </label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <input
+                    type="text"
+                    value={scriptId}
+                    onChange={e => setScriptId(e.target.value)}
+                    placeholder="e.g. cadb45d7-623f-4364-91e5-f3b017a1892c"
+                    disabled={loading}
+                    style={{ flex: '1 1 260px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}
+                  />
+                  <button onClick={onNavigateScripts}
+                    style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    ✍️ Go to Scripts
+                  </button>
+                </div>
+              </div>
+
+              {/* Avatar picker */}
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>
+                  AI Avatar {avatars.length > 0 && `(${avatars.length} available)`}
+                </label>
+                {avatars.length > 0 ? (
+                  <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <div
+                      onClick={() => setAvatarId('')}
+                      style={{ border: `2px solid ${!avatarId ? '#34d399' : 'rgba(148,163,184,0.2)'}`, borderRadius: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', background: !avatarId ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)', color: !avatarId ? '#34d399' : '#94a3b8', fontSize: '0.8rem', fontWeight: !avatarId ? 700 : 400 }}>
+                      🤖 Auto-select
+                    </div>
+                    {avatars.slice(0, 12).map(a => (
+                      <div key={a.id}
+                        onClick={() => setAvatarId(a.id)}
+                        style={{ border: `2px solid ${avatarId === a.id ? '#34d399' : 'rgba(148,163,184,0.2)'}`, borderRadius: '0.5rem', padding: '0.5rem 0.75rem', cursor: 'pointer', background: avatarId === a.id ? 'rgba(16,185,129,0.12)' : 'rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', minWidth: '80px', maxWidth: '100px' }}>
+                        {a.preview_image_url
+                          ? <img src={a.preview_image_url} alt={avatarName(a)} style={{ width: '52px', height: '52px', borderRadius: '50%', objectFit: 'cover', border: avatarId === a.id ? '2px solid #34d399' : '2px solid transparent' }} />
+                          : <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: 'rgba(16,185,129,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem' }}>🧑</div>
+                        }
+                        <span style={{ color: avatarId === a.id ? '#34d399' : '#94a3b8', fontSize: '0.7rem', fontWeight: avatarId === a.id ? 700 : 400, textAlign: 'center', wordBreak: 'break-word' }}>{avatarName(a)}</span>
+                        {a.gender && <span style={{ color: '#64748b', fontSize: '0.65rem' }}>{a.gender}</span>}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b', fontSize: '0.8125rem' }}>Avatar list not loaded — first active avatar will be used automatically.</p>
+                )}
+              </div>
+
+              {/* Voice picker */}
+              <div>
+                <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>
+                  Voice {voices.length > 0 && `(${voices.length} available)`}
+                </label>
+                <select
+                  value={voiceId}
+                  onChange={e => setVoiceId(e.target.value)}
+                  disabled={loading}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.6rem 0.85rem', fontSize: '0.875rem' }}>
+                  <option value="">Default avatar voice</option>
+                  {voices.map(v => (
+                    <option key={v.id} value={v.id}>{voiceName(v)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Aspect ratio + Caption style */}
+              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                <div style={{ flex: '1 1 160px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Aspect Ratio</label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {['9:16', '16:9', '1:1'].map(r => (
+                      <button key={r} onClick={() => setAspect(r)}
+                        style={{ flex: 1, background: aspect === r ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${aspect === r ? '#34d399' : 'rgba(148,163,184,0.2)'}`, color: aspect === r ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.45rem 0', cursor: 'pointer', fontWeight: aspect === r ? 700 : 400, fontSize: '0.8rem' }}>
+                        {r === '9:16' ? '📱 9:16' : r === '16:9' ? '🖥 16:9' : '⬜ 1:1'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ flex: '1 1 160px' }}>
+                  <label style={{ color: '#94a3b8', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '0.35rem' }}>Caption Style</label>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    {[['normal', 'Normal'], ['highlight', 'Highlight'], ['none', 'None']].map(([id, label]) => (
+                      <button key={id} onClick={() => setCaptionStyle(id)}
+                        style={{ flex: 1, background: captionStyle === id ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)', border: `1px solid ${captionStyle === id ? '#34d399' : 'rgba(148,163,184,0.2)'}`, color: captionStyle === id ? '#34d399' : '#94a3b8', borderRadius: '0.375rem', padding: '0.45rem 0', cursor: 'pointer', fontWeight: captionStyle === id ? 700 : 400, fontSize: '0.78rem' }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {error && <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.28)', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#fca5a5', fontSize: '0.875rem' }}>{error}</div>}
+
+              {/* Submit */}
+              <button
+                onClick={submit}
+                disabled={loading || !scriptId.trim()}
+                style={{ background: loading || !scriptId.trim() ? 'rgba(16,185,129,0.25)' : 'linear-gradient(135deg,#34d399,#059669)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem 1.5rem', fontWeight: 800, fontSize: '1rem', cursor: loading || !scriptId.trim() ? 'not-allowed' : 'pointer', opacity: loading || !scriptId.trim() ? 0.7 : 1 }}>
+                {loading ? '⏳ Submitting to Creatify…' : '🎭 Generate AI Avatar Video'}
+              </button>
+              <p style={{ color: '#475569', fontSize: '0.78rem', margin: 0 }}>
+                ⏱ Typical generation time: 1–3 minutes. The video will appear in My Videos below when ready.
+              </p>
+              </>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Made with Bob
