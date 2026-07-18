@@ -3271,7 +3271,32 @@ function App() {
 
       {scripts.length > 0 && (
         <div className="scripts-history">
-          <h2>Recent Scripts ({scripts.length})</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h2 style={{ margin: 0 }}>Recent Scripts ({scripts.length})</h2>
+            <button
+              onClick={() => {
+                const header = ['id','topic','hook','body','cta','created_at'];
+                const rows = scripts.map(s => [
+                  s.id,
+                  `"${(s.topic||'').replace(/"/g,'""')}"`,
+                  `"${(s.hook||'').replace(/"/g,'""')}"`,
+                  `"${(s.body||'').replace(/"/g,'""')}"`,
+                  `"${(s.cta||'').replace(/"/g,'""')}"`,
+                  s.created_at,
+                ]);
+                const csv = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `scripts-${new Date().toISOString().slice(0,10)}.csv`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399', borderRadius: '0.5rem', padding: '0.4rem 0.9rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+              ⬇️ Download All as CSV
+            </button>
+          </div>
           <div className="scripts-list">
             {scripts.map((script) => (
               <div key={script.id} className="script-card">
