@@ -58,13 +58,58 @@ jobs:
         with:
           creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}"}'
 
-      # ── 6. Deploy backend Container App ──────────────────────────────────────
+      # ── 6. Deploy backend Container App — update image + all env vars ─────────
+      # Secrets live in GitHub repo → Settings → Secrets and variables → Actions.
+      # To add a new API key: add the secret in GitHub, then add a line below.
+      # Values are passed at deploy time — the container image itself has no secrets baked in.
       - name: Deploy backend
+        env:
+          DATABASE_URL:                ${{ secrets.DATABASE_URL }}
+          OPENAI_API_KEY:              ${{ secrets.OPENAI_API_KEY }}
+          CREATIFY_API_ID:             ${{ secrets.CREATIFY_API_ID }}
+          CREATIFY_API_KEY:            ${{ secrets.CREATIFY_API_KEY }}
+          ELEVENLABS_API_KEY:          ${{ secrets.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID:         ${{ secrets.ELEVENLABS_VOICE_ID }}
+          PEXELS_API_KEY:              ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_DATA_API_KEY:        ${{ secrets.YOUTUBE_DATA_API_KEY }}
+          YOUTUBE_CLIENT_ID:           ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET:       ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN:       ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          BUFFER_ACCESS_TOKEN:         ${{ secrets.BUFFER_ACCESS_TOKEN }}
+          BUFFER_YOUTUBE_PROFILE_ID:   ${{ secrets.BUFFER_YOUTUBE_PROFILE_ID }}
+          BUFFER_TIKTOK_PROFILE_ID:    ${{ secrets.BUFFER_TIKTOK_PROFILE_ID }}
+          BUFFER_INSTAGRAM_PROFILE_ID: ${{ secrets.BUFFER_INSTAGRAM_PROFILE_ID }}
+          BUFFER_FACEBOOK_PROFILE_ID:  ${{ secrets.BUFFER_FACEBOOK_PROFILE_ID }}
+          TIKTOK_ACCESS_TOKEN:         ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          INSTAGRAM_ACCESS_TOKEN:      ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          GOOGLE_API_KEY:              ${{ secrets.GOOGLE_API_KEY }}
         run: |
           az containerapp update \
             --name ${{ env.BACKEND_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
+            --set-env-vars \
+              "DATABASE_URL=${DATABASE_URL}" \
+              "OPENAI_API_KEY=${OPENAI_API_KEY}" \
+              "CREATIFY_API_ID=${CREATIFY_API_ID}" \
+              "CREATIFY_API_KEY=${CREATIFY_API_KEY}" \
+              "ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}" \
+              "ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}" \
+              "PEXELS_API_KEY=${PEXELS_API_KEY}" \
+              "YOUTUBE_DATA_API_KEY=${YOUTUBE_DATA_API_KEY}" \
+              "YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}" \
+              "YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}" \
+              "YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN}" \
+              "BUFFER_ACCESS_TOKEN=${BUFFER_ACCESS_TOKEN}" \
+              "BUFFER_YOUTUBE_PROFILE_ID=${BUFFER_YOUTUBE_PROFILE_ID}" \
+              "BUFFER_TIKTOK_PROFILE_ID=${BUFFER_TIKTOK_PROFILE_ID}" \
+              "BUFFER_INSTAGRAM_PROFILE_ID=${BUFFER_INSTAGRAM_PROFILE_ID}" \
+              "BUFFER_FACEBOOK_PROFILE_ID=${BUFFER_FACEBOOK_PROFILE_ID}" \
+              "TIKTOK_ACCESS_TOKEN=${TIKTOK_ACCESS_TOKEN}" \
+              "INSTAGRAM_ACCESS_TOKEN=${INSTAGRAM_ACCESS_TOKEN}" \
+              "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
+              "VIDEO_OUTPUT_DIR=/tmp/videos" \
+              "ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
 
       # ── 7. Deploy frontend Container App ─────────────────────────────────────
       - name: Deploy frontend
