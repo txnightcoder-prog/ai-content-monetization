@@ -58,11 +58,17 @@ jobs:
         with:
           creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}"}'
 
-      # ── 6. Deploy backend Container App — update image + all env vars ─────────
-      # Secrets live in GitHub repo → Settings → Secrets and variables → Actions.
-      # To add a new API key: add the secret in GitHub, then add a line below.
-      # Values are passed at deploy time — the container image itself has no secrets baked in.
-      - name: Deploy backend
+      # ── 6. Deploy backend — update image then set only non-empty secrets ───────
+      # Only variables that have a value in GitHub Secrets are written to Azure.
+      # Empty secrets are skipped so they don't overwrite keys set via PowerShell.
+      - name: Deploy backend image
+        run: |
+          az containerapp update \
+            --name ${{ env.BACKEND_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      - name: Set backend environment variables
         env:
           DATABASE_URL:                ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY:              ${{ secrets.OPENAI_API_KEY }}
@@ -84,32 +90,32 @@ jobs:
           INSTAGRAM_ACCESS_TOKEN:      ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           GOOGLE_API_KEY:              ${{ secrets.GOOGLE_API_KEY }}
         run: |
+          # Build env-vars string — only include variables that have a non-empty value
+          VARS="VIDEO_OUTPUT_DIR=/tmp/videos ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+          add_var() { [ -n "$2" ] && VARS="$VARS $1=$2"; }
+          add_var DATABASE_URL                "$DATABASE_URL"
+          add_var OPENAI_API_KEY              "$OPENAI_API_KEY"
+          add_var CREATIFY_API_ID             "$CREATIFY_API_ID"
+          add_var CREATIFY_API_KEY            "$CREATIFY_API_KEY"
+          add_var ELEVENLABS_API_KEY          "$ELEVENLABS_API_KEY"
+          add_var ELEVENLABS_VOICE_ID         "$ELEVENLABS_VOICE_ID"
+          add_var PEXELS_API_KEY              "$PEXELS_API_KEY"
+          add_var YOUTUBE_DATA_API_KEY        "$YOUTUBE_DATA_API_KEY"
+          add_var YOUTUBE_CLIENT_ID           "$YOUTUBE_CLIENT_ID"
+          add_var YOUTUBE_CLIENT_SECRET       "$YOUTUBE_CLIENT_SECRET"
+          add_var YOUTUBE_REFRESH_TOKEN       "$YOUTUBE_REFRESH_TOKEN"
+          add_var BUFFER_ACCESS_TOKEN         "$BUFFER_ACCESS_TOKEN"
+          add_var BUFFER_YOUTUBE_PROFILE_ID   "$BUFFER_YOUTUBE_PROFILE_ID"
+          add_var BUFFER_TIKTOK_PROFILE_ID    "$BUFFER_TIKTOK_PROFILE_ID"
+          add_var BUFFER_INSTAGRAM_PROFILE_ID "$BUFFER_INSTAGRAM_PROFILE_ID"
+          add_var BUFFER_FACEBOOK_PROFILE_ID  "$BUFFER_FACEBOOK_PROFILE_ID"
+          add_var TIKTOK_ACCESS_TOKEN         "$TIKTOK_ACCESS_TOKEN"
+          add_var INSTAGRAM_ACCESS_TOKEN      "$INSTAGRAM_ACCESS_TOKEN"
+          add_var GOOGLE_API_KEY              "$GOOGLE_API_KEY"
           az containerapp update \
             --name ${{ env.BACKEND_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.BACKEND_IMAGE }}:${{ github.sha }} \
-            --set-env-vars \
-              "DATABASE_URL=${DATABASE_URL}" \
-              "OPENAI_API_KEY=${OPENAI_API_KEY}" \
-              "CREATIFY_API_ID=${CREATIFY_API_ID}" \
-              "CREATIFY_API_KEY=${CREATIFY_API_KEY}" \
-              "ELEVENLABS_API_KEY=${ELEVENLABS_API_KEY}" \
-              "ELEVENLABS_VOICE_ID=${ELEVENLABS_VOICE_ID}" \
-              "PEXELS_API_KEY=${PEXELS_API_KEY}" \
-              "YOUTUBE_DATA_API_KEY=${YOUTUBE_DATA_API_KEY}" \
-              "YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}" \
-              "YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}" \
-              "YOUTUBE_REFRESH_TOKEN=${YOUTUBE_REFRESH_TOKEN}" \
-              "BUFFER_ACCESS_TOKEN=${BUFFER_ACCESS_TOKEN}" \
-              "BUFFER_YOUTUBE_PROFILE_ID=${BUFFER_YOUTUBE_PROFILE_ID}" \
-              "BUFFER_TIKTOK_PROFILE_ID=${BUFFER_TIKTOK_PROFILE_ID}" \
-              "BUFFER_INSTAGRAM_PROFILE_ID=${BUFFER_INSTAGRAM_PROFILE_ID}" \
-              "BUFFER_FACEBOOK_PROFILE_ID=${BUFFER_FACEBOOK_PROFILE_ID}" \
-              "TIKTOK_ACCESS_TOKEN=${TIKTOK_ACCESS_TOKEN}" \
-              "INSTAGRAM_ACCESS_TOKEN=${INSTAGRAM_ACCESS_TOKEN}" \
-              "GOOGLE_API_KEY=${GOOGLE_API_KEY}" \
-              "VIDEO_OUTPUT_DIR=/tmp/videos" \
-              "ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+            --set-env-vars $VARS
 
       # ── 7. Deploy frontend Container App ─────────────────────────────────────
       - name: Deploy frontend
