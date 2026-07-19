@@ -3,7 +3,7 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 pydantic==2.10.3
 pydantic-settings==2.6.1
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 httpx==0.28.1
 email-validator==2.2.0
 
@@ -17,7 +17,7 @@ celery==5.4.0
 redis==5.2.1
 
 # Authentication
-python-jose[cryptography]==3.3.0
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 
 # Azure integration
@@ -28,7 +28,7 @@ azure-identity==1.20.0
 openai==1.57.4
 
 # Additional utilities
-python-multipart==0.0.20
+python-multipart==0.0.31
 python-dateutil==2.9.0.post0
 
 # Video assembly
