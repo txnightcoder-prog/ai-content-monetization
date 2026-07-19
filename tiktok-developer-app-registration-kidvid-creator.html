@@ -106,9 +106,9 @@
 
   
   <div class="steps">
-    <div class="step active">1 Create Account</div>
-    <div class="step">2 New App</div>
-    <div class="step">3 Add Products</div>
+    <div class="step done">✓ Create Account</div>
+    <div class="step done">✓ New App + Legal URLs</div>
+    <div class="step active">3 Add Products</div>
     <div class="step">4 Set Scopes</div>
     <div class="step">5 OAuth Flow</div>
     <div class="step">6 Paste Tokens</div>
@@ -176,28 +176,43 @@
         <div class="note">Select <strong>Web</strong> — your backend runs as a web service.</div>
       </div>
 
-      <div class="field">
-        <div class="label">Website URL</div>
-        <div class="value">
-          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io</code>
-          <button class="copy-btn">Copy</button>
-        </div>
+      <div class="warn">
+        ⚠️ <strong>TikTok does not accept <code>godaddysites.com</code> subdomains</strong> as a Website URL — it requires a domain you own. Use <strong>Option A</strong> (easiest, free) or <strong>Option B</strong> (buy a domain) below.
       </div>
 
       <div class="field">
-        <div class="label">Privacy Policy URL</div>
+        <div class="label">Website URL — <span style="color:#1d4ed8;">Option A: Use your Azure frontend (recommended — already live, free)</span></div>
         <div class="value">
-          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/privacy</code>
+          <code>https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io</code>
           <button class="copy-btn">Copy</button>
         </div>
-        <div class="note">TikTok requires a privacy policy URL. You can host a simple one-pager here — or use a free generator at <a href="https://www.privacypolicygenerator.info" target="_blank">privacypolicygenerator.info</a> and paste the link.</div>
+        <div class="note">✅ Your backend is already running at this URL. TikTok will accept any <code>azurecontainerapps.io</code> domain — it's a real, verifiable hostname you control. Use this for now and swap to a custom domain later.</div>
       </div>
 
       <div class="field">
-        <div class="label">Terms of Service URL (optional but recommended)</div>
+        <div class="label">Website URL — <span style="color:#57606a;">Option B: Buy a custom domain on GoDaddy (~$12/yr)</span></div>
         <div class="value">
-          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/terms</code>
+          <code>https://kidvidcreator.com</code> &nbsp;<span style="font-size:0.78rem;color:#57606a;">(example — check availability at GoDaddy)</span>
         </div>
+        <div class="note">Go to <strong>godaddy.com → Domains</strong>, buy e.g. <code>kidvidcreator.com</code>, then in GoDaddy Website Builder go to <strong>Settings → Custom Domain</strong> and connect it. Once connected GoDaddy gives you a real URL that TikTok will accept. Then update all three URLs below to use your new domain.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Privacy Policy URL <span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:0.1rem 0.55rem;font-size:0.72rem;font-weight:700;margin-left:0.4rem;">✅ Live</span></div>
+        <div class="value">
+          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/privacy.html</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note" style="color:#15803d;">✅ Privacy Policy is live on Azure — TikTok accepts this URL as-is.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Terms of Service URL <span style="background:#dcfce7;color:#15803d;border-radius:999px;padding:0.1rem 0.55rem;font-size:0.72rem;font-weight:700;margin-left:0.4rem;">✅ Live</span></div>
+        <div class="value">
+          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/terms.html</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note" style="color:#15803d;">✅ Terms of Service is live on Azure — TikTok accepts this URL as-is.</div>
       </div>
     </div>
   </div>

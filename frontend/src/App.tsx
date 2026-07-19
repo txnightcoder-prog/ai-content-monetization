@@ -179,7 +179,7 @@ interface AIImage {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -254,6 +254,32 @@ function App() {
   const [connStatus,   setConnStatus]   = useState<ConnectionStatus | null>(null);
   const [connLoading,  setConnLoading]  = useState(false);
 
+  // ── Orders Management state ───────────────────────────────────────────────
+  interface ChildProfileRecord {
+    id: string; order_id: string;
+    child_name: string | null; age: string | null;
+    hair_colour: string | null; eye_colour: string | null; features: string | null;
+    created_at: string;
+  }
+  interface OrderRecord {
+    id: string; gumroad_sale_id: string; product_name: string | null;
+    price_cents: number | null; customer_email: string; customer_name: string | null;
+    status: 'received' | 'queued' | 'generating' | 'storing' | 'delivering' | 'delivered' | 'failed';
+    error_message: string | null;
+    generated_prompt: string | null; video_local_path: string | null;
+    video_storage_url: string | null; email_message_id: string | null;
+    created_at: string; updated_at: string;
+    child_profile: ChildProfileRecord | null;
+  }
+  const [ordersList,      setOrdersList]      = useState<OrderRecord[]>([]);
+  const [ordersTotal,     setOrdersTotal]     = useState(0);
+  const [ordersLoading,   setOrdersLoading]   = useState(false);
+  const [ordersError,     setOrdersError]     = useState('');
+  const [ordersFilter,    setOrdersFilter]    = useState<string>('all');
+  const [ordersPage,      setOrdersPage]      = useState(1);
+  const [selectedOrder,   setSelectedOrder]   = useState<OrderRecord | null>(null);
+  const [orderRetrying,   setOrderRetrying]   = useState<string | null>(null);
+  const [orderRetryMsg,   setOrderRetryMsg]   = useState('');
 
   // Helper: return backend streaming URL for a video record
   const videoStreamUrl = (v: VideoRecord) =>
@@ -2117,6 +2143,349 @@ function App() {
 
   const fmt = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(1)}K` : String(n);
 
+  // ── Orders Management functions ───────────────────────────────────────────
+  const fetchOrders = async (filter = ordersFilter, page = ordersPage) => {
+    setOrdersLoading(true); setOrdersError('');
+    try {
+      const status = filter !== 'all' ? `&status=${filter}` : '';
+      const skip   = (page - 1) * 20;
+      const res    = await fetch(`${API_BASE}/api/v1/orders/?skip=${skip}&limit=20${status}`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const d = await res.json();
+      setOrdersList(d.items ?? []);
+      setOrdersTotal(d.total ?? 0);
+    } catch (err) { setOrdersError(err instanceof Error ? err.message : 'Failed to load orders'); }
+    finally { setOrdersLoading(false); }
+  };
+
+  const retryOrder = async (orderId: string) => {
+    setOrderRetrying(orderId); setOrderRetryMsg('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/orders/${orderId}/retry`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setOrderRetryMsg('✅ Order re-queued — pipeline restarting…');
+      await fetchOrders();
+      if (selectedOrder?.id === orderId) {
+        const updated = await fetch(`${API_BASE}/api/v1/orders/${orderId}`);
+        if (updated.ok) setSelectedOrder(await updated.json());
+      }
+    } catch (err) { setOrderRetryMsg(`❌ ${err instanceof Error ? err.message : 'Retry failed'}`); }
+    finally { setOrderRetrying(null); }
+  };
+
+  const ORDER_STEPS: Array<{ key: string; label: string; icon: string }> = [
+    { key: 'received',   label: 'Webhook Received',   icon: '📥' },
+    { key: 'queued',     label: 'Order Queued',        icon: '⏳' },
+    { key: 'generating', label: 'Video Generating',    icon: '🎬' },
+    { key: 'storing',    label: 'Uploading to Cloud',  icon: '☁️'  },
+    { key: 'delivering', label: 'Sending Email',       icon: '📧' },
+    { key: 'delivered',  label: 'Delivered',           icon: '✅' },
+  ];
+
+  const orderStatusColor = (s: string) =>
+    s === 'delivered'  ? '#10b981' :
+    s === 'failed'     ? '#ef4444' :
+    s === 'delivering' ? '#3b82f6' :
+    s === 'storing'    ? '#8b5cf6' :
+    s === 'generating' ? '#f59e0b' :
+    s === 'queued'     ? '#06b6d4' : '#94a3b8';
+
+  const orderStepIndex = (status: string) =>
+    ORDER_STEPS.findIndex(s => s.key === status);
+
+  const renderOrders = () => {
+    const FILTERS = ['all', 'received', 'queued', 'generating', 'storing', 'delivering', 'delivered', 'failed'];
+    const totalPages = Math.ceil(ordersTotal / 20) || 1;
+
+    // Stats from current list
+    const counts: Record<string, number> = {};
+    ordersList.forEach(o => { counts[o.status] = (counts[o.status] ?? 0) + 1; });
+
+    return (
+      <div className="videos-page">
+        <h1>🛍️ Orders — Personalised Video Pipeline</h1>
+        <p className="subtitle">
+          Every Gumroad purchase triggers the AI pipeline below. Track each order from webhook to delivery.
+        </p>
+
+        {/* ── Pipeline architecture diagram ── */}
+        <div style={{ background: 'rgba(16,185,129,0.05)', border: '1px solid rgba(16,185,129,0.2)', borderRadius: '0.875rem', padding: '1.5rem', marginBottom: '1.5rem', overflowX: 'auto' }}>
+          <div style={{ color: '#34d399', fontWeight: 700, fontSize: '0.8125rem', letterSpacing: '0.08em', marginBottom: '1rem', textTransform: 'uppercase' }}>
+            Pipeline Architecture
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'nowrap', minWidth: 'max-content' }}>
+            {[
+              { icon: '🛒', label: 'Landing Page', sublabel: 'Buy Now → Gumroad', color: '#3b82f6' },
+              { icon: '💳', label: 'Gumroad Payment', sublabel: 'Checkout', color: '#8b5cf6' },
+              { icon: '📥', label: 'Order Webhook', sublabel: 'Receives ping-back', color: '#06b6d4' },
+              { icon: '🤖', label: 'AI Prompt Builder', sublabel: 'Name, age, features', color: '#f59e0b' },
+              { icon: '🎬', label: 'Video Engine', sublabel: 'Runway / Kling / Veo', color: '#ef4444' },
+              { icon: '☁️',  label: 'Cloud Storage', sublabel: 'S3 / Azure Blob', color: '#10b981' },
+              { icon: '📧', label: 'Email Delivery', sublabel: 'SendGrid / Mailgun', color: '#34d399' },
+            ].map((step, i, arr) => (
+              <React.Fragment key={step.label}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem', minWidth: '90px' }}>
+                  <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: `${step.color}22`, border: `2px solid ${step.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem' }}>
+                    {step.icon}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0', textAlign: 'center', lineHeight: 1.2 }}>{step.label}</div>
+                  <div style={{ fontSize: '0.65rem', color: '#64748b', textAlign: 'center', lineHeight: 1.2 }}>{step.sublabel}</div>
+                </div>
+                {i < arr.length - 1 && (
+                  <div style={{ color: '#334155', fontSize: '1.25rem', padding: '0 0.25rem', flexShrink: 0, alignSelf: 'flex-start', marginTop: '0.85rem' }}>→</div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Stats bar ── */}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+          {[
+            { label: 'Total Orders', value: ordersTotal, color: '#3b82f6' },
+            { label: 'Delivered', value: ordersList.filter(o=>o.status==='delivered').length, color: '#10b981' },
+            { label: 'In Progress', value: ordersList.filter(o=>['queued','generating','storing','delivering'].includes(o.status)).length, color: '#f59e0b' },
+            { label: 'Failed', value: ordersList.filter(o=>o.status==='failed').length, color: '#ef4444' },
+          ].map(s => (
+            <div key={s.label} style={{ flex: '1 1 120px', background: `${s.color}12`, border: `1px solid ${s.color}35`, borderRadius: '0.625rem', padding: '0.75rem 1rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.2rem' }}>{s.label}</div>
+            </div>
+          ))}
+          <div style={{ flex: '1 1 120px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <button
+              onClick={() => fetchOrders(ordersFilter, ordersPage)}
+              disabled={ordersLoading}
+              style={{ background: 'linear-gradient(135deg,#3b82f6,#2563eb)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.25rem', fontWeight: 700, cursor: ordersLoading ? 'not-allowed' : 'pointer', opacity: ordersLoading ? 0.7 : 1, fontSize: '0.875rem' }}>
+              {ordersLoading ? '⟳ Loading…' : '🔄 Refresh'}
+            </button>
+          </div>
+        </div>
+
+        {orderRetryMsg && (
+          <div style={{ background: orderRetryMsg.startsWith('✅') ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)', border: `1px solid ${orderRetryMsg.startsWith('✅') ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '1rem', color: orderRetryMsg.startsWith('✅') ? '#34d399' : '#fca5a5', fontWeight: 600, fontSize: '0.875rem' }}>
+            {orderRetryMsg}
+          </div>
+        )}
+
+        {/* ── Filter tabs ── */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          {FILTERS.map(f => (
+            <button key={f}
+              onClick={() => { setOrdersFilter(f); setOrdersPage(1); fetchOrders(f, 1); }}
+              style={{ padding: '0.35rem 0.85rem', borderRadius: '999px', border: `2px solid ${ordersFilter === f ? orderStatusColor(f) : 'rgba(148,163,184,0.25)'}`, background: ordersFilter === f ? `${orderStatusColor(f)}22` : 'transparent', color: ordersFilter === f ? orderStatusColor(f) : '#94a3b8', fontWeight: ordersFilter === f ? 700 : 400, fontSize: '0.8125rem', cursor: 'pointer', textTransform: 'capitalize' }}>
+              {f === 'all' ? `All (${ordersTotal})` : f}
+            </button>
+          ))}
+        </div>
+
+        {ordersError && (
+          <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '0.5rem', padding: '0.75rem 1rem', color: '#fca5a5', marginBottom: '1rem', fontSize: '0.875rem' }}>
+            ⚠️ {ordersError}
+          </div>
+        )}
+
+        {ordersLoading ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>Loading orders…</div>
+        ) : ordersList.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🛍️</div>
+            <div style={{ fontSize: '1.125rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.5rem' }}>No orders yet</div>
+            <div style={{ fontSize: '0.875rem', color: '#475569' }}>
+              Connect your Gumroad webhook to{' '}
+              <code style={{ background: 'rgba(255,255,255,0.06)', padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.8125rem' }}>
+                /api/v1/orders/webhook/gumroad
+              </code>
+              {' '}to start receiving orders.
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: selectedOrder ? '1fr 380px' : '1fr', gap: '1rem', alignItems: 'start' }}>
+
+            {/* Order list */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {ordersList.map(order => {
+                const stepIdx  = orderStepIndex(order.status);
+                const isActive = selectedOrder?.id === order.id;
+
+                return (
+                  <div key={order.id}
+                    onClick={() => setSelectedOrder(isActive ? null : order)}
+                    style={{ background: isActive ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)', border: `1px solid ${isActive ? 'rgba(59,130,246,0.4)' : 'rgba(255,255,255,0.08)'}`, borderLeft: `4px solid ${orderStatusColor(order.status)}`, borderRadius: '0.75rem', padding: '1rem 1.25rem', cursor: 'pointer', transition: 'border-color 0.15s' }}>
+
+                    {/* Header row */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '0.9375rem' }}>
+                          {order.child_profile?.child_name
+                            ? `✨ ${order.child_profile.child_name}'s Video`
+                            : order.product_name ?? 'Personalised Video'}
+                        </div>
+                        <div style={{ color: '#64748b', fontSize: '0.8125rem', marginTop: '0.2rem' }}>
+                          {order.customer_email}
+                          {order.customer_name ? ` · ${order.customer_name}` : ''}
+                          {order.price_cents != null ? ` · $${Number(order.price_cents).toFixed(2)}` : ''}
+                        </div>
+                      </div>
+                      <span style={{ background: `${orderStatusColor(order.status)}22`, color: orderStatusColor(order.status), border: `1px solid ${orderStatusColor(order.status)}55`, borderRadius: '999px', padding: '0.2rem 0.7rem', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap', textTransform: 'uppercase' }}>
+                        {order.status}
+                      </span>
+                    </div>
+
+                    {/* Pipeline stepper */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0', marginTop: '0.85rem', overflowX: 'auto' }}>
+                      {ORDER_STEPS.map((step, i) => {
+                        const done    = order.status === 'delivered' || (order.status !== 'failed' && i < stepIdx);
+                        const current = i === stepIdx && order.status !== 'failed';
+                        const failed  = order.status === 'failed' && i === stepIdx;
+                        const clr     = done ? '#10b981' : current ? '#f59e0b' : failed ? '#ef4444' : '#334155';
+                        return (
+                          <React.Fragment key={step.key}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem', minWidth: '52px' }}>
+                              <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: `${clr}22`, border: `2px solid ${clr}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem' }}>
+                                {done ? '✓' : failed ? '✕' : step.icon}
+                              </div>
+                              <div style={{ fontSize: '0.6rem', color: done ? '#34d399' : current ? '#fbbf24' : failed ? '#fca5a5' : '#475569', textAlign: 'center', lineHeight: 1.2, maxWidth: '52px' }}>{step.label}</div>
+                            </div>
+                            {i < ORDER_STEPS.length - 1 && (
+                              <div style={{ flex: 1, height: '2px', background: done ? '#10b981' : '#1e293b', minWidth: '12px', alignSelf: 'flex-start', marginTop: '13px' }} />
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {order.status === 'failed' && order.error_message && (
+                      <div style={{ marginTop: '0.75rem', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.375rem', padding: '0.5rem 0.75rem', fontSize: '0.8125rem', color: '#fca5a5' }}>
+                        ⚠️ {order.error_message}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#475569' }}>
+                        {new Date(order.created_at).toLocaleString()}
+                      </div>
+                      {['failed', 'received'].includes(order.status) && (
+                        <button
+                          onClick={e => { e.stopPropagation(); retryOrder(order.id); }}
+                          disabled={orderRetrying === order.id}
+                          style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', borderRadius: '0.375rem', padding: '0.3rem 0.85rem', fontWeight: 700, fontSize: '0.8125rem', cursor: 'pointer' }}>
+                          {orderRetrying === order.id ? '⟳ Retrying…' : '↺ Retry'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '0.5rem' }}>
+                  <button disabled={ordersPage <= 1} onClick={() => { const p = ordersPage - 1; setOrdersPage(p); fetchOrders(ordersFilter, p); }}
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#94a3b8', borderRadius: '0.375rem', padding: '0.4rem 0.85rem', cursor: ordersPage <= 1 ? 'not-allowed' : 'pointer' }}>← Prev</button>
+                  <span style={{ color: '#64748b', alignSelf: 'center', fontSize: '0.875rem' }}>Page {ordersPage} / {totalPages}</span>
+                  <button disabled={ordersPage >= totalPages} onClick={() => { const p = ordersPage + 1; setOrdersPage(p); fetchOrders(ordersFilter, p); }}
+                    style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#94a3b8', borderRadius: '0.375rem', padding: '0.4rem 0.85rem', cursor: ordersPage >= totalPages ? 'not-allowed' : 'pointer' }}>Next →</button>
+                </div>
+              )}
+            </div>
+
+            {/* Order detail panel */}
+            {selectedOrder && (
+              <div style={{ background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '0.875rem', padding: '1.25rem', position: 'sticky', top: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                  <div style={{ fontWeight: 700, color: '#e2e8f0', fontSize: '1rem' }}>Order Details</div>
+                  <button onClick={() => setSelectedOrder(null)}
+                    style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.125rem' }}>✕</button>
+                </div>
+
+                {/* Child profile */}
+                {selectedOrder.child_profile && (
+                  <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: '0.625rem', padding: '0.875rem', marginBottom: '1rem' }}>
+                    <div style={{ color: '#a78bfa', fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.6rem' }}>👶 Child Profile</div>
+                    {[
+                      ['Name',       selectedOrder.child_profile.child_name],
+                      ['Age',        selectedOrder.child_profile.age],
+                      ['Hair',       selectedOrder.child_profile.hair_colour],
+                      ['Eyes',       selectedOrder.child_profile.eye_colour],
+                      ['Extra',      selectedOrder.child_profile.features],
+                    ].map(([k, v]) => v ? (
+                      <div key={k as string} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.3rem', fontSize: '0.8125rem' }}>
+                        <span style={{ color: '#64748b', minWidth: '48px' }}>{k}:</span>
+                        <span style={{ color: '#e2e8f0' }}>{v}</span>
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
+
+                {/* Pipeline artefacts */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                  {[
+                    { label: 'Sale ID',      value: selectedOrder.gumroad_sale_id,                            icon: '🏷️' },
+                    { label: 'Product',      value: selectedOrder.product_name,                               icon: '📦' },
+                    { label: 'Price',        value: selectedOrder.price_cents != null ? `$${Number(selectedOrder.price_cents).toFixed(2)}` : null, icon: '💵' },
+                    { label: 'Customer',     value: selectedOrder.customer_name,                              icon: '👤' },
+                    { label: 'Email',        value: selectedOrder.customer_email,                             icon: '✉️' },
+                    { label: 'Video URL',    value: selectedOrder.video_storage_url,                          icon: '🎬' },
+                    { label: 'Email Msg ID', value: selectedOrder.email_message_id,                           icon: '📧' },
+                  ].map(row => row.value ? (
+                    <div key={row.label} style={{ fontSize: '0.8125rem' }}>
+                      <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{row.icon} {row.label}</div>
+                      {row.label === 'Video URL' ? (
+                        <a href={row.value} target="_blank" rel="noopener noreferrer"
+                          style={{ color: '#60a5fa', wordBreak: 'break-all', display: 'block', marginTop: '0.1rem' }}>
+                          {row.value.length > 60 ? row.value.slice(0, 57) + '…' : row.value}
+                        </a>
+                      ) : (
+                        <div style={{ color: '#e2e8f0', marginTop: '0.1rem', wordBreak: 'break-all' }}>{row.value}</div>
+                      )}
+                    </div>
+                  ) : null)}
+                </div>
+
+                {/* Prompt */}
+                {selectedOrder.generated_prompt && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.35rem' }}>🤖 Generated Prompt</div>
+                    <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '0.375rem', padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#94a3b8', maxHeight: '120px', overflowY: 'auto', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                      {selectedOrder.generated_prompt}
+                    </div>
+                  </div>
+                )}
+
+                {/* Error */}
+                {selectedOrder.error_message && (
+                  <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '1rem', fontSize: '0.8125rem', color: '#fca5a5' }}>
+                    ⚠️ <strong>Error:</strong> {selectedOrder.error_message}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {['failed', 'received'].includes(selectedOrder.status) && (
+                    <button onClick={() => retryOrder(selectedOrder.id)} disabled={orderRetrying === selectedOrder.id}
+                      style={{ flex: 1, background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                      {orderRetrying === selectedOrder.id ? '⟳ Retrying…' : '↺ Retry Pipeline'}
+                    </button>
+                  )}
+                  {selectedOrder.video_storage_url && (
+                    <a href={selectedOrder.video_storage_url} target="_blank" rel="noopener noreferrer"
+                      style={{ flex: 1, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#34d399', borderRadius: '0.5rem', padding: '0.65rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', textAlign: 'center', textDecoration: 'none' }}>
+                      ▶ Watch Video
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderKeywords = () => (
     <div className="videos-page">
       <h1>🔍 Keyword Research</h1>
@@ -2744,11 +3113,19 @@ function App() {
                             </div>
                           )}
 
-                          {/* Setup link */}
-                          <a href={p.setup_url} target="_blank" rel="noopener noreferrer"
-                            style={{ display: 'inline-block', background: `${platC}22`, color: platC, border: `1px solid ${platC}44`, borderRadius: '0.4rem', padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
-                            {ok ? '⚙ Manage →' : '🔗 Setup Guide →'}
-                          </a>
+                          {/* Setup link + optional channel shortcut */}
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <a href={p.setup_url} target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'inline-block', background: `${platC}22`, color: platC, border: `1px solid ${platC}44`, borderRadius: '0.4rem', padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
+                              {ok ? '⚙ Manage →' : '🔗 Setup Guide →'}
+                            </a>
+                            {p.platform === 'youtube' && (
+                              <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer"
+                                style={{ display: 'inline-block', background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '0.4rem', padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
+                                ▶ @TxNightcoder →
+                              </a>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -2820,6 +3197,7 @@ function App() {
               envKey: 'BUFFER_YOUTUBE_PROFILE_ID',
               setupUrl: 'https://publish.buffer.com/settings/channels',
               setupLabel: 'Connect via Buffer',
+              channelUrl: 'https://www.youtube.com/@TxNightcoder',
               hint: 'Connect YouTube in Buffer, then set BUFFER_YOUTUBE_PROFILE_ID',
             },
             {
@@ -2877,14 +3255,26 @@ function App() {
                     </p>
                   : <p style={{ color: '#64748b', fontSize: '0.75rem', margin: '0 0 0.5rem', lineHeight: 1.4 }}>{acct.hint}</p>
                 }
-                <a href={acct.setupUrl} target="_blank" rel="noopener noreferrer" style={{
-                  display: 'inline-block', fontSize: '0.72rem', fontWeight: 700,
-                  color: acct.color, textDecoration: 'none',
-                  background: `${acct.color}15`, border: `1px solid ${acct.color}35`,
-                  borderRadius: '0.3rem', padding: '0.2rem 0.55rem',
-                }}>
-                  {connected ? '⚙ Manage' : '🔗 Set up'} →
-                </a>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <a href={acct.setupUrl} target="_blank" rel="noopener noreferrer" style={{
+                    display: 'inline-block', fontSize: '0.72rem', fontWeight: 700,
+                    color: acct.color, textDecoration: 'none',
+                    background: `${acct.color}15`, border: `1px solid ${acct.color}35`,
+                    borderRadius: '0.3rem', padding: '0.2rem 0.55rem',
+                  }}>
+                    {connected ? '⚙ Manage' : '🔗 Set up'} →
+                  </a>
+                  {(acct as any).channelUrl && (
+                    <a href={(acct as any).channelUrl} target="_blank" rel="noopener noreferrer" style={{
+                      display: 'inline-block', fontSize: '0.72rem', fontWeight: 700,
+                      color: acct.color, textDecoration: 'none',
+                      background: `${acct.color}15`, border: `1px solid ${acct.color}35`,
+                      borderRadius: '0.3rem', padding: '0.2rem 0.55rem',
+                    }}>
+                      ▶ Visit Channel →
+                    </a>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -4626,6 +5016,9 @@ Example:
           <button className={`nav-util-btn ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }} title="Analytics">
             📊
           </button>
+          <button className={`nav-util-btn ${currentPage === 'orders' ? 'active' : ''}`} onClick={() => { setCurrentPage('orders'); fetchOrders('all', 1); }} title="Orders — Personalised Video Pipeline">
+            🛍️
+          </button>
           <button className={`nav-util-btn ${currentPage === 'diagnostics' ? 'active' : ''}`} onClick={() => setCurrentPage('diagnostics')} title="Diagnostics">
             🔧
           </button>
@@ -4690,6 +5083,7 @@ Example:
          currentPage === 'diagnostics' ? renderDiagnostics() :
          currentPage === 'monitor' ? renderMonitor() :
          currentPage === 'analytics' ? renderAnalytics() :
+         currentPage === 'orders' ? renderOrders() :
          currentPage === 'monetize' ? renderMonetize() :
          currentPage === 'visuals' ? renderVisuals() :
          renderHelp()}
