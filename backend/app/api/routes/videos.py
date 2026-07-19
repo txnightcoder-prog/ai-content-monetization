@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -31,6 +31,55 @@ class ScheduleVideoRequest(BaseModel):
     platforms: List[str]
     scheduled_at: datetime          # ISO-8601 e.g. "2026-07-04T09:00:00Z"
     caption: Optional[str] = None
+
+
+# ── Royalty-free music tracks bundled with the app ───────────────────────────
+# These are open-licensed tracks from Pixabay / public domain sources.
+# Replace URLs with your own CDN paths if you host them yourself.
+MUSIC_TRACKS = [
+    {"id": "none",         "label": "No music",              "url": None},
+    {"id": "upbeat",       "label": "Upbeat Corporate",      "url": "https://cdn.pixabay.com/download/audio/2022/08/25/audio_57d4e1d3fc.mp3"},
+    {"id": "motivational", "label": "Motivational Rise",     "url": "https://cdn.pixabay.com/download/audio/2022/10/25/audio_946b63cb84.mp3"},
+    {"id": "lofi",         "label": "Lo-Fi Chill",           "url": "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3"},
+    {"id": "cinematic",    "label": "Cinematic Dramatic",    "url": "https://cdn.pixabay.com/download/audio/2022/03/15/audio_d1718ab41b.mp3"},
+    {"id": "tech",         "label": "Tech/Digital Pulse",    "url": "https://cdn.pixabay.com/download/audio/2023/04/07/audio_7f6f831ad3.mp3"},
+]
+
+ELEVENLABS_VOICES = [
+    {"id": "21m00Tcm4TlvDq8ikWAM", "label": "Rachel (default) — neutral female"},
+    {"id": "29vD33N1CtxCmqQRPOHJ", "label": "Drew — deep male"},
+    {"id": "2EiwWnXFnvU5JabPnv8n", "label": "Clyde — warm male"},
+    {"id": "5Q0t7uMcjvnagumLfvZi", "label": "Paul — professional male"},
+    {"id": "AZnzlk1XvdvUeBnXmlld", "label": "Domi — energetic female"},
+    {"id": "EXAVITQu4vr4xnSDxMaL", "label": "Bella — soft female"},
+    {"id": "ErXwobaYiN019PkySvjV", "label": "Antoni — conversational male"},
+    {"id": "GBv7mTt0atIp3Br8iCZE", "label": "Thomas — calm male"},
+    {"id": "IKne3meq5aSn9XLyUdCD", "label": "Charlie — Australian male"},
+    {"id": "MF3mGyEYCl7XYWbV9V6O", "label": "Emily — calm female"},
+    {"id": "N2lVS1w4EtoT3dr4eOWO", "label": "Ethan — male"},
+    {"id": "ODq5zmih8GrVes37Dizd", "label": "Patrick — authoritative male"},
+    {"id": "ThT5KcBeYPX3keUQqHPh", "label": "Dorothy — British female"},
+    {"id": "TxGEqnHWrfWFTfGW9XjX", "label": "Josh — deep male"},
+    {"id": "VR6AewLTigWG4xSOukaG", "label": "Arnold — strong male"},
+    {"id": "pNInz6obpgDQGcFmaJgB", "label": "Adam — deep male"},
+    {"id": "yoZ06aMxZJJ28mfd3POQ", "label": "Sam — raspy male"},
+]
+
+CAPTION_STYLES = [
+    {"id": "timed",   "label": "Timed Karaoke — word-by-word pop (default)"},
+    {"id": "hook",    "label": "Hook Only — one caption burned at bottom"},
+    {"id": "none",    "label": "No captions"},
+]
+
+
+class EditVideoRequest(BaseModel):
+    """Options for regenerating a video with different AI settings."""
+    script_id: Optional[UUID] = Field(None, description="Use a different script (defaults to original)")
+    voice_id: Optional[str]   = Field(None, description="ElevenLabs voice ID — see GET /api/v1/videos/voices")
+    broll_keywords: Optional[str] = Field(None, description="Custom keywords for Pexels B-roll search, e.g. 'modern kitchen cooking'")
+    music_id: Optional[str]   = Field(None, description="Music track ID — see GET /api/v1/videos/music-tracks")
+    caption_style: Optional[str] = Field(None, description="timed | hook | none")
+    music_volume: Optional[float] = Field(None, ge=0.0, le=1.0, description="Background music volume 0.0–1.0, default 0.15")
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +161,28 @@ async def upload_video_file(
 
 
 # ---------------------------------------------------------------------------
+# Reference data endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/voices")
+def list_voices():
+    """Return the list of available ElevenLabs voices for video generation."""
+    return {"voices": ELEVENLABS_VOICES}
+
+
+@router.get("/music-tracks")
+def list_music_tracks():
+    """Return the list of available background music tracks."""
+    return {"tracks": MUSIC_TRACKS}
+
+
+@router.get("/caption-styles")
+def list_caption_styles():
+    """Return available caption style options."""
+    return {"styles": CAPTION_STYLES}
+
+
+# ---------------------------------------------------------------------------
 # Pipeline endpoints
 # ---------------------------------------------------------------------------
 
@@ -164,6 +235,217 @@ async def generate_video(
     logger.info("Queued local video generation for video %s (script %s)", db_video.id, request.script_id)
 
     return db_video
+
+
+@router.post("/{video_id}/edit", response_model=VideoResponse, status_code=202)
+async def edit_video(
+    video_id: UUID,
+    request: EditVideoRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    pipeline: VideoPipelineService = Depends(get_pipeline),
+):
+    """
+    **AI Video Editor** — regenerate a video with different settings.
+
+    Lets you change voice, B-roll keywords, background music, and caption style
+    without re-generating the script. The original video record is reset to
+    `generating` status and a new MP4 is produced in the background.
+
+    Poll `GET /api/v1/videos/{video_id}` for status.
+    """
+    from app.models.content_script import ContentScript
+
+    original = db.query(Video).filter(Video.id == video_id).first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Resolve script
+    script_id = request.script_id or original.script_id
+    if not script_id:
+        raise HTTPException(status_code=400, detail="No script linked to this video and none provided")
+
+    script = db.query(ContentScript).filter(ContentScript.id == script_id).first()
+    if not script:
+        raise HTTPException(status_code=404, detail=f"Script {script_id} not found")
+
+    # Validate options
+    music_url: Optional[str] = None
+    if request.music_id and request.music_id != "none":
+        track = next((t for t in MUSIC_TRACKS if t["id"] == request.music_id), None)
+        if not track:
+            raise HTTPException(status_code=400, detail=f"Unknown music_id '{request.music_id}'. Call GET /api/v1/videos/music-tracks.")
+        music_url = track["url"]
+
+    if request.voice_id:
+        known_ids = {v["id"] for v in ELEVENLABS_VOICES}
+        if request.voice_id not in known_ids:
+            raise HTTPException(status_code=400, detail=f"Unknown voice_id. Call GET /api/v1/videos/voices.")
+
+    caption_style = request.caption_style or "timed"
+    if caption_style not in {"timed", "hook", "none"}:
+        raise HTTPException(status_code=400, detail="caption_style must be timed | hook | none")
+
+    if pipeline._video is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Video provider not configured. Set ELEVENLABS_API_KEY + PEXELS_API_KEY (or GOOGLE_API_KEY for Veo).",
+        )
+
+    # Reset the existing video record so the frontend polls work correctly
+    original.status = VideoStatus.GENERATING
+    original.script_id = script_id
+    original.video_url = None
+    original.thumbnail_url = None
+    original.duration = None
+    original.error_message = None
+    db.commit()
+    db.refresh(original)
+
+    # Pass edit options to the pipeline via a custom generate call
+    background_tasks.add_task(
+        _edit_generate,
+        pipeline,
+        original.id,
+        script,
+        request.voice_id,
+        request.broll_keywords,
+        music_url,
+        caption_style,
+        request.music_volume or 0.15,
+    )
+    logger.info("Queued video re-generation for video %s with edit options", video_id)
+    return original
+
+
+async def _edit_generate(
+    pipeline: "VideoPipelineService",
+    video_id: UUID,
+    script,
+    voice_id: Optional[str],
+    broll_keywords: Optional[str],
+    music_url: Optional[str],
+    caption_style: str,
+    music_volume: float,
+) -> None:
+    """Background task: regenerate video with custom edit options."""
+    from app.models.video import Video as _Video, VideoStatus as _VS
+    import os as _os
+
+    video = pipeline.db.query(_Video).filter(_Video.id == video_id).first()
+    if not video:
+        return
+
+    script_text = "\n\n".join(p for p in [script.hook, script.body, script.cta] if p)
+    caption = script.hook or script_text[:100]
+
+    if pipeline._video is None:
+        pipeline._set_failed(video, error="No video provider configured.")
+        return
+
+    # Patch the provider temporarily for this job
+    original_provider = pipeline._video
+
+    try:
+        # Apply voice override for ElevenLabs local provider
+        if voice_id:
+            try:
+                from app.services.local_video_service import LocalVideoService  # noqa
+                from app.services.elevenlabs_service import ElevenLabsService   # noqa
+                from app.services.pexels_service import PexelsService            # noqa
+                from app.services.video_assembler import VideoAssembler          # noqa
+
+                custom_tts = ElevenLabsService(
+                    api_key=_os.getenv("ELEVENLABS_API_KEY"),
+                    voice_id=voice_id,
+                )
+                pipeline._video = LocalVideoService(
+                    elevenlabs=custom_tts,
+                    timed_captions=(caption_style == "timed"),
+                )
+            except Exception as exc:
+                logger.warning("Could not apply voice override: %s — using default", exc)
+
+        # Apply B-roll keyword override for Pexels
+        if broll_keywords and hasattr(pipeline._video, "_pexels"):
+            # Monkey-patch the keyword extractor for this job
+            pipeline._video._broll_override = broll_keywords
+
+        # Apply caption style
+        if hasattr(pipeline._video, "_timed_captions"):
+            pipeline._video._timed_captions = (caption_style == "timed")
+
+        result = await pipeline._video.create_video(script=script_text, aspect_ratio="9:16")
+        job_id = result.get("video_id")
+        if not job_id:
+            raise RuntimeError("Provider returned no job id")
+
+        video.job_id = job_id
+        pipeline.db.commit()
+
+        # Download music if needed
+        bg_music_path: Optional[str] = None
+        if music_url:
+            import httpx as _httpx
+            from pathlib import Path as _Path
+            import tempfile as _tf
+            tmp_fd, bg_music_path = _tf.mkstemp(suffix=".mp3", prefix="bgmusic_")
+            _os.close(tmp_fd)
+            try:
+                async with _httpx.AsyncClient(timeout=30) as client:
+                    r = await client.get(music_url, follow_redirects=True)
+                    r.raise_for_status()
+                    with open(bg_music_path, "wb") as f:
+                        f.write(r.content)
+            except Exception as exc:
+                logger.warning("Failed to download background music %s: %s", music_url, exc)
+                if _os.path.exists(bg_music_path):
+                    _os.unlink(bg_music_path)
+                bg_music_path = None
+
+        kw = {"script": script_text, "caption_text": caption}
+        status_data = await pipeline._video.wait_for_completion(job_id, **kw)
+
+        # Post-process: mix in music if provided and provider returned a raw path
+        if bg_music_path and status_data.get("video_url") and _os.path.exists(str(status_data["video_url"])):
+            try:
+                from app.services.video_assembler import VideoAssembler  # noqa
+                asm = VideoAssembler()
+                mixed_path = str(status_data["video_url"]).replace(".mp4", "_music.mp4")
+                asm._mix_audio(
+                    video_path=str(status_data["video_url"]),
+                    voice_path=str(status_data["video_url"]),  # already has voice mixed in
+                    out=mixed_path,
+                    bg_music_path=bg_music_path,
+                )
+                # Replace output with music-mixed version
+                import shutil as _shutil
+                _shutil.move(mixed_path, str(status_data["video_url"]))
+            except Exception as exc:
+                logger.warning("Music mix failed: %s — using video without background music", exc)
+            finally:
+                if _os.path.exists(bg_music_path):
+                    try:
+                        _os.unlink(bg_music_path)
+                    except OSError:
+                        pass
+
+        if status_data.get("status") == "failed":
+            raise RuntimeError(status_data.get("error") or "Video edit failed")
+
+        video.video_url     = status_data.get("video_url")
+        video.thumbnail_url = status_data.get("thumbnail_url")
+        video.duration      = status_data.get("duration")
+        video.status        = VideoStatus.READY
+        video.error_message = None
+        pipeline.db.commit()
+        logger.info("Video %s re-generated (edit) successfully", video_id)
+
+    except Exception as exc:
+        logger.error("Video edit failed for %s: %s", video_id, exc)
+        pipeline._set_failed(video, error=str(exc))
+    finally:
+        pipeline._video = original_provider
 
 
 @router.post("/{video_id}/publish", response_model=list[PostResponse], status_code=201)
@@ -337,6 +619,34 @@ def mark_video_failed(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to update video status: {str(e)}")
+
+@router.get("/{video_id}/srt")
+def download_srt(
+    video_id: UUID,
+    db: Session = Depends(get_db),
+):
+    """
+    Download the SRT subtitle file for a generated video.
+    The SRT is saved alongside the MP4 during the Whisper timed-captions step.
+    """
+    db_video = db.query(Video).filter(Video.id == video_id).first()
+    if not db_video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if not db_video.video_url:
+        raise HTTPException(status_code=404, detail="Video has no associated file")
+
+    srt_path = Path(str(db_video.video_url).replace("_raw.mp4", "").replace(".mp4", ".srt"))
+    if not srt_path.exists() or srt_path.stat().st_size == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="No SRT file found for this video. Only videos generated with timed captions have SRT files.",
+        )
+    return FileResponse(
+        path=str(srt_path),
+        media_type="text/plain",
+        filename=f"captions-{video_id}.srt",
+    )
+
 
 @router.get("/{video_id}/stream")
 def stream_video(

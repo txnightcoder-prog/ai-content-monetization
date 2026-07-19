@@ -303,16 +303,33 @@ class VideoPipelineService:
 # ------------------------------------------------------------------
 def get_video_service():
     """
-    Return the video provider. Veo 3 is the only supported provider.
-    GOOGLE_API_KEY must be set — no fallback to local pipeline.
+    Return the best available video provider with graceful fallback chain:
+      1. Veo 3  (GOOGLE_API_KEY set)               — AI-generated clips
+      2. Local  (ELEVENLABS_API_KEY + PEXELS_API_KEY) — stock footage + TTS
+      3. None   — fail gracefully with a clear error message
     """
     if os.getenv("GOOGLE_API_KEY"):
         try:
             from app.services.veo_service import VeoVideoService   # noqa: PLC0415
-            return VeoVideoService()
+            svc = VeoVideoService()
+            logger.info("Video provider: Veo 3 (AI-generated clips)")
+            return svc
         except Exception as exc:
-            logger.error("Veo provider init failed: %s", exc)
+            logger.warning("Veo provider init failed (%s) — falling back to local", exc)
 
+    if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
+        try:
+            from app.services.local_video_service import LocalVideoService  # noqa: PLC0415
+            svc = LocalVideoService()
+            logger.info("Video provider: Local (ElevenLabs + Pexels + FFmpeg)")
+            return svc
+        except Exception as exc:
+            logger.warning("Local video provider init failed: %s", exc)
+
+    logger.warning(
+        "No video provider configured. "
+        "Set GOOGLE_API_KEY or ELEVENLABS_API_KEY + PEXELS_API_KEY."
+    )
     return None
 
 

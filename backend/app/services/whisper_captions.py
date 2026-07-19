@@ -195,16 +195,28 @@ async def add_timed_captions(
 
     Returns ``output_path`` on success.
     If transcription fails, copies ``video_path`` to ``output_path`` unchanged.
+
+    Side effect: saves a permanent SRT file alongside the output MP4 so callers
+    can offer subtitle downloads. The SRT path is ``output_path`` with ``.mp4``
+    replaced by ``.srt``.
     """
+    # Permanent SRT saved next to the output MP4 (e.g. /tmp/videos/<id>.srt)
+    permanent_srt = str(output_path).replace("_raw.mp4", "").replace(".mp4", ".srt")
+
     with tempfile.NamedTemporaryFile(suffix=".srt", delete=False) as f:
-        srt_path = f.name
+        tmp_srt = f.name
     try:
         words = await transcribe_words(audio_path)
-        write_srt(words, srt_path, words_per_line=words_per_line)
-        burn_subtitles(video_path, srt_path, output_path)
+        write_srt(words, tmp_srt, words_per_line=words_per_line)
+        burn_subtitles(video_path, tmp_srt, output_path)
+        # Copy SRT to permanent location alongside the final MP4
+        import shutil as _shutil
+        if os.path.exists(tmp_srt) and os.path.getsize(tmp_srt) > 0:
+            _shutil.copy2(tmp_srt, permanent_srt)
+            logger.info("Whisper captions: SRT saved to %s", permanent_srt)
     finally:
-        if os.path.exists(srt_path):
-            os.unlink(srt_path)
+        if os.path.exists(tmp_srt):
+            os.unlink(tmp_srt)
     return output_path
 
 # Made with Bob

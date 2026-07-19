@@ -601,6 +601,111 @@ def get_top_performers_route(
     }
 
 
+class TrendingQueueRequest(BaseModel):
+    niche: str = "AI tools"
+    count: int = 5   # Number of trending items to convert (max 8)
+
+
+@router.post("/trending-to-queue")
+async def trending_to_queue(
+    request: TrendingQueueRequest,
+    db: Session = Depends(get_db),
+    generator: ScriptGenerator = Depends(get_script_generator),
+    trending: TrendingService = Depends(get_trending_service),
+):
+    """
+    **One-click: Fetch trending → Auto-generate scripts for all of them.**
+
+    1. Fetches the top ``count`` trending topics for your niche across YouTube, TikTok & Instagram.
+    2. Deduplicates overlapping topics across platforms.
+    3. Generates a full Hook/Body/CTA script for each in parallel.
+    4. Saves all scripts to the database immediately.
+
+    Returns a list of ContentScript records ready to use for video generation.
+    Typical run time: 15–30 seconds for 5 scripts.
+    """
+    import asyncio as _asyncio
+
+    count = max(1, min(request.count, 8))
+
+    logger.info("trending-to-queue: fetching trends for niche '%s'", request.niche)
+    try:
+        trends = await trending.get_trending(niche=request.niche, count=count)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch trending topics: {exc}")
+
+    # Build a deduplicated topic list — prefer use_for_niche (the actionable angle)
+    seen: set = set()
+    topics: list[str] = []
+    for platform in ("youtube", "tiktok", "instagram"):
+        for item in trends.get(platform, []):
+            angle = item.get("use_for_niche") or item.get("title") or ""
+            key = angle.lower()[:60]
+            if angle and key not in seen:
+                seen.add(key)
+                topics.append(angle)
+            if len(topics) >= count:
+                break
+        if len(topics) >= count:
+            break
+
+    if not topics:
+        raise HTTPException(status_code=502, detail="Trending service returned no usable topics")
+
+    logger.info("trending-to-queue: generating %d scripts for topics: %s", len(topics), topics)
+
+    # Generate all scripts in parallel
+    async def _generate_one(topic: str):
+        try:
+            data = await generator.generate_script(topic=topic, niche=request.niche)
+            script = ContentScript(
+                topic=topic,
+                hook=data["hook"],
+                body=data["body"],
+                cta=data["cta"],
+                status=ScriptStatus.DRAFT,
+                script_metadata={**data.get("metadata", {}), "auto_queued": True, "source": "trending"},
+            )
+            db.add(script)
+            return script
+        except Exception as exc:
+            logger.warning("Failed to generate script for '%s': %s", topic, exc)
+            return None
+
+    results = await _asyncio.gather(*[_generate_one(t) for t in topics])
+    scripts = [s for s in results if s is not None]
+
+    if not scripts:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="All script generations failed")
+
+    try:
+        db.commit()
+        for s in scripts:
+            db.refresh(s)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save scripts: {exc}")
+
+    logger.info("trending-to-queue: saved %d scripts", len(scripts))
+    return {
+        "count": len(scripts),
+        "niche": request.niche,
+        "topics": [s.topic for s in scripts],
+        "scripts": [
+            {
+                "id": str(s.id),
+                "topic": s.topic,
+                "hook": s.hook,
+                "body": s.body,
+                "cta": s.cta,
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in scripts
+        ],
+    }
+
+
 class TopPerformersRequest(BaseModel):
     niche: str = "AI tools"
     count: int = 10

@@ -192,8 +192,11 @@ async def run_checks() -> Dict[str, Any]:
         # Critical — these block core features
         _check("Database",               "Set DATABASE_URL and restart. Check firewall rules.", _db()),
         _check("OpenAI API Key",         "Set OPENAI_API_KEY. Get a key at platform.openai.com/api-keys", _openai()),
-        _check("Google Veo 3 (AI video)", "Set GOOGLE_API_KEY. Get a key at aistudio.google.com/apikey", _veo()),
-        # Important but non-critical
+        # Video providers — warn level (at least one should be set)
+        _warn_check("Google Veo 3 (AI video)", "Set GOOGLE_API_KEY. Get a key at aistudio.google.com/apikey", _veo()),
+        _warn_check("ElevenLabs API Key",  "Set ELEVENLABS_API_KEY for local stock-footage pipeline. Get free key at elevenlabs.io", _elevenlabs()),
+        _warn_check("Pexels API Key",      "Set PEXELS_API_KEY for stock footage B-roll. Free at pexels.com/api", _pexels()),
+        # Publishing & distribution
         _warn_check("YouTube OAuth (upload)",  "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN via console.cloud.google.com", _yt_oauth()),
         _warn_check("YouTube Data API Key",    "Set YOUTUBE_DATA_API_KEY at console.cloud.google.com → APIs → Credentials", _yt_data()),
         _warn_check("Buffer (social posting)", "Set BUFFER_ACCESS_TOKEN at buffer.com → Settings → Apps & Integrations", _buffer()),
@@ -220,10 +223,14 @@ async def run_checks() -> Dict[str, Any]:
 
 @router.get("/video-provider")
 async def get_video_provider() -> Dict[str, str]:
-    """
-    Returns which video generation provider is currently active.
-    Veo 3 is the only supported provider.
-    """
+    """Returns which video generation provider is currently active (priority order)."""
+    if os.getenv("CREATIFY_API_ID") and os.getenv("CREATIFY_API_KEY"):
+        return {
+            "provider": "creatify",
+            "label":    "Creatify AI Avatar",
+            "detail":   "AI talking-head avatar videos + URL-to-Video ad creation via Creatify",
+            "color":    "#10b981",
+        }
     if os.getenv("GOOGLE_API_KEY"):
         return {
             "provider": "veo",
@@ -231,10 +238,17 @@ async def get_video_provider() -> Dict[str, str]:
             "detail":   "AI-generated video clips via Google DeepMind Veo",
             "color":    "#10b981",
         }
+    if os.getenv("ELEVENLABS_API_KEY") and os.getenv("PEXELS_API_KEY"):
+        return {
+            "provider": "local",
+            "label":    "Local Pipeline",
+            "detail":   "ElevenLabs voiceover + Pexels stock footage + FFmpeg assembly",
+            "color":    "#3b82f6",
+        }
     return {
         "provider": "none",
         "label":    "No video provider configured",
-        "detail":   "Set GOOGLE_API_KEY to enable Veo 3 AI video generation. Get a key at aistudio.google.com/apikey",
+        "detail":   "Set CREATIFY_API_ID + CREATIFY_API_KEY (recommended), GOOGLE_API_KEY, or ELEVENLABS_API_KEY + PEXELS_API_KEY",
         "color":    "#ef4444",
     }
 
