@@ -7,6 +7,7 @@ from app.models.product import Product
 from app.models.conversion import Conversion
 from app.models.analytics import Analytics
 from app.models.integration import Integration
+from app.models.order import Order, ChildProfile, OrderStatus
 
 __all__ = [
     "Base",
@@ -18,6 +19,9 @@ __all__ = [
     "Conversion",
     "Analytics",
     "Integration",
+    "Order",
+    "ChildProfile",
+    "OrderStatus",
 ]
 
 # Made with Bob
