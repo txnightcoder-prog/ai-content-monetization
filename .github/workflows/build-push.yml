@@ -96,6 +96,10 @@ jobs:
           MAILGUN_DOMAIN:              ${{ secrets.MAILGUN_DOMAIN }}
           EMAIL_FROM:                  ${{ secrets.EMAIL_FROM }}
           EMAIL_FROM_NAME:             ${{ secrets.EMAIL_FROM_NAME }}
+          SMTP_HOST:                   ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:                   ${{ secrets.SMTP_PORT }}
+          SMTP_USER:                   ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD:               ${{ secrets.SMTP_PASSWORD }}
           AWS_S3_BUCKET:               ${{ secrets.AWS_S3_BUCKET }}
           AWS_REGION:                  ${{ secrets.AWS_REGION }}
           AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
@@ -129,6 +133,10 @@ jobs:
           [ -n "$MAILGUN_DOMAIN" ]              && VARS="$VARS MAILGUN_DOMAIN=$MAILGUN_DOMAIN"
           [ -n "$EMAIL_FROM" ]                  && VARS="$VARS EMAIL_FROM=$EMAIL_FROM"
           [ -n "$EMAIL_FROM_NAME" ]             && VARS="$VARS EMAIL_FROM_NAME=$EMAIL_FROM_NAME"
+          [ -n "$SMTP_HOST" ]                   && VARS="$VARS SMTP_HOST=$SMTP_HOST"
+          [ -n "$SMTP_PORT" ]                   && VARS="$VARS SMTP_PORT=$SMTP_PORT"
+          [ -n "$SMTP_USER" ]                   && VARS="$VARS SMTP_USER=$SMTP_USER"
+          [ -n "$SMTP_PASSWORD" ]               && VARS="$VARS SMTP_PASSWORD=$SMTP_PASSWORD"
           [ -n "$AWS_S3_BUCKET" ]               && VARS="$VARS AWS_S3_BUCKET=$AWS_S3_BUCKET"
           [ -n "$AWS_REGION" ]                  && VARS="$VARS AWS_REGION=$AWS_REGION"
           [ -n "$AZURE_STORAGE_CONNECTION_STRING" ] && VARS="$VARS AZURE_STORAGE_CONNECTION_STRING=$AZURE_STORAGE_CONNECTION_STRING"
