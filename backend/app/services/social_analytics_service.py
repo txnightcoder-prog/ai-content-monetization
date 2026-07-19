@@ -215,18 +215,192 @@ def _fetch_youtube_buffer() -> list[PlatformPost]:
     return _fetch_buffer_channel(channel_id, "youtube")
 
 
+# ── TikTok — native Content Posting API v2 ────────────────────────────────────
+#
+# Uses the TikTok Content Posting API v2 (open.tiktokapis.com).
+# Requires a user access token obtained via TikTok OAuth.
+#
+# Required env vars:
+#   TIKTOK_ACCESS_TOKEN   — user access token (expires every 24h)
+#   TIKTOK_CLIENT_KEY     — from TikTok Developer Portal (app credentials)
+#   TIKTOK_CLIENT_SECRET  — from TikTok Developer Portal (app credentials)
+#   TIKTOK_REFRESH_TOKEN  — long-lived refresh token (valid 365 days)
+#
+# How to get these:
+#   1. Go to https://developers.tiktok.com → My Apps → Create an app
+#   2. Enable "Content Posting API" + "Video List" scope
+#   3. Complete OAuth flow once to get the initial access + refresh tokens
+#      (use https://developers.tiktok.com/tools/redirect to test locally)
+#   4. Paste the tokens into your .env — this fetcher auto-refreshes on expiry.
+#
+# Fields returned: view_count, like_count, comment_count, share_count,
+#                  title (caption), create_time, id
+
+_TIKTOK_VIDEO_LIST_URL = "https://open.tiktokapis.com/v2/video/list/"
+_TIKTOK_TOKEN_URL      = "https://open.tiktokapis.com/v2/oauth/token/"
+
+_TIKTOK_VIDEO_FIELDS = (
+    "id,title,create_time,"
+    "view_count,like_count,comment_count,share_count"
+)
+
+
+def _tiktok_refresh_access_token() -> str:
+    """
+    Exchange TIKTOK_REFRESH_TOKEN for a fresh access token.
+    Updates TIKTOK_ACCESS_TOKEN in the process environment so the
+    same server process reuses it without hitting the token endpoint again.
+    Raises ValueError if required credentials are missing.
+    """
+    client_key     = os.getenv("TIKTOK_CLIENT_KEY", "")
+    client_secret  = os.getenv("TIKTOK_CLIENT_SECRET", "")
+    refresh_token  = os.getenv("TIKTOK_REFRESH_TOKEN", "")
+
+    if not all([client_key, client_secret, refresh_token]):
+        raise ValueError(
+            "TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REFRESH_TOKEN "
+            "must all be set to auto-refresh the TikTok access token."
+        )
+
+    with httpx.Client(timeout=15) as client:
+        resp = client.post(
+            _TIKTOK_TOKEN_URL,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_key":    client_key,
+                "client_secret": client_secret,
+                "grant_type":    "refresh_token",
+                "refresh_token": refresh_token,
+            },
+        )
+        resp.raise_for_status()
+        body = resp.json()
+
+    if body.get("error"):
+        raise ValueError(
+            f"TikTok token refresh failed: {body.get('error')} — "
+            f"{body.get('error_description', '')}"
+        )
+
+    new_token = body["data"]["access_token"]
+    # Store in the process env so other calls within this process reuse it
+    os.environ["TIKTOK_ACCESS_TOKEN"] = new_token
+    logger.info("TikTok: access token refreshed successfully")
+    return new_token
+
+
+def _tiktok_video_list(access_token: str, max_count: int = 20) -> list[dict]:
+    """
+    Call POST /v2/video/list/ and return the raw video objects.
+    Handles pagination cursor automatically for up to max_count videos.
+    """
+    videos: list[dict] = []
+    cursor: Optional[int] = None
+
+    while len(videos) < max_count:
+        page_size = min(20, max_count - len(videos))  # TikTok max per page = 20
+        payload: dict = {"max_count": page_size}
+        if cursor is not None:
+            payload["cursor"] = cursor
+
+        with httpx.Client(timeout=20) as client:
+            resp = client.post(
+                _TIKTOK_VIDEO_LIST_URL,
+                params={"fields": _TIKTOK_VIDEO_FIELDS},
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            )
+
+        if resp.status_code == 401:
+            # Token expired — bubble up so caller can refresh and retry
+            raise PermissionError("TikTok access token expired (401)")
+
+        resp.raise_for_status()
+        body = resp.json()
+
+        error = body.get("error", {})
+        if error.get("code") and error["code"] != "ok":
+            raise ValueError(
+                f"TikTok API error: {error.get('code')} — {error.get('message', '')}"
+            )
+
+        data    = body.get("data", {})
+        batch   = data.get("videos", [])
+        videos.extend(batch)
+
+        if not data.get("has_more") or not batch:
+            break
+        cursor = data.get("cursor")
+
+    return videos
+
+
+def _parse_tiktok_video(v: dict) -> PlatformPost:
+    """Convert a TikTok video object to the canonical PlatformPost shape."""
+    create_time = v.get("create_time")
+    posted_at: Optional[datetime] = None
+    if create_time:
+        try:
+            posted_at = datetime.fromtimestamp(int(create_time), tz=timezone.utc)
+        except (ValueError, TypeError):
+            pass
+
+    # TikTok captions live in "title"; truncate to 120 chars
+    title = (v.get("title") or "")[:120] or None
+
+    return PlatformPost(
+        platform    = "tiktok",
+        external_id = v.get("id", ""),
+        title       = title,
+        views       = _safe_int(v.get("view_count")),
+        likes       = _safe_int(v.get("like_count")),
+        comments    = _safe_int(v.get("comment_count")),
+        shares      = _safe_int(v.get("share_count")),
+        clicks      = 0,   # TikTok doesn't expose click data via this API
+        posted_at   = posted_at,
+    )
+
+
+@register("tiktok")
+def _fetch_tiktok() -> list[PlatformPost]:
+    """
+    Fetch TikTok video stats via the Content Posting API v2.
+
+    Auto-refreshes the access token on 401 if TIKTOK_CLIENT_KEY,
+    TIKTOK_CLIENT_SECRET, and TIKTOK_REFRESH_TOKEN are all set.
+
+    Falls back gracefully if no token is configured at all.
+    """
+    access_token = os.getenv("TIKTOK_ACCESS_TOKEN", "")
+    if not access_token:
+        logger.info("TikTok: TIKTOK_ACCESS_TOKEN not set — skipping")
+        return []
+
+    try:
+        videos = _tiktok_video_list(access_token)
+    except PermissionError:
+        # 401 — try to refresh and retry once
+        logger.info("TikTok: access token expired, attempting refresh…")
+        try:
+            access_token = _tiktok_refresh_access_token()
+            videos = _tiktok_video_list(access_token)
+        except Exception as exc:
+            raise ValueError(
+                f"TikTok token refresh failed: {exc}. "
+                "Set TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET, and TIKTOK_REFRESH_TOKEN "
+                "to enable auto-refresh, or paste a fresh TIKTOK_ACCESS_TOKEN."
+            ) from exc
+
+    result = [_parse_tiktok_video(v) for v in videos]
+    logger.info("TikTok: fetched %d videos", len(result))
+    return result
+
+
 # ── How to add a new platform in the future ───────────────────────────────────
 #
-# 1. Import this module (or add below)
-# 2. Write a fetcher function that returns list[PlatformPost]
-# 3. Decorate it with @register("platform_name")
-#
-# Example — TikTok (once you have a TikTok Business API token):
-#
-#   @register("tiktok")
-#   def _fetch_tiktok() -> list[PlatformPost]:
-#       token = os.getenv("TIKTOK_ACCESS_TOKEN", "")
-#       # ... call TikTok API ...
-#       return [PlatformPost(platform="tiktok", ...)]
-#
-# That's it. The sync endpoint and summary endpoint pick it up automatically.
+# 1. Write a fetcher function that returns list[PlatformPost]
+# 2. Decorate it with @register("platform_name")
+# That's it — sync, summary, and the performance monitor pick it up automatically.

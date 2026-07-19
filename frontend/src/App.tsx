@@ -179,7 +179,7 @@ interface AIImage {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -210,6 +210,49 @@ function App() {
   const [analyticsSyncing, setAnalyticsSyncing]     = useState(false);
   const [analyticsSyncMsg, setAnalyticsSyncMsg]     = useState('');
   const [analyticsTopMetric, setAnalyticsTopMetric] = useState<'views'|'likes'|'comments'|'shares'>('views');
+
+  // ── Performance Monitor state ─────────────────────────────────────────────
+  interface MonitorData {
+    period_days: number;
+    last_synced: string | null;
+    social: {
+      total_posts: number; total_views: number; total_likes: number;
+      total_comments: number; total_shares: number; total_clicks: number;
+      avg_engagement_rate: number;
+      by_platform: Array<{platform:string;posts:number;views:number;likes:number;comments:number;shares:number;engagement_rate:number}>;
+    };
+    revenue: { total: number; conversions: number; avg_order: number };
+    pipeline: { videos_by_status: Record<string,number>; posts_published: number };
+    low_performer_count: number;
+    top_posts: Array<{id:string;platform:string;title:string|null;views:number;likes:number;comments:number;shares:number;posted_at:string|null}>;
+    affiliates: Array<{name:string;category:string;commission:string;est_monthly:string;link:string;why:string}>;
+  }
+  interface ImproveSuggestions {
+    threshold_views: number; avg_views: number; low_performer_count: number;
+    low_performers: Array<{title:string|null;platform:string;views:number;likes:number;comments:number}>;
+    suggestions: Array<{title:string;platform:string;tactics:string[]}>;
+    general_tips: string[];
+  }
+  const [monitorData,        setMonitorData]        = useState<MonitorData | null>(null);
+  const [monitorLoading,     setMonitorLoading]     = useState(false);
+  const [monitorError,       setMonitorError]       = useState('');
+  const [monitorDays,        setMonitorDays]        = useState(30);
+  const [monitorSyncing,     setMonitorSyncing]     = useState(false);
+  const [monitorSyncMsg,     setMonitorSyncMsg]     = useState('');
+  const [monitorTab,         setMonitorTab]         = useState<'overview'|'platforms'|'topvids'|'affiliate'|'ai-coach'|'connections'>('overview');
+  const [improveData,        setImproveData]        = useState<ImproveSuggestions | null>(null);
+  const [improveLoading,     setImproveLoading]     = useState(false);
+  const [improveError,       setImproveError]       = useState('');
+  const [improveThreshold,   setImproveThreshold]   = useState(500);
+  interface PlatformStatus {
+    platform: string; label: string; connected: boolean; auto_refresh: boolean;
+    missing: string[]; setup_url: string; scope_needed: string; notes: string;
+  }
+  interface ConnectionStatus {
+    platforms: PlatformStatus[]; connected_count: number; total: number; all_connected: boolean;
+  }
+  const [connStatus,   setConnStatus]   = useState<ConnectionStatus | null>(null);
+  const [connLoading,  setConnLoading]  = useState(false);
 
 
   // Helper: return backend streaming URL for a video record
@@ -555,45 +598,115 @@ function App() {
         <p className="subtitle">Generate a video from a script and publish it to your social platforms</p>
       )}
 
-      {/* ── Import Video from external source ── */}
+      {/* ── Davinci.ai launcher + Import ── */}
       <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: '0.875rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
           <h3 style={{ color: '#a78bfa', margin: 0, fontSize: '1rem' }}>📥 Import Video</h3>
-          <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Upload a video file from your device, HeyGen, CapCut, or any other source</span>
+          <span style={{ color: '#64748b', fontSize: '0.8rem' }}>Create on Davinci.ai, HeyGen, CapCut, or any other tool — then import here</span>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <input
-            type="text"
-            value={uploadTitle}
-            onChange={e => setUploadTitle(e.target.value)}
-            placeholder="Video title (optional)"
-            disabled={uploadLoading}
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.65rem 0.85rem', fontSize: '0.875rem' }}
-          />
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{
-              flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: '0.6rem',
-              background: 'rgba(139,92,246,0.1)', border: '2px dashed rgba(139,92,246,0.4)',
-              borderRadius: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer', color: '#a78bfa', fontWeight: 600, fontSize: '0.875rem'
-            }}>
-              <input type="file" accept="video/*" style={{ display: 'none' }}
-                onChange={e => setUploadFile(e.target.files?.[0] ?? null)} disabled={uploadLoading} />
-              📂 {uploadFile ? uploadFile.name : 'Choose video file (MP4, MOV, WebM)'}
-            </label>
-            <button
-              onClick={uploadIphoneVideo}
-              disabled={uploadLoading || !uploadFile}
-              style={{ flex: '0 0 auto', background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: uploadLoading || !uploadFile ? 'not-allowed' : 'pointer', opacity: uploadLoading || !uploadFile ? 0.6 : 1 }}>
-              {uploadLoading ? `⏳ Uploading ${uploadProgress}%…` : '📥 Import'}
-            </button>
-          </div>
-          {uploadError && <div className="error-message">{uploadError}</div>}
-          {uploadSuccess && <div className="publish-success">{uploadSuccess} — find it in My Videos below to publish to YouTube.</div>}
-          {uploadLoading && uploadProgress > 0 && (
-            <div style={{ background: 'rgba(139,92,246,0.1)', borderRadius: '999px', height: '6px', overflow: 'hidden' }}>
-              <div style={{ background: '#a78bfa', height: '100%', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
+
+        {/* ── Step 1: Davinci.ai launch button ── */}
+        <div style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.12))', border: '1px solid rgba(99,102,241,0.4)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
+                <span style={{ background: '#6366f1', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}>Step 1</span>
+                <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.9rem' }}>Create your video on Davinci.ai</span>
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+                AI-powered video editor — use your script, add AI avatars, voiceover &amp; captions, then export as MP4.
+              </p>
             </div>
-          )}
+            <a
+              href="https://davinci.ai/app/home"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
+                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                color: '#fff', borderRadius: '0.5rem', padding: '0.65rem 1.25rem',
+                fontWeight: 700, fontSize: '0.875rem', textDecoration: 'none',
+                whiteSpace: 'nowrap', flexShrink: 0,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              Open Davinci.ai →
+            </a>
+          </div>
+        </div>
+
+        {/* ── Step 2: paste URL or upload file ── */}
+        <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+            <span style={{ background: '#a78bfa', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.72rem', fontWeight: 700 }}>Step 2</span>
+            <span style={{ color: '#e2e8f0', fontWeight: 700, fontSize: '0.9rem' }}>Import your finished video</span>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <input
+              type="text"
+              value={uploadTitle}
+              onChange={e => setUploadTitle(e.target.value)}
+              placeholder="Video title (optional)"
+              disabled={uploadLoading}
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.65rem 0.85rem', fontSize: '0.875rem' }}
+            />
+
+            {/* URL import row */}
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <input
+                type="url"
+                value={importUrl}
+                onChange={e => setImportUrl(e.target.value)}
+                placeholder="Paste Davinci.ai MP4 download link — or use file upload below"
+                disabled={importUrlLoading}
+                style={{ flex: '1 1 260px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(99,102,241,0.35)', borderRadius: '0.5rem', color: '#e2e8f0', padding: '0.65rem 0.85rem', fontSize: '0.875rem' }}
+              />
+              <button
+                onClick={submitImportUrl}
+                disabled={importUrlLoading || !importUrl.trim()}
+                style={{ flex: '0 0 auto', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: importUrlLoading || !importUrl.trim() ? 'not-allowed' : 'pointer', opacity: importUrlLoading || !importUrl.trim() ? 0.6 : 1, whiteSpace: 'nowrap' }}>
+                {importUrlLoading ? '⏳ Importing…' : '🔗 Import URL'}
+              </button>
+            </div>
+            {importUrlError   && <div className="error-message">{importUrlError}</div>}
+            {importUrlSuccess && <div className="publish-success">{importUrlSuccess}</div>}
+
+            {/* Divider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(148,163,184,0.12)' }} />
+              <span style={{ color: '#475569', fontSize: '0.75rem', fontWeight: 600 }}>OR UPLOAD FILE</span>
+              <div style={{ flex: 1, height: '1px', background: 'rgba(148,163,184,0.12)' }} />
+            </div>
+
+            {/* File upload row */}
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <label style={{
+                flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: '0.6rem',
+                background: 'rgba(139,92,246,0.1)', border: '2px dashed rgba(139,92,246,0.4)',
+                borderRadius: '0.5rem', padding: '0.75rem 1rem', cursor: 'pointer', color: '#a78bfa', fontWeight: 600, fontSize: '0.875rem'
+              }}>
+                <input type="file" accept="video/*" style={{ display: 'none' }}
+                  onChange={e => setUploadFile(e.target.files?.[0] ?? null)} disabled={uploadLoading} />
+                📂 {uploadFile ? uploadFile.name : 'Choose video file (MP4, MOV, WebM)'}
+              </label>
+              <button
+                onClick={uploadIphoneVideo}
+                disabled={uploadLoading || !uploadFile}
+                style={{ flex: '0 0 auto', background: 'linear-gradient(135deg,#a78bfa,#7c3aed)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: uploadLoading || !uploadFile ? 'not-allowed' : 'pointer', opacity: uploadLoading || !uploadFile ? 0.6 : 1 }}>
+                {uploadLoading ? `⏳ Uploading ${uploadProgress}%…` : '📥 Import File'}
+              </button>
+            </div>
+            {uploadError   && <div className="error-message">{uploadError}</div>}
+            {uploadSuccess && <div className="publish-success">{uploadSuccess} — find it in My Videos below to publish to YouTube.</div>}
+            {uploadLoading && uploadProgress > 0 && (
+              <div style={{ background: 'rgba(139,92,246,0.1)', borderRadius: '999px', height: '6px', overflow: 'hidden' }}>
+                <div style={{ background: '#a78bfa', height: '100%', width: `${uploadProgress}%`, transition: 'width 0.3s' }} />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1765,6 +1878,36 @@ function App() {
   const [uploadError, setUploadError]             = useState('');
   const [uploadSuccess, setUploadSuccess]         = useState('');
 
+  // ── URL import (Davinci.ai / HeyGen / CapCut paste-link) ─────────────────
+  const [importUrl,        setImportUrl]        = useState('');
+  const [importUrlLoading, setImportUrlLoading] = useState(false);
+  const [importUrlError,   setImportUrlError]   = useState('');
+  const [importUrlSuccess, setImportUrlSuccess] = useState('');
+
+  const submitImportUrl = async () => {
+    const url = importUrl.trim();
+    if (!url) { setImportUrlError('Paste a direct MP4 URL first'); return; }
+    setImportUrlLoading(true); setImportUrlError(''); setImportUrlSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/videos/import-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title: uploadTitle.trim() || undefined }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      const video: VideoRecord = await res.json();
+      setImportUrlSuccess(`✅ Imported! Video ID: ${video.id} — find it in My Videos below.`);
+      setImportUrl('');
+      setUploadTitle('');
+      setActiveVideo(video);
+      setAllVideos(prev => [video, ...prev.filter(v => v.id !== video.id)]);
+    } catch (err) {
+      setImportUrlError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setImportUrlLoading(false);
+    }
+  };
+
   const uploadIphoneVideo = async () => {
     if (!uploadFile) { setUploadError('Choose a video file first'); return; }
     setUploadLoading(true); setUploadError(''); setUploadSuccess(''); setUploadProgress(0);
@@ -2075,6 +2218,550 @@ function App() {
       )}
     </div>
   );
+
+  // ── Performance Monitor helpers ───────────────────────────────────────────
+  const loadMonitorData = async (days = monitorDays) => {
+    setMonitorLoading(true); setMonitorError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/analytics/performance-monitor?days=${days}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setMonitorData(await res.json());
+    } catch (e) { setMonitorError(e instanceof Error ? e.message : 'Failed to load'); }
+    finally { setMonitorLoading(false); }
+  };
+
+  const syncAndReload = async () => {
+    setMonitorSyncing(true); setMonitorSyncMsg('');
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
+      if (!r.ok) throw new Error(`Sync failed: HTTP ${r.status}`);
+      const d = await r.json();
+      const total = d.total_records ?? 0;
+      setMonitorSyncMsg(`✅ Synced ${total} records`);
+      await loadMonitorData(monitorDays);
+    } catch (e) { setMonitorSyncMsg(e instanceof Error ? `❌ ${e.message}` : '❌ Sync failed'); }
+    finally { setMonitorSyncing(false); }
+  };
+
+  const runImprove = async () => {
+    setImproveLoading(true); setImproveError(''); setImproveData(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/analytics/improve-suggestions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threshold_views: improveThreshold, limit: 10 }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setImproveData(await res.json());
+    } catch (e) { setImproveError(e instanceof Error ? e.message : 'Failed'); }
+    finally { setImproveLoading(false); }
+  };
+
+  const loadConnStatus = async () => {
+    setConnLoading(true);
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/analytics/platform-status`);
+      if (r.ok) setConnStatus(await r.json());
+    } catch { /* ignore */ }
+    finally { setConnLoading(false); }
+  };
+
+  const platIcon  = (p: string) => ({ youtube: '▶', instagram: '📸', tiktok: '🎵', facebook: '👥', twitter: '𝕏', linkedin: '💼' } as Record<string,string>)[p] ?? '🌐';
+  const platColor = (p: string) => ({ youtube: '#ef4444', instagram: '#e1306c', tiktok: '#69c9d0', facebook: '#1877f2', twitter: '#1da1f2', linkedin: '#0077b5' } as Record<string,string>)[p] ?? '#94a3b8';
+
+  const renderMonitor = () => {
+    const s = monitorData;
+    const TAB_STYLE = (active: boolean) => ({
+      padding: '0.5rem 1.1rem', borderRadius: '0.4rem', border: 'none', cursor: 'pointer', fontWeight: 700,
+      fontSize: '0.82rem', background: active ? '#3b82f6' : 'rgba(255,255,255,0.05)',
+      color: active ? '#fff' : '#94a3b8', transition: 'background 0.15s',
+    });
+    const CARD = (children: React.ReactNode, accent = '#3b82f6') => (
+      <div style={{ background: `${accent}0d`, border: `1px solid ${accent}35`, borderRadius: '0.75rem', padding: '1rem' }}>
+        {children}
+      </div>
+    );
+    const BIG_NUM = (val: React.ReactNode, label: string, color: string) => (
+      <div style={{ background: `${color}12`, border: `1px solid ${color}40`, borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
+        <div style={{ fontSize: '1.6rem', fontWeight: 900, color }}>{val}</div>
+        <div style={{ color: '#94a3b8', fontSize: '0.78rem', marginTop: '0.2rem' }}>{label}</div>
+      </div>
+    );
+
+    return (
+      <div className="videos-page">
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.5rem' }}>
+          <div>
+            <h1 style={{ margin: 0 }}>📡 Performance Monitor</h1>
+            <p className="subtitle" style={{ margin: '0.25rem 0 0' }}>
+              Live video metrics · Revenue · AI improvement coach · Affiliate income
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* Period selector */}
+            {([7,14,30,90] as const).map(d => (
+              <button key={d} onClick={() => { setMonitorDays(d); loadMonitorData(d); }}
+                style={{ padding: '0.35rem 0.8rem', borderRadius: '999px', border: `1px solid ${monitorDays===d?'#3b82f6':'rgba(148,163,184,0.25)'}`, background: monitorDays===d?'rgba(59,130,246,0.2)':'transparent', color: monitorDays===d?'#60a5fa':'#94a3b8', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 700 }}>
+                {d}d
+              </button>
+            ))}
+            <button onClick={syncAndReload} disabled={monitorSyncing}
+              style={{ padding: '0.45rem 1rem', borderRadius: '0.4rem', border: '1px solid rgba(16,185,129,0.4)', background: 'rgba(16,185,129,0.1)', color: '#34d399', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 700 }}>
+              {monitorSyncing ? '⏳ Syncing…' : '☁️ Sync'}
+            </button>
+            <button onClick={() => loadMonitorData(monitorDays)} disabled={monitorLoading}
+              style={{ padding: '0.45rem 1rem', borderRadius: '0.4rem', border: '1px solid rgba(59,130,246,0.35)', background: 'rgba(59,130,246,0.1)', color: '#60a5fa', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 700 }}>
+              {monitorLoading ? '⏳' : '🔄 Refresh'}
+            </button>
+          </div>
+        </div>
+        {monitorSyncMsg && <p style={{ color: monitorSyncMsg.startsWith('✅') ? '#34d399' : '#f87171', fontSize: '0.82rem', margin: '0.25rem 0 0.75rem' }}>{monitorSyncMsg}</p>}
+        {monitorError   && <div className="error-message" style={{ marginBottom: '1rem' }}>{monitorError}</div>}
+
+        {/* ── Empty state ─────────────────────────────────────────────────── */}
+        {!s && !monitorLoading && (
+          <div style={{ textAlign: 'center', padding: '3rem 1rem', color: '#64748b' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📡</div>
+            <p style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>No data loaded yet.</p>
+            <button onClick={() => loadMonitorData(monitorDays)}
+              style={{ padding: '0.7rem 1.5rem', borderRadius: '0.5rem', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+              Load Dashboard
+            </button>
+          </div>
+        )}
+        {monitorLoading && !s && (
+          <div style={{ textAlign: 'center', padding: '3rem', color: '#64748b' }}>⏳ Loading…</div>
+        )}
+
+        {s && (
+          <>
+            {/* ── KPI row ─────────────────────────────────────────────── */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: '0.65rem', marginBottom: '1.25rem' }}>
+              {BIG_NUM(`$${s.revenue.total.toFixed(2)}`,   `Revenue (${s.period_days}d)`,   '#f59e0b')}
+              {BIG_NUM(fmt(s.social.total_views),          'Total Views',                   '#10b981')}
+              {BIG_NUM(fmt(s.social.total_likes),          'Total Likes',                   '#f472b6')}
+              {BIG_NUM(`${s.social.avg_engagement_rate}%`, 'Engagement',                    '#a78bfa')}
+              {BIG_NUM(s.social.total_posts,               'Posts Tracked',                 '#3b82f6')}
+              {BIG_NUM(s.revenue.conversions,              `Sales (${s.period_days}d)`,     '#06b6d4')}
+              {BIG_NUM(s.pipeline.posts_published,         'Published Posts',               '#34d399')}
+              {BIG_NUM(
+                s.low_performer_count > 0
+                  ? <span style={{ color: '#fbbf24' }}>{s.low_performer_count} ⚠</span>
+                  : <span style={{ color: '#34d399' }}>0 ✓</span>,
+                'Low Performers', s.low_performer_count > 0 ? '#fbbf24' : '#34d399'
+              )}
+            </div>
+
+            {/* ── Tabs ────────────────────────────────────────────────── */}
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+              {([
+                ['overview',   '📊 Overview'],
+                ['platforms',  '🌐 By Platform'],
+                ['topvids',    '🏆 Top Videos'],
+                ['affiliate',  '💸 Affiliate Income'],
+                ['ai-coach',   `🤖 AI Coach${s.low_performer_count > 0 ? ` (${s.low_performer_count})` : ''}`],
+                ['connections', `🔌 Connections${connStatus && !connStatus.all_connected ? ` (${connStatus.connected_count}/${connStatus.total})` : ''}`],
+              ] as [typeof monitorTab, string][]).map(([key, label]) => (
+                <button key={key} onClick={() => { setMonitorTab(key as typeof monitorTab); if (key === 'connections') loadConnStatus(); }} style={TAB_STYLE(monitorTab === key)}>{label}</button>
+              ))}
+            </div>
+
+            {/* ════════ TAB: OVERVIEW ══════════════════════════════════ */}
+            {monitorTab === 'overview' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* Revenue card */}
+                {CARD(
+                  <>
+                    <h3 style={{ color: '#f59e0b', margin: '0 0 0.75rem', fontSize: '0.95rem' }}>💰 Revenue</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: '0.6rem' }}>
+                      {[
+                        ['Total Revenue', `$${s.revenue.total.toFixed(2)}`, '#f59e0b'],
+                        ['Conversions',   s.revenue.conversions,            '#10b981'],
+                        ['Avg Order',     `$${s.revenue.avg_order.toFixed(2)}`, '#06b6d4'],
+                      ].map(([lbl, val, col]) => (
+                        <div key={lbl as string} style={{ textAlign: 'center', background: `${col as string}12`, borderRadius: '0.5rem', padding: '0.6rem' }}>
+                          <div style={{ fontSize: '1.35rem', fontWeight: 900, color: col as string }}>{val as string | number}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '0.76rem' }}>{lbl as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>,
+                  '#f59e0b'
+                )}
+                {/* Pipeline card */}
+                {CARD(
+                  <>
+                    <h3 style={{ color: '#a78bfa', margin: '0 0 0.75rem', fontSize: '0.95rem' }}>🎬 Video Pipeline</h3>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {Object.entries(s.pipeline.videos_by_status).map(([status, count]) => {
+                        const c = ({ generating:'#f59e0b', ready:'#10b981', posted:'#3b82f6', failed:'#ef4444' } as Record<string,string>)[status] ?? '#94a3b8';
+                        return (
+                          <div key={status} style={{ background: `${c}18`, border: `1px solid ${c}45`, borderRadius: '0.5rem', padding: '0.4rem 0.85rem', textAlign: 'center' }}>
+                            <div style={{ fontSize: '1.2rem', fontWeight: 800, color: c }}>{count}</div>
+                            <div style={{ color: '#94a3b8', fontSize: '0.73rem', textTransform: 'capitalize' }}>{status}</div>
+                          </div>
+                        );
+                      })}
+                      <div style={{ background: 'rgba(52,211,153,0.12)', border: '1px solid rgba(52,211,153,0.35)', borderRadius: '0.5rem', padding: '0.4rem 0.85rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#34d399' }}>{s.pipeline.posts_published}</div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.73rem' }}>Published</div>
+                      </div>
+                    </div>
+                  </>,
+                  '#a78bfa'
+                )}
+                {/* Social totals */}
+                {CARD(
+                  <>
+                    <h3 style={{ color: '#10b981', margin: '0 0 0.75rem', fontSize: '0.95rem' }}>📈 Social Totals</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: '0.5rem' }}>
+                      {[
+                        ['👁 Views',    fmt(s.social.total_views),    '#10b981'],
+                        ['❤️ Likes',    fmt(s.social.total_likes),    '#f472b6'],
+                        ['💬 Comments', fmt(s.social.total_comments), '#a78bfa'],
+                        ['🔁 Shares',   fmt(s.social.total_shares),   '#06b6d4'],
+                        ['🖱 Clicks',   fmt(s.social.total_clicks),   '#3b82f6'],
+                        ['📊 Eng %',    `${s.social.avg_engagement_rate}%`, '#f59e0b'],
+                      ].map(([l, v, c]) => (
+                        <div key={l as string} style={{ textAlign: 'center', background: 'rgba(255,255,255,0.04)', borderRadius: '0.4rem', padding: '0.45rem' }}>
+                          <div style={{ color: c as string, fontWeight: 800, fontSize: '0.95rem' }}>{v as string}</div>
+                          <div style={{ color: '#64748b', fontSize: '0.72rem' }}>{l as string}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>,
+                  '#10b981'
+                )}
+                {s.last_synced && <p style={{ color: '#475569', fontSize: '0.76rem', margin: 0 }}>Last synced: {new Date(s.last_synced).toLocaleString()}</p>}
+              </div>
+            )}
+
+            {/* ════════ TAB: BY PLATFORM ═══════════════════════════════ */}
+            {monitorTab === 'platforms' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {s.social.by_platform.length === 0
+                  ? <p style={{ color: '#64748b' }}>No platform data — sync from social platforms first.</p>
+                  : s.social.by_platform.map(p => (
+                    <div key={p.platform} className="script-card" style={{ borderLeft: `4px solid ${platColor(p.platform)}` }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <h3 style={{ color: '#f1f5f9', margin: 0, fontSize: '1rem' }}>{platIcon(p.platform)} {p.platform.charAt(0).toUpperCase()+p.platform.slice(1)}</h3>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ background: `${platColor(p.platform)}22`, color: platColor(p.platform), borderRadius: '999px', padding: '0.2rem 0.6rem', fontSize: '0.78rem', fontWeight: 700 }}>{p.posts} posts</span>
+                          <span style={{ background: p.engagement_rate >= 3 ? 'rgba(16,185,129,0.15)' : p.engagement_rate >= 1 ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)', color: p.engagement_rate >= 3 ? '#34d399' : p.engagement_rate >= 1 ? '#fbbf24' : '#f87171', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.78rem', fontWeight: 700 }}>
+                            {p.engagement_rate}% eng
+                          </span>
+                        </div>
+                      </div>
+                      {/* Bar chart — views as proportion of max */}
+                      {(() => {
+                        const maxV = Math.max(...s.social.by_platform.map(x => x.views), 1);
+                        const pct = Math.round((p.views / maxV) * 100);
+                        return (
+                          <div style={{ marginBottom: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem', color: '#64748b', marginBottom: '0.25rem' }}>
+                              <span>Views</span><span style={{ color: '#e2e8f0', fontWeight: 700 }}>{fmt(p.views)}</span>
+                            </div>
+                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '999px', height: '8px', overflow: 'hidden' }}>
+                              <div style={{ background: platColor(p.platform), width: `${pct}%`, height: '100%', borderRadius: '999px', transition: 'width 0.4s' }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '0.4rem' }}>
+                        {[['❤️', fmt(p.likes),'Likes'],['💬',fmt(p.comments),'Comments'],['🔁',fmt(p.shares),'Shares']].map(([ic,v,lb]) => (
+                          <div key={lb} style={{ textAlign: 'center', background: 'rgba(255,255,255,0.04)', borderRadius: '0.4rem', padding: '0.35rem' }}>
+                            <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 700 }}>{ic} {v}</div>
+                            <div style={{ color: '#64748b', fontSize: '0.7rem' }}>{lb}</div>
+                          </div>
+                        ))}
+                        <div style={{ textAlign: 'center', background: p.engagement_rate >= 3 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.08)', borderRadius: '0.4rem', padding: '0.35rem' }}>
+                          <div style={{ color: p.engagement_rate >= 3 ? '#34d399' : '#f87171', fontSize: '0.85rem', fontWeight: 700 }}>{p.engagement_rate}%</div>
+                          <div style={{ color: '#64748b', fontSize: '0.7rem' }}>Eng Rate</div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* ════════ TAB: TOP VIDEOS ════════════════════════════════ */}
+            {monitorTab === 'topvids' && (
+              <div>
+                {s.top_posts.length === 0
+                  ? <p style={{ color: '#64748b' }}>No posts tracked yet. Sync from platforms.</p>
+                  : s.top_posts.map((post, i) => (
+                    <div key={post.id} className="script-card" style={{ borderLeft: `4px solid ${platColor(post.platform)}`, marginBottom: '0.65rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <span style={{ background: platColor(post.platform), color: '#fff', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', fontWeight: 700 }}>#{i+1}</span>
+                          <span style={{ background: `${platColor(post.platform)}22`, color: platColor(post.platform), borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem', fontWeight: 600 }}>{platIcon(post.platform)} {post.platform}</span>
+                        </div>
+                        {post.posted_at && <span style={{ color: '#475569', fontSize: '0.72rem' }}>{new Date(post.posted_at).toLocaleDateString()}</span>}
+                      </div>
+                      <p style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.875rem', margin: '0 0 0.4rem', lineHeight: 1.4 }}>{post.title || '(untitled)'}</p>
+                      {/* Mini bar for views */}
+                      {(() => {
+                        const maxV = Math.max(...s.top_posts.map(x => x.views), 1);
+                        const pct = Math.round((post.views / maxV) * 100);
+                        return (
+                          <div style={{ marginBottom: '0.5rem' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: '999px', height: '6px', overflow: 'hidden' }}>
+                              <div style={{ background: `linear-gradient(90deg,${platColor(post.platform)},${platColor(post.platform)}88)`, width: `${pct}%`, height: '100%', borderRadius: '999px' }} />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.8125rem' }}>
+                        <span style={{ color: '#10b981' }}>👁 {fmt(post.views)}</span>
+                        <span style={{ color: '#f472b6' }}>❤️ {fmt(post.likes)}</span>
+                        <span style={{ color: '#a78bfa' }}>💬 {fmt(post.comments)}</span>
+                        <span style={{ color: '#06b6d4' }}>🔁 {fmt(post.shares)}</span>
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            )}
+
+            {/* ════════ TAB: AFFILIATE INCOME ══════════════════════════ */}
+            {monitorTab === 'affiliate' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '0.25rem' }}>
+                  <h3 style={{ color: '#fbbf24', margin: '0 0 0.3rem', fontSize: '0.95rem' }}>💸 How to Earn Affiliate Revenue</h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.83rem', margin: 0, lineHeight: 1.6 }}>
+                    Add your affiliate links to every video description, pinned comment, and link-in-bio.
+                    Create dedicated "Best AI Tools" or "I Use This Every Day" videos — these convert at 3–8%.
+                    Track which platform drives the most clicks in the By Platform tab.
+                  </p>
+                </div>
+                {s.affiliates.map((af, i) => (
+                  <div key={i} className="script-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.95rem' }}>{af.name}</span>
+                        <span style={{ marginLeft: '0.5rem', background: 'rgba(148,163,184,0.12)', color: '#94a3b8', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.72rem' }}>{af.category}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <span style={{ background: 'rgba(245,158,11,0.15)', color: '#fbbf24', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.78rem', fontWeight: 700 }}>{af.commission}</span>
+                        <span style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.78rem', fontWeight: 700 }}>{af.est_monthly}/mo</span>
+                      </div>
+                    </div>
+                    <p style={{ color: '#94a3b8', fontSize: '0.82rem', margin: '0 0 0.6rem', lineHeight: 1.5 }}>{af.why}</p>
+                    <a href={af.link} target="_blank" rel="noopener noreferrer"
+                      style={{ display: 'inline-block', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', borderRadius: '0.4rem', padding: '0.4rem 1rem', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
+                      Get Affiliate Link →
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* ════════ TAB: AI COACH ══════════════════════════════════ */}
+            {monitorTab === 'ai-coach' && (
+              <div>
+                <div style={{ background: 'rgba(59,130,246,0.07)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ color: '#60a5fa', margin: '0 0 0.5rem', fontSize: '0.95rem' }}>🤖 AI Improvement Coach</h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.83rem', margin: '0 0 0.75rem', lineHeight: 1.5 }}>
+                    Finds your low-performing videos and GPT-4 gives you 3 specific tactics to fix each one.
+                    Set the views threshold below — any post under that number gets analysed.
+                  </p>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <label style={{ color: '#94a3b8', fontSize: '0.83rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      Threshold (views):
+                      <input type="number" value={improveThreshold} min={50} max={100000} step={50}
+                        onChange={e => setImproveThreshold(Number(e.target.value))}
+                        style={{ width: '90px', background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '0.4rem', color: '#e2e8f0', padding: '0.35rem 0.6rem', fontSize: '0.83rem' }} />
+                    </label>
+                    <button onClick={runImprove} disabled={improveLoading}
+                      style={{ padding: '0.5rem 1.1rem', borderRadius: '0.4rem', border: 'none', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', color: '#fff', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', opacity: improveLoading ? 0.7 : 1 }}>
+                      {improveLoading ? '🤖 Analysing…' : '🤖 Get AI Tips'}
+                    </button>
+                  </div>
+                  {s.low_performer_count > 0 && !improveData && !improveLoading && (
+                    <p style={{ color: '#fbbf24', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>
+                      ⚠ {s.low_performer_count} posts are below the auto-calculated threshold — click Get AI Tips.
+                    </p>
+                  )}
+                </div>
+
+                {improveError && <div className="error-message" style={{ marginBottom: '0.75rem' }}>{improveError}</div>}
+
+                {improveData && (
+                  <>
+                    <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                      {[
+                        [`${improveData.low_performer_count} low-performing`, '#fbbf24'],
+                        [`avg ${fmt(Math.round(improveData.avg_views))} views`, '#94a3b8'],
+                        [`< ${fmt(improveData.threshold_views)} views threshold`, '#64748b'],
+                      ].map(([v, c]) => (
+                        <span key={v} style={{ background: `${c}18`, color: c as string, borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.78rem', fontWeight: 600 }}>{v}</span>
+                      ))}
+                    </div>
+
+                    {/* General tips */}
+                    {improveData.general_tips.length > 0 && (
+                      <div style={{ background: 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1rem' }}>
+                        <h4 style={{ color: '#34d399', margin: '0 0 0.6rem', fontSize: '0.88rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>✅ Channel-Wide Improvements</h4>
+                        <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                          {improveData.general_tips.map((tip, i) => (
+                            <li key={i} style={{ color: '#a7f3d0', fontSize: '0.85rem', lineHeight: 1.6, marginBottom: '0.2rem' }}>{tip}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Per-post suggestions */}
+                    {improveData.suggestions.length > 0 && (
+                      <>
+                        <h4 style={{ color: '#f1f5f9', margin: '0 0 0.75rem', fontSize: '0.9rem' }}>🔧 Per-Post Action Plans</h4>
+                        {improveData.suggestions.map((sug, i) => (
+                          <div key={i} className="script-card" style={{ borderLeft: `4px solid ${platColor(sug.platform)}`, marginBottom: '0.65rem' }}>
+                            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+                              <span style={{ background: `${platColor(sug.platform)}22`, color: platColor(sug.platform), borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.73rem', fontWeight: 700 }}>{platIcon(sug.platform)} {sug.platform}</span>
+                              <span style={{ color: '#e2e8f0', fontWeight: 600, fontSize: '0.875rem' }}>{sug.title || '(untitled)'}</span>
+                            </div>
+                            {/* Tactics list */}
+                            {sug.tactics.map((t, j) => (
+                              <div key={j} style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-start', padding: '0.3rem 0', borderBottom: j < sug.tactics.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                                <span style={{ color: '#3b82f6', fontWeight: 700, flexShrink: 0, fontSize: '0.8rem' }}>{j+1}.</span>
+                                <span style={{ color: '#cbd5e1', fontSize: '0.83rem', lineHeight: 1.5 }}>{t}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                    {improveData.low_performer_count === 0 && (
+                      <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.6rem', padding: '1rem', textAlign: 'center', color: '#34d399', fontWeight: 600 }}>
+                        ✅ No posts are below the threshold — your content is performing well!
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ════════ TAB: CONNECTIONS ═══════════════════════════════ */}
+            {monitorTab === 'connections' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                {/* Header */}
+                <div style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.28)', borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                  <h3 style={{ color: '#818cf8', margin: '0 0 0.35rem', fontSize: '0.95rem' }}>🔌 Platform Connections</h3>
+                  <p style={{ color: '#94a3b8', fontSize: '0.83rem', margin: 0, lineHeight: 1.55 }}>
+                    Shows which platforms are wired up and pulling live metrics into the dashboard.
+                    Green = data flowing. Red = credentials missing.
+                  </p>
+                </div>
+
+                {connLoading && !connStatus && (
+                  <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>⏳ Checking connections…</div>
+                )}
+
+                {connStatus && (
+                  <>
+                    {/* Summary badge */}
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{
+                        background: connStatus.all_connected ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                        color: connStatus.all_connected ? '#34d399' : '#fbbf24',
+                        border: `1px solid ${connStatus.all_connected ? 'rgba(16,185,129,0.35)' : 'rgba(245,158,11,0.35)'}`,
+                        borderRadius: '999px', padding: '0.3rem 0.9rem', fontWeight: 700, fontSize: '0.83rem'
+                      }}>
+                        {connStatus.connected_count}/{connStatus.total} platforms connected
+                      </span>
+                      <button onClick={loadConnStatus} disabled={connLoading}
+                        style={{ padding: '0.3rem 0.75rem', borderRadius: '0.35rem', border: '1px solid rgba(148,163,184,0.25)', background: 'transparent', color: '#94a3b8', fontSize: '0.78rem', cursor: 'pointer' }}>
+                        {connLoading ? '…' : '🔄 Recheck'}
+                      </button>
+                    </div>
+
+                    {/* One card per platform */}
+                    {connStatus.platforms.map(p => {
+                      const ok = p.connected;
+                      const accent = ok ? '#10b981' : '#ef4444';
+                      const platC  = platColor(p.platform);
+                      return (
+                        <div key={p.platform} style={{ background: `${accent}08`, border: `1px solid ${accent}35`, borderRadius: '0.75rem', padding: '1rem 1.25rem' }}>
+                          {/* Row 1: name + status */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontSize: '1.2rem' }}>{platIcon(p.platform)}</span>
+                              <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.95rem' }}>{p.label}</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                              <span style={{ background: `${accent}20`, color: accent, border: `1px solid ${accent}50`, borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.78rem', fontWeight: 700 }}>
+                                {ok ? '✅ Connected' : '❌ Not connected'}
+                              </span>
+                              {ok && (
+                                <span style={{ background: p.auto_refresh ? 'rgba(52,211,153,0.12)' : 'rgba(245,158,11,0.12)', color: p.auto_refresh ? '#34d399' : '#fbbf24', border: `1px solid ${p.auto_refresh ? 'rgba(52,211,153,0.3)' : 'rgba(245,158,11,0.3)'}`, borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.75rem', fontWeight: 600 }}>
+                                  {p.auto_refresh ? '🔄 Auto-refresh' : '⚠ Manual refresh'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Notes */}
+                          <p style={{ color: '#94a3b8', fontSize: '0.8rem', margin: '0 0 0.6rem', lineHeight: 1.5 }}>{p.notes}</p>
+
+                          {/* Missing vars list */}
+                          {!ok && p.missing.length > 0 && (
+                            <div style={{ marginBottom: '0.75rem' }}>
+                              <p style={{ color: '#fca5a5', fontSize: '0.78rem', fontWeight: 700, margin: '0 0 0.3rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Missing env vars:</p>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                {p.missing.map(v => (
+                                  <code key={v} style={{ background: 'rgba(239,68,68,0.12)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '0.3rem', padding: '0.15rem 0.5rem', fontSize: '0.78rem' }}>{v}</code>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* TikTok-specific setup steps */}
+                          {p.platform === 'tiktok' && !ok && (
+                            <div style={{ background: 'rgba(105,201,208,0.07)', border: '1px solid rgba(105,201,208,0.2)', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                              <p style={{ color: '#69c9d0', fontWeight: 700, fontSize: '0.8rem', margin: '0 0 0.4rem', textTransform: 'uppercase' }}>TikTok Setup (5 minutes)</p>
+                              <ol style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                                {[
+                                  'Go to developers.tiktok.com → My Apps → Create App',
+                                  'Add products: "Content Posting API" and "Login Kit"',
+                                  'Set scopes: user.info.basic + video.list',
+                                  'Copy "App Key" → TIKTOK_CLIENT_KEY in .env',
+                                  'Copy "App Secret" → TIKTOK_CLIENT_SECRET in .env',
+                                  'Run OAuth flow once to get access + refresh tokens (see docs below)',
+                                  'Paste tokens into TIKTOK_ACCESS_TOKEN + TIKTOK_REFRESH_TOKEN',
+                                ].map((step, i) => (
+                                  <li key={i} style={{ color: '#a7f3d0', fontSize: '0.8rem', lineHeight: 1.7 }}>{step}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+
+                          {/* Setup link */}
+                          <a href={p.setup_url} target="_blank" rel="noopener noreferrer"
+                            style={{ display: 'inline-block', background: `${platC}22`, color: platC, border: `1px solid ${platC}44`, borderRadius: '0.4rem', padding: '0.35rem 0.9rem', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none' }}>
+                            {ok ? '⚙ Manage →' : '🔗 Setup Guide →'}
+                          </a>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {!connStatus && !connLoading && (
+                  <button onClick={loadConnStatus}
+                    style={{ padding: '0.6rem 1.25rem', borderRadius: '0.5rem', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', alignSelf: 'flex-start', fontSize: '0.875rem' }}>
+                    Check Connections
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
 
   const renderAnalytics = () => (
     <div className="videos-page">
@@ -3819,6 +4506,9 @@ Example:
           <button className={`nav-util-btn ${currentPage === 'visuals' ? 'active' : ''}`} onClick={() => setCurrentPage('visuals')} title="AI Visuals">
             🎨
           </button>
+          <button className={`nav-util-btn ${currentPage === 'monitor' ? 'active' : ''}`} onClick={() => { setCurrentPage('monitor'); loadMonitorData(monitorDays); }} title="Performance Monitor">
+            📡
+          </button>
           <button className={`nav-util-btn ${currentPage === 'monetize' ? 'active' : ''}`} onClick={() => setCurrentPage('monetize')} title="Monetization">
             💰
           </button>
@@ -3887,6 +4577,7 @@ Example:
          currentPage === 'parrot' ? renderParrot() :
          currentPage === 'trending' ? renderTrending() :
          currentPage === 'diagnostics' ? renderDiagnostics() :
+         currentPage === 'monitor' ? renderMonitor() :
          currentPage === 'analytics' ? renderAnalytics() :
          currentPage === 'monetize' ? renderMonetize() :
          currentPage === 'visuals' ? renderVisuals() :

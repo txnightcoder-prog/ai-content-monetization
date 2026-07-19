@@ -183,6 +183,88 @@ def list_caption_styles():
 
 
 # ---------------------------------------------------------------------------
+# URL import endpoint
+# ---------------------------------------------------------------------------
+
+class ImportUrlRequest(BaseModel):
+    url: str = Field(..., description="Direct download URL of an MP4 video (e.g. from Davinci.ai, CapCut, HeyGen)")
+    script_id: Optional[UUID] = Field(None, description="Optional: link to an existing script record")
+    title: Optional[str] = Field(None, description="Optional label stored in the video record")
+
+
+@router.post("/import-url", response_model=VideoResponse, status_code=201)
+async def import_video_from_url(
+    request: ImportUrlRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    **Import a video from a direct download URL.**
+
+    Paste any public MP4 URL (e.g. the download link from Davinci.ai, CapCut,
+    HeyGen, or any other tool) and the backend will:
+
+    1. Download the MP4 to local storage.
+    2. Create a Video record in status `ready`.
+    3. Return the record — ready to publish to YouTube / TikTok / etc.
+
+    The URL must point directly to an MP4 file and be publicly accessible
+    (no login required to download).
+    """
+    import httpx
+    import tempfile
+
+    if not request.url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    # Stream-download the file so we don't load the whole thing into memory
+    output_dir = Path(os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos"))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / f"{_uuid.uuid4()}.mp4"
+
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
+            async with client.stream("GET", request.url) as response:
+                if response.status_code != 200:
+                    raise HTTPException(
+                        status_code=502,
+                        detail=f"Failed to download video: remote server returned HTTP {response.status_code}",
+                    )
+                content_type = response.headers.get("content-type", "")
+                if content_type and "video" not in content_type and "octet-stream" not in content_type:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"URL does not appear to be a video file (content-type: {content_type}). Make sure you paste the direct MP4 download link.",
+                    )
+                with open(dest, "wb") as f:
+                    async for chunk in response.aiter_bytes(chunk_size=1024 * 64):
+                        f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        if dest.exists():
+            dest.unlink()
+        raise HTTPException(status_code=502, detail=f"Download failed: {exc}")
+
+    file_size = dest.stat().st_size
+    if file_size < 1024:
+        dest.unlink()
+        raise HTTPException(status_code=502, detail="Downloaded file is too small — the URL may not point to a valid MP4.")
+
+    db_video = Video(
+        script_id=request.script_id,
+        video_url=str(dest),
+        status=VideoStatus.READY,
+        error_message=None,
+    )
+    db.add(db_video)
+    db.commit()
+    db.refresh(db_video)
+
+    logger.info("Imported video from URL to %s (%d bytes) — video id %s", dest, file_size, db_video.id)
+    return db_video
+
+
+# ---------------------------------------------------------------------------
 # Pipeline endpoints
 # ---------------------------------------------------------------------------
 

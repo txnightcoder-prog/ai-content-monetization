@@ -85,8 +85,21 @@ jobs:
           BUFFER_INSTAGRAM_PROFILE_ID: ${{ secrets.BUFFER_INSTAGRAM_PROFILE_ID }}
           BUFFER_FACEBOOK_PROFILE_ID:  ${{ secrets.BUFFER_FACEBOOK_PROFILE_ID }}
           TIKTOK_ACCESS_TOKEN:         ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_CLIENT_KEY:           ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET:        ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_REFRESH_TOKEN:        ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           INSTAGRAM_ACCESS_TOKEN:      ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           GOOGLE_API_KEY:              ${{ secrets.GOOGLE_API_KEY }}
+          GUMROAD_WEBHOOK_SECRET:      ${{ secrets.GUMROAD_WEBHOOK_SECRET }}
+          SENDGRID_API_KEY:            ${{ secrets.SENDGRID_API_KEY }}
+          MAILGUN_API_KEY:             ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN:              ${{ secrets.MAILGUN_DOMAIN }}
+          EMAIL_FROM:                  ${{ secrets.EMAIL_FROM }}
+          EMAIL_FROM_NAME:             ${{ secrets.EMAIL_FROM_NAME }}
+          AWS_S3_BUCKET:               ${{ secrets.AWS_S3_BUCKET }}
+          AWS_REGION:                  ${{ secrets.AWS_REGION }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          AZURE_STORAGE_CONTAINER:     ${{ secrets.AZURE_STORAGE_CONTAINER }}
         run: |
           VARS="VIDEO_OUTPUT_DIR=/tmp/videos"
           VARS="$VARS ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
@@ -105,8 +118,21 @@ jobs:
           [ -n "$BUFFER_INSTAGRAM_PROFILE_ID" ] && VARS="$VARS BUFFER_INSTAGRAM_PROFILE_ID=$BUFFER_INSTAGRAM_PROFILE_ID"
           [ -n "$BUFFER_FACEBOOK_PROFILE_ID" ]  && VARS="$VARS BUFFER_FACEBOOK_PROFILE_ID=$BUFFER_FACEBOOK_PROFILE_ID"
           [ -n "$TIKTOK_ACCESS_TOKEN" ]         && VARS="$VARS TIKTOK_ACCESS_TOKEN=$TIKTOK_ACCESS_TOKEN"
+          [ -n "$TIKTOK_CLIENT_KEY" ]           && VARS="$VARS TIKTOK_CLIENT_KEY=$TIKTOK_CLIENT_KEY"
+          [ -n "$TIKTOK_CLIENT_SECRET" ]        && VARS="$VARS TIKTOK_CLIENT_SECRET=$TIKTOK_CLIENT_SECRET"
+          [ -n "$TIKTOK_REFRESH_TOKEN" ]        && VARS="$VARS TIKTOK_REFRESH_TOKEN=$TIKTOK_REFRESH_TOKEN"
           [ -n "$INSTAGRAM_ACCESS_TOKEN" ]      && VARS="$VARS INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_ACCESS_TOKEN"
           [ -n "$GOOGLE_API_KEY" ]              && VARS="$VARS GOOGLE_API_KEY=$GOOGLE_API_KEY"
+          [ -n "$GUMROAD_WEBHOOK_SECRET" ]      && VARS="$VARS GUMROAD_WEBHOOK_SECRET=$GUMROAD_WEBHOOK_SECRET"
+          [ -n "$SENDGRID_API_KEY" ]            && VARS="$VARS SENDGRID_API_KEY=$SENDGRID_API_KEY"
+          [ -n "$MAILGUN_API_KEY" ]             && VARS="$VARS MAILGUN_API_KEY=$MAILGUN_API_KEY"
+          [ -n "$MAILGUN_DOMAIN" ]              && VARS="$VARS MAILGUN_DOMAIN=$MAILGUN_DOMAIN"
+          [ -n "$EMAIL_FROM" ]                  && VARS="$VARS EMAIL_FROM=$EMAIL_FROM"
+          [ -n "$EMAIL_FROM_NAME" ]             && VARS="$VARS EMAIL_FROM_NAME=$EMAIL_FROM_NAME"
+          [ -n "$AWS_S3_BUCKET" ]               && VARS="$VARS AWS_S3_BUCKET=$AWS_S3_BUCKET"
+          [ -n "$AWS_REGION" ]                  && VARS="$VARS AWS_REGION=$AWS_REGION"
+          [ -n "$AZURE_STORAGE_CONNECTION_STRING" ] && VARS="$VARS AZURE_STORAGE_CONNECTION_STRING=$AZURE_STORAGE_CONNECTION_STRING"
+          [ -n "$AZURE_STORAGE_CONTAINER" ]     && VARS="$VARS AZURE_STORAGE_CONTAINER=$AZURE_STORAGE_CONTAINER"
           az containerapp update \
             --name ${{ env.BACKEND_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \

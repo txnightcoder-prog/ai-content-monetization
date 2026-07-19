@@ -27,6 +27,7 @@ from app.api.routes.integrations import router as integrations_router
 from app.api.routes.analytics import router as analytics_router
 from app.api.routes.health_checks import router as health_router
 from app.api.routes.openart import router as openart_router
+from app.api.routes.orders import router as orders_router
 from app.core.database import init_db
 from sqlalchemy import text
 
@@ -44,12 +45,20 @@ def _migrate_add_columns():
         # SQLite: attempt each ALTER and silently skip if column already exists
         migrations = [
             "ALTER TABLE videos ADD COLUMN error_message VARCHAR(1000)",
+            "ALTER TABLE orders ADD COLUMN generated_prompt TEXT",
+            "ALTER TABLE orders ADD COLUMN video_local_path VARCHAR(500)",
+            "ALTER TABLE orders ADD COLUMN video_storage_url VARCHAR(500)",
+            "ALTER TABLE orders ADD COLUMN email_message_id VARCHAR(255)",
         ]
     else:
         # PostgreSQL: IF NOT EXISTS is safe to run every startup
         migrations = [
             "ALTER TABLE videos ADD COLUMN IF NOT EXISTS error_message VARCHAR(1000)",
             "ALTER TABLE videos ALTER COLUMN script_id DROP NOT NULL",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS generated_prompt TEXT",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS video_local_path VARCHAR(500)",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS video_storage_url VARCHAR(500)",
+            "ALTER TABLE orders ADD COLUMN IF NOT EXISTS email_message_id VARCHAR(255)",
         ]
 
     with engine.connect() as conn:
@@ -151,6 +160,7 @@ app.include_router(integrations_router)
 app.include_router(analytics_router)
 app.include_router(health_router)
 app.include_router(openart_router)
+app.include_router(orders_router)
 
 
 @app.get("/health")
