@@ -72,8 +72,6 @@ jobs:
         env:
           DATABASE_URL:                ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY:              ${{ secrets.OPENAI_API_KEY }}
-          CREATIFY_API_ID:             ${{ secrets.CREATIFY_API_ID }}
-          CREATIFY_API_KEY:            ${{ secrets.CREATIFY_API_KEY }}
           ELEVENLABS_API_KEY:          ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID:         ${{ secrets.ELEVENLABS_VOICE_ID }}
           PEXELS_API_KEY:              ${{ secrets.PEXELS_API_KEY }}
@@ -94,8 +92,6 @@ jobs:
           VARS="$VARS ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
           [ -n "$DATABASE_URL" ]                && VARS="$VARS DATABASE_URL=$DATABASE_URL"
           [ -n "$OPENAI_API_KEY" ]              && VARS="$VARS OPENAI_API_KEY=$OPENAI_API_KEY"
-          [ -n "$CREATIFY_API_ID" ]             && VARS="$VARS CREATIFY_API_ID=$CREATIFY_API_ID"
-          [ -n "$CREATIFY_API_KEY" ]            && VARS="$VARS CREATIFY_API_KEY=$CREATIFY_API_KEY"
           [ -n "$ELEVENLABS_API_KEY" ]          && VARS="$VARS ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
           [ -n "$ELEVENLABS_VOICE_ID" ]         && VARS="$VARS ELEVENLABS_VOICE_ID=$ELEVENLABS_VOICE_ID"
           [ -n "$PEXELS_API_KEY" ]              && VARS="$VARS PEXELS_API_KEY=$PEXELS_API_KEY"
