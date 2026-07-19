@@ -1,0 +1,366 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TikTok App Registration — KidVid Creator</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px; line-height: 1.6;
+    background: #ffffff; color: #1f2328;
+    padding: 2rem 1rem;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  h1 { font-size: 1.35rem; font-weight: 800; margin-bottom: 0.25rem; }
+  .subtitle { color: #57606a; font-size: 0.875rem; margin-bottom: 2rem; }
+
+  /* progress steps */
+  .steps { display: flex; gap: 0; margin-bottom: 2.5rem; border: 1px solid #e5e7eb; border-radius: 0.6rem; overflow: hidden; }
+  .step { flex: 1; padding: 0.55rem 0.5rem; text-align: center; font-size: 0.75rem; font-weight: 600; color: #57606a; border-right: 1px solid #e5e7eb; background: #f7f8fa; }
+  .step:last-child { border-right: none; }
+  .step.active { background: #3b82d4; color: #fff; }
+  .step.done { background: #e6f4ea; color: #1a7f37; }
+
+  /* section */
+  .section { border: 1px solid #e5e7eb; border-radius: 0.6rem; margin-bottom: 1.25rem; overflow: hidden; }
+  .section-head {
+    background: #f7f8fa; border-bottom: 1px solid #e5e7eb;
+    padding: 0.65rem 1rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .section-head .num {
+    background: #3b82d4; color: #fff; border-radius: 50%;
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 800; flex-shrink: 0;
+  }
+  .section-head h2 { font-size: 0.9rem; font-weight: 700; }
+  .section-head .tag {
+    margin-left: auto; background: #dbeafe; color: #1d4ed8;
+    border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.72rem; font-weight: 700;
+  }
+  .section-body { padding: 1rem; }
+
+  /* field rows */
+  .field { margin-bottom: 1rem; }
+  .field:last-child { margin-bottom: 0; }
+  .label { font-size: 0.78rem; font-weight: 700; color: #57606a; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem; }
+  .value {
+    background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 0.4rem;
+    padding: 0.5rem 0.75rem; font-size: 0.875rem; color: #1f2328;
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;
+  }
+  .value code { font-family: "Courier New", monospace; font-size: 0.83rem; color: #0550ae; word-break: break-all; flex: 1; }
+  .value .copy-btn {
+    flex-shrink: 0; background: #3b82d4; color: #fff; border: none;
+    border-radius: 0.3rem; padding: 0.2rem 0.55rem; font-size: 0.72rem;
+    font-weight: 700; cursor: pointer; white-space: nowrap;
+  }
+  .value .copy-btn:active { background: #1d4ed8; }
+  .note { font-size: 0.8rem; color: #57606a; margin-top: 0.35rem; line-height: 1.5; }
+
+  /* info box */
+  .info { background: #fffbeb; border: 1px solid #fde68a; border-radius: 0.4rem; padding: 0.65rem 0.85rem; margin-bottom: 1rem; font-size: 0.83rem; color: #92400e; line-height: 1.55; }
+  .info strong { color: #78350f; }
+
+  /* warning */
+  .warn { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 0.4rem; padding: 0.65rem 0.85rem; margin-bottom: 1rem; font-size: 0.83rem; color: #9f1239; line-height: 1.55; }
+
+  /* checklist */
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { display: flex; gap: 0.55rem; padding: 0.35rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.875rem; align-items: flex-start; }
+  .checklist li:last-child { border-bottom: none; }
+  .checklist li::before { content: "☐"; color: #3b82d4; font-size: 1rem; flex-shrink: 0; line-height: 1.4; }
+  .checklist li strong { color: #1f2328; }
+
+  /* scope table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+  th { background: #f7f8fa; text-align: left; padding: 0.45rem 0.75rem; font-weight: 700; border-bottom: 2px solid #e5e7eb; color: #57606a; font-size: 0.75rem; text-transform: uppercase; }
+  td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .req { background: #dcfce7; color: #15803d; border-radius: 999px; padding: 0.1rem 0.5rem; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+  .opt { background: #f7f8fa; color: #57606a; border-radius: 999px; padding: 0.1rem 0.5rem; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+
+  /* env block */
+  .env-block {
+    background: #0d1117; border-radius: 0.5rem; padding: 1rem 1.25rem;
+    font-family: "Courier New", monospace; font-size: 0.82rem; color: #c9d1d9;
+    line-height: 2; overflow-x: auto;
+  }
+  .env-block .k { color: #79c0ff; }
+  .env-block .v { color: #a5f3a0; }
+  .env-block .c { color: #6e7681; }
+
+  a { color: #3b82d4; }
+
+  footer { margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; text-align: center; color: #57606a; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>🎵 TikTok Developer App Registration</h1>
+  <p class="subtitle">Exact values to paste into <a href="https://developers.tiktok.com" target="_blank">developers.tiktok.com</a> — takes about 10 minutes</p>
+
+  
+  <div class="steps">
+    <div class="step active">1 Create Account</div>
+    <div class="step">2 New App</div>
+    <div class="step">3 Add Products</div>
+    <div class="step">4 Set Scopes</div>
+    <div class="step">5 OAuth Flow</div>
+    <div class="step">6 Paste Tokens</div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">1</div>
+      <h2>Create / log in to TikTok Developer Account</h2>
+      <span class="tag">5 min</span>
+    </div>
+    <div class="section-body">
+      <div class="info">
+        Go to <strong>developers.tiktok.com</strong> and sign in with your TikTok account (or create one). You need a regular TikTok account first — the developer portal is free.
+      </div>
+      <ul class="checklist">
+        <li>Go to <strong>developers.tiktok.com</strong></li>
+        <li>Click <strong>Log in</strong> — use your existing TikTok credentials</li>
+        <li>Accept the Developer Agreement when prompted</li>
+        <li>Verify your email address if asked</li>
+      </ul>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">2</div>
+      <h2>Create a New App — use these exact values</h2>
+      <span class="tag">Copy-paste ready</span>
+    </div>
+    <div class="section-body">
+      <div class="info">Go to <strong>My Apps → Manage apps → Create app</strong>. Fill in the fields exactly as shown.</div>
+
+      <div class="field">
+        <div class="label">App Name</div>
+        <div class="value">
+          <code>KidVid Creator</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note">Shown to users in the TikTok OAuth consent screen.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Category</div>
+        <div class="value">
+          <code>Media / Content Creation</code>
+        </div>
+        <div class="note">Select the closest match from the dropdown. Choose <strong>Entertainment</strong> or <strong>Content Creation</strong> if "Media" isn't listed separately.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">App Description</div>
+        <div class="value">
+          <code>Personalized AI generated children's videos.</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note">Keep it short and factual — TikTok reviewers read this.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Platform</div>
+        <div class="value"><code>Web</code></div>
+        <div class="note">Select <strong>Web</strong> — your backend runs as a web service.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Website URL</div>
+        <div class="value">
+          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">Privacy Policy URL</div>
+        <div class="value">
+          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/privacy</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note">TikTok requires a privacy policy URL. You can host a simple one-pager here — or use a free generator at <a href="https://www.privacypolicygenerator.info" target="_blank">privacypolicygenerator.info</a> and paste the link.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Terms of Service URL (optional but recommended)</div>
+        <div class="value">
+          <code>https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/terms</code>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">3</div>
+      <h2>Add Products to the App</h2>
+    </div>
+    <div class="section-body">
+      <div class="info">After saving the app, go to <strong>Products</strong> in the left sidebar and add the two products below.</div>
+      <ul class="checklist">
+        <li><strong>Login Kit</strong> — needed to run the OAuth flow and get tokens</li>
+        <li><strong>Content Posting API</strong> — gives access to <code>video.list</code> for reading your stats</li>
+      </ul>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">4</div>
+      <h2>Set OAuth Scopes</h2>
+    </div>
+    <div class="section-body">
+      <div class="info">Under <strong>Login Kit → Scopes</strong>, enable the scopes in the table below. Only the <span class="req">Required</span> ones are needed for metrics.</div>
+      <table>
+        <thead>
+          <tr><th>Scope</th><th>Why</th><th>Status</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>user.info.basic</code></td>
+            <td>Read your TikTok user profile (display name, open_id)</td>
+            <td><span class="req">Required</span></td>
+          </tr>
+          <tr>
+            <td><code>video.list</code></td>
+            <td>Read your posted videos + their view/like/comment/share counts</td>
+            <td><span class="req">Required</span></td>
+          </tr>
+          <tr>
+            <td><code>video.publish</code></td>
+            <td>Post videos to TikTok directly from the app</td>
+            <td><span class="opt">Optional</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">5</div>
+      <h2>Set Redirect URI &amp; Run the OAuth Flow Once</h2>
+    </div>
+    <div class="section-body">
+      <div class="info">This is the one-time step that produces your <strong>access token</strong> and <strong>refresh token</strong>. You only do this once — the backend auto-refreshes from then on.</div>
+
+      <div class="field">
+        <div class="label">Redirect URI to add in the portal</div>
+        <div class="value">
+          <code>https://developers.tiktok.com/tools/redirect</code>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="note">Add this under <strong>Login Kit → Redirect domain / URI</strong>. TikTok's own redirect tool catches the auth code for you — no server needed.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">OAuth URL to open in your browser (fill in your Client Key)</div>
+        <div class="value" style="display:block">
+          <code>https://www.tiktok.com/v2/auth/authorize/?client_key=YOUR_CLIENT_KEY&amp;scope=user.info.basic,video.list&amp;response_type=code&amp;redirect_uri=https://developers.tiktok.com/tools/redirect&amp;state=kidvid123</code>
+        </div>
+        <div class="note">Replace <code>YOUR_CLIENT_KEY</code> with your App Key from the portal. Open this URL in a browser while logged into TikTok. It will redirect to <code>developers.tiktok.com/tools/redirect?code=XXXX</code> — copy the <code>code</code> value.</div>
+      </div>
+
+      <div class="field">
+        <div class="label">Exchange the code for tokens (run in terminal / Postman)</div>
+        <div class="value" style="display:block">
+          <code>curl -X POST https://open.tiktokapis.com/v2/oauth/token/ \<br />
+  -H "Content-Type: application/x-www-form-urlencoded" \<br />
+  -d "client_key=YOUR_CLIENT_KEY" \<br />
+  -d "client_secret=YOUR_CLIENT_SECRET" \<br />
+  -d "code=YOUR_AUTH_CODE" \<br />
+  -d "grant_type=authorization_code" \<br />
+  -d "redirect_uri=https://developers.tiktok.com/tools/redirect"</code>
+        </div>
+        <div class="note">The response JSON contains <code>access_token</code> (valid 24 h) and <code>refresh_token</code> (valid 365 days). Copy both.</div>
+      </div>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num">6</div>
+      <h2>Add Tokens to GitHub Secrets + .env</h2>
+    </div>
+    <div class="section-body">
+
+      <div class="warn">
+        <strong>Never commit tokens to git.</strong> Add them as GitHub Secrets so the CI/CD pipeline injects them into the Azure Container App automatically.
+      </div>
+
+      <div class="field">
+        <div class="label">GitHub Secrets to add<br /><small style="font-weight:400;text-transform:none;letter-spacing:0">(Settings → Secrets and variables → Actions → New repository secret)</small></div>
+        <div class="env-block">
+          <span class="k">TIKTOK_CLIENT_KEY</span>      <span class="c">← App Key from the portal</span><br />
+          <span class="k">TIKTOK_CLIENT_SECRET</span>   <span class="c">← App Secret from the portal</span><br />
+          <span class="k">TIKTOK_ACCESS_TOKEN</span>    <span class="c">← access_token from Step 5 curl response</span><br />
+          <span class="k">TIKTOK_REFRESH_TOKEN</span>   <span class="c">← refresh_token from Step 5 curl response</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">Local .env (for running the backend locally)</div>
+        <div class="env-block">
+          <span class="k">TIKTOK_CLIENT_KEY</span><span class="c">=</span><span class="v">paste_app_key_here</span><br />
+          <span class="k">TIKTOK_CLIENT_SECRET</span><span class="c">=</span><span class="v">paste_app_secret_here</span><br />
+          <span class="k">TIKTOK_ACCESS_TOKEN</span><span class="c">=</span><span class="v">paste_access_token_here</span><br />
+          <span class="k">TIKTOK_REFRESH_TOKEN</span><span class="c">=</span><span class="v">paste_refresh_token_here</span>
+        </div>
+      </div>
+
+      <div class="info">
+        Once the GitHub Secrets are saved, push any commit to <code>main</code> and the pipeline will inject them into the live Azure container automatically. The backend auto-refreshes the access token every 24 h — you never need to touch it again.
+      </div>
+
+      <ul class="checklist">
+        <li>Add all 4 secrets to GitHub Actions secrets</li>
+        <li>Push a commit to trigger the deploy (or use <strong>Actions → Run workflow</strong>)</li>
+        <li>Open 📡 Performance Monitor → 🔌 Connections tab in your app to verify TikTok shows <strong>✅ Connected</strong></li>
+        <li>Click <strong>☁️ Sync</strong> — your TikTok views/likes/comments/shares will appear in the dashboard</li>
+      </ul>
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-head">
+      <div class="num" style="background:#f59e0b">!</div>
+      <h2>Important Notes</h2>
+    </div>
+    <div class="section-body">
+      <div class="field">
+        <div class="label">Review / Sandbox mode</div>
+        <div class="note" style="font-size:0.875rem">New TikTok apps start in <strong>Sandbox mode</strong>. In sandbox, the OAuth flow only works for the TikTok account that created the app — which is fine for your personal use case. You do <em>not</em> need to submit for TikTok's formal review to use the API on your own account.</div>
+      </div>
+      <div class="field">
+        <div class="label">Children's content (COPPA)</div>
+        <div class="note" style="font-size:0.875rem">Because KidVid Creator produces content <em>for</em> children but the TikTok <em>account owner</em> is an adult creator, your app itself isn't directed at children. Set <strong>Is your app directed to children under 13?</strong> to <strong>No</strong> in the portal — the creator is the user, not the children who watch the videos.</div>
+      </div>
+      <div class="field">
+        <div class="label">Token lifetime</div>
+        <div class="note" style="font-size:0.875rem">Access token: <strong>24 hours</strong> — auto-refreshed by the backend on every sync.<br />Refresh token: <strong>365 days</strong> — you'll get an email from TikTok 30 days before it expires. Re-run Step 5 at that point.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<footer>Made with IBM Bob</footer>
+
+</body>
+</html>

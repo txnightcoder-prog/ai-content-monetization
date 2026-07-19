@@ -1521,8 +1521,14 @@ function App() {
     finally { setTrendLoading(false); }
   };
 
-  const platformColor = (p: string) => ({ youtube: '#ef4444', tiktok: '#a78bfa', instagram: '#f59e0b' }[p] ?? '#3b82f6');
-  const platformIcon  = (p: string) => ({ youtube: '▶️', tiktok: '🎵', instagram: '📸' }[p] ?? '📱');
+  const platformColor = (p: string) => ({
+    youtube: '#ef4444', tiktok: '#69c9d0', instagram: '#e1306c',
+    facebook: '#1877f2', twitter: '#1da1f2', linkedin: '#0077b5',
+  }[p] ?? '#a78bfa');
+  const platformIcon  = (p: string) => ({
+    youtube: '▶', tiktok: '🎵', instagram: '📸',
+    facebook: '👥', twitter: '𝕏', linkedin: '💼',
+  }[p] ?? '🌐');
 
   const [trendingScriptLoading, setTrendingScriptLoading] = useState<number | null>(null);
 
@@ -2768,21 +2774,126 @@ function App() {
       <h1>📊 Analytics Dashboard</h1>
       <p className="subtitle">Performance across all connected social platforms</p>
 
-      {/* Toolbar */}
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem', alignItems: 'center' }}>
-        <button className="generate-button" style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}
-          onClick={() => fetchAnalytics()} disabled={analyticsLoading}>
-          {analyticsLoading ? '⏳ Loading…' : '🔄 Refresh'}
-        </button>
-        <button className="publish-button" style={{ padding: '0.6rem 1.25rem', fontSize: '0.9rem' }}
-          onClick={syncAnalytics} disabled={analyticsSyncing}>
-          {analyticsSyncing ? '⏳ Syncing…' : '☁️ Sync from Platforms'}
-        </button>
-        {analyticsSyncMsg && <span style={{ color: analyticsSyncMsg.startsWith('✅') ? '#10b981' : '#ef4444', fontSize: '0.875rem' }}>{analyticsSyncMsg}</span>}
+      {/* ── Connected Accounts panel ─────────────────────────────────── */}
+      <div style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '0.875rem', padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <h2 style={{ color: '#f1f5f9', fontSize: '1rem', margin: 0 }}>🔌 Connected Accounts</h2>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button className="generate-button" style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
+              onClick={() => fetchAnalytics()} disabled={analyticsLoading}>
+              {analyticsLoading ? '⏳' : '🔄 Refresh'}
+            </button>
+            <button className="publish-button" style={{ padding: '0.45rem 1rem', fontSize: '0.82rem' }}
+              onClick={syncAnalytics} disabled={analyticsSyncing}>
+              {analyticsSyncing ? '⏳ Syncing…' : '☁️ Sync All'}
+            </button>
+          </div>
+        </div>
+        {analyticsSyncMsg && <p style={{ color: analyticsSyncMsg.startsWith('✅') ? '#34d399' : '#f87171', fontSize: '0.8rem', marginBottom: '0.75rem' }}>{analyticsSyncMsg}</p>}
+
+        {/* Platform connection cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.65rem' }}>
+          {[
+            {
+              id: 'tiktok', label: 'TikTok', icon: '🎵', color: '#69c9d0',
+              envKey: 'TIKTOK_ACCESS_TOKEN',
+              setupUrl: 'https://developers.tiktok.com/apps',
+              setupLabel: 'TikTok Developer Portal',
+              hint: 'Needs TIKTOK_ACCESS_TOKEN + 3 other vars in GitHub Secrets',
+            },
+            {
+              id: 'instagram', label: 'Instagram', icon: '📸', color: '#e1306c',
+              envKey: 'BUFFER_INSTAGRAM_PROFILE_ID',
+              setupUrl: 'https://publish.buffer.com/settings/channels',
+              setupLabel: 'Connect via Buffer',
+              hint: 'Connect Instagram in Buffer, then set BUFFER_INSTAGRAM_PROFILE_ID',
+            },
+            {
+              id: 'facebook', label: 'Facebook', icon: '👥', color: '#1877f2',
+              envKey: 'BUFFER_FACEBOOK_PROFILE_ID',
+              setupUrl: 'https://publish.buffer.com/settings/channels',
+              setupLabel: 'Connect via Buffer',
+              hint: 'Connect Facebook Page in Buffer, then set BUFFER_FACEBOOK_PROFILE_ID',
+            },
+            {
+              id: 'youtube', label: 'YouTube', icon: '▶', color: '#ef4444',
+              envKey: 'BUFFER_YOUTUBE_PROFILE_ID',
+              setupUrl: 'https://publish.buffer.com/settings/channels',
+              setupLabel: 'Connect via Buffer',
+              hint: 'Connect YouTube in Buffer, then set BUFFER_YOUTUBE_PROFILE_ID',
+            },
+            {
+              id: 'twitter', label: 'X / Twitter', icon: '𝕏', color: '#1da1f2',
+              envKey: 'BUFFER_TWITTER_PROFILE_ID',
+              setupUrl: 'https://publish.buffer.com/settings/channels',
+              setupLabel: 'Connect via Buffer',
+              hint: 'Connect X/Twitter in Buffer, then set BUFFER_TWITTER_PROFILE_ID',
+            },
+            {
+              id: 'linkedin', label: 'LinkedIn', icon: '💼', color: '#0077b5',
+              envKey: 'BUFFER_LINKEDIN_PROFILE_ID',
+              setupUrl: 'https://publish.buffer.com/settings/channels',
+              setupLabel: 'Connect via Buffer',
+              hint: 'Connect LinkedIn in Buffer, then set BUFFER_LINKEDIN_PROFILE_ID',
+            },
+            {
+              id: 'gumroad', label: 'Gumroad', icon: '🛒', color: '#f59e0b',
+              envKey: null,
+              setupUrl: 'https://app.gumroad.com/settings/advanced',
+              setupLabel: 'Gumroad Webhook Settings',
+              hint: 'Set your backend webhook URL in Gumroad → Settings → Advanced → Webhooks',
+            },
+          ].map(acct => {
+            // We can't read server env from the browser, so show as "needs setup"
+            // until the user syncs data — once data exists for this platform it shows as connected
+            const hasData = analyticsSummary?.by_platform?.some(p => p.platform === acct.id);
+            const isGumroad = acct.id === 'gumroad';
+            const connected = isGumroad
+              ? !!(analyticsSummary)   // if analytics loaded, assume gumroad webhook may be set
+              : hasData;
+            return (
+              <div key={acct.id} style={{
+                background: connected ? `${acct.color}10` : 'rgba(255,255,255,0.03)',
+                border: `1px solid ${connected ? acct.color + '45' : 'rgba(255,255,255,0.08)'}`,
+                borderRadius: '0.65rem', padding: '0.85rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '1.1rem' }}>{acct.icon}</span>
+                    <span style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.875rem' }}>{acct.label}</span>
+                  </div>
+                  <span style={{
+                    background: connected ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)',
+                    color: connected ? '#34d399' : '#64748b',
+                    border: `1px solid ${connected ? 'rgba(16,185,129,0.3)' : 'rgba(148,163,184,0.2)'}`,
+                    borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700,
+                  }}>
+                    {connected ? '● Active' : '○ Setup'}
+                  </span>
+                </div>
+                {connected
+                  ? <p style={{ color: '#34d399', fontSize: '0.75rem', margin: '0 0 0.5rem', lineHeight: 1.4 }}>
+                      {isGumroad ? 'Webhook endpoint ready' : `Data syncing ✓`}
+                    </p>
+                  : <p style={{ color: '#64748b', fontSize: '0.75rem', margin: '0 0 0.5rem', lineHeight: 1.4 }}>{acct.hint}</p>
+                }
+                <a href={acct.setupUrl} target="_blank" rel="noopener noreferrer" style={{
+                  display: 'inline-block', fontSize: '0.72rem', fontWeight: 700,
+                  color: acct.color, textDecoration: 'none',
+                  background: `${acct.color}15`, border: `1px solid ${acct.color}35`,
+                  borderRadius: '0.3rem', padding: '0.2rem 0.55rem',
+                }}>
+                  {connected ? '⚙ Manage' : '🔗 Set up'} →
+                </a>
+              </div>
+            );
+          })}
+        </div>
+
         {analyticsSummary?.last_synced && (
-          <span style={{ color: '#64748b', fontSize: '0.8125rem', marginLeft: 'auto' }}>
+          <p style={{ color: '#475569', fontSize: '0.75rem', marginTop: '0.75rem' }}>
             Last synced: {new Date(analyticsSummary.last_synced).toLocaleString()}
-          </span>
+          </p>
         )}
       </div>
 
