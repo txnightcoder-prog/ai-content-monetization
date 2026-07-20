@@ -24,7 +24,6 @@ from app.models.analytics import Analytics
 from app.models.post import Post
 from app.services import social_analytics_service as svc
 from app.services.channel_audit_service import ChannelAuditService
-from app.services.openai_service import OpenAIService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
@@ -333,8 +332,14 @@ Respond in this exact JSON shape (no markdown, no extra text):
     general_tips: list = []
 
     try:
-        openai = OpenAIService()
-        raw = await openai.generate_completion(
+        from app.services.gemini_service import GeminiService
+        import os as _os
+        if _os.getenv("OPENAI_API_KEY"):
+            from app.services.openai_service import OpenAIService
+            _ai = OpenAIService()
+        else:
+            _ai = GeminiService()
+        raw = await _ai.generate_completion(
             prompt=prompt,
             system_message=(
                 "You are an expert viral content strategist. "
@@ -620,7 +625,7 @@ async def channel_audit(request: ChannelAuditRequest):
     Requires YOUTUBE_DATA_API_KEY env var.
     """
     try:
-        service = ChannelAuditService(OpenAIService())
+        service = ChannelAuditService()
         return await service.audit(channel_input=request.channel, niche=request.niche)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

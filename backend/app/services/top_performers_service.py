@@ -28,9 +28,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
 from app.models.analytics import Analytics
-from app.services.openai_service import OpenAIService
-
 logger = logging.getLogger(__name__)
+
+
+def _make_ai_service():
+    import os
+    if os.getenv("OPENAI_API_KEY"):
+        from app.services.openai_service import OpenAIService
+        return OpenAIService()
+    from app.services.gemini_service import GeminiService
+    return GeminiService()
 
 # How many top records to pull for the feedback prompt
 _TOP_N = 10
@@ -71,7 +78,7 @@ def get_top_performers(db: Session, limit: int = _TOP_N) -> List[Dict[str, Any]]
 
 async def generate_ideas_from_top_performers(
     db: Session,
-    openai: OpenAIService,
+    openai,
     niche: str = "AI tools",
     count: int = 10,
 ) -> Dict[str, Any]:

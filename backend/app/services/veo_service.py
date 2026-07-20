@@ -105,42 +105,43 @@ class VeoVideoService:
     # ------------------------------------------------------------------
     async def _google_tts(self, text: str, output_path: str) -> None:
         """
-        Generate voiceover MP3 using OpenAI TTS API.
-        Uses OPENAI_API_KEY — already required for scripts.
-        Cost: ~$0.015 per 1000 characters (tts-1 model).
+        Generate voiceover MP3 using GeminiService (Google Cloud TTS).
+        Falls back to OpenAI TTS if GOOGLE_API_KEY is missing but OPENAI_API_KEY exists.
         """
+        from app.services.gemini_service import GeminiService
         import httpx as _httpx
 
-        openai_key = os.getenv("OPENAI_API_KEY", "")
-        if not openai_key:
-            raise RuntimeError("OPENAI_API_KEY not set — cannot generate voiceover")
+        google_key = os.getenv("GOOGLE_API_KEY", "")
+        openai_key  = os.getenv("OPENAI_API_KEY", "")
 
-        # OpenAI TTS max 4096 chars per request — split if needed
-        chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
-        audio_parts = []
+        if google_key:
+            # Primary: Google Cloud TTS via GeminiService
+            svc = GeminiService(api_key=google_key)
+            await svc.text_to_speech(text, output_path)
+            logger.info("VeoService: voiceover written to %s via Google Cloud TTS", output_path)
+            return
 
-        async with _httpx.AsyncClient(timeout=60.0) as client:
-            for chunk in chunks:
-                resp = await client.post(
-                    "https://api.openai.com/v1/audio/speech",
-                    headers={"Authorization": f"Bearer {openai_key}"},
-                    json={
-                        "model": "tts-1",
-                        "input": chunk,
-                        "voice": "onyx",   # deep, professional male voice
-                        "response_format": "mp3",
-                    },
-                )
-                if resp.status_code != 200:
-                    raise RuntimeError(
-                        f"OpenAI TTS failed ({resp.status_code}): {resp.text[:200]}"
+        if openai_key:
+            # Fallback: OpenAI TTS
+            chunks = [text[i:i+4096] for i in range(0, len(text), 4096)]
+            audio_parts = []
+            async with _httpx.AsyncClient(timeout=60.0) as client:
+                for chunk in chunks:
+                    resp = await client.post(
+                        "https://api.openai.com/v1/audio/speech",
+                        headers={"Authorization": f"Bearer {openai_key}"},
+                        json={"model": "tts-1", "input": chunk, "voice": "onyx", "response_format": "mp3"},
                     )
-                audio_parts.append(resp.content)
+                    if resp.status_code != 200:
+                        raise RuntimeError(f"OpenAI TTS failed ({resp.status_code}): {resp.text[:200]}")
+                    audio_parts.append(resp.content)
+            with open(output_path, "wb") as f:
+                for part in audio_parts:
+                    f.write(part)
+            logger.info("VeoService: voiceover written to %s via OpenAI TTS (fallback)", output_path)
+            return
 
-        with open(output_path, "wb") as f:
-            for part in audio_parts:
-                f.write(part)
-        logger.info("VeoService: voiceover written to %s via OpenAI TTS", output_path)
+        raise RuntimeError("No TTS key available: set GOOGLE_API_KEY or OPENAI_API_KEY")
 
     # ------------------------------------------------------------------
     async def create_video(

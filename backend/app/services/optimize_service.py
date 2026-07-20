@@ -12,15 +12,22 @@ import json
 import logging
 from typing import Any, Dict, Optional
 
-from app.services.openai_service import OpenAIService
-
 logger = logging.getLogger(__name__)
+
+
+def _make_ai_service():
+    import os
+    if os.getenv("OPENAI_API_KEY"):
+        from app.services.openai_service import OpenAIService
+        return OpenAIService()
+    from app.services.gemini_service import GeminiService
+    return GeminiService()
 
 
 class OptimizeService:
 
-    def __init__(self, openai_service: OpenAIService):
-        self.openai = openai_service
+    def __init__(self, openai_service=None):
+        self.openai = openai_service or _make_ai_service()
 
     async def optimize(
         self,

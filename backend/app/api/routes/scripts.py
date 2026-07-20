@@ -16,7 +16,6 @@ from app.schemas.content_script import (
     ContentScriptResponse,
     ContentScriptListResponse,
 )
-from app.services.openai_service import OpenAIService
 from app.services.script_generator import ScriptGenerator
 from app.services.parrot_service import ParrotService
 from app.services.trending_service import TrendingService
@@ -81,28 +80,34 @@ class TrendingRequest(BaseModel):
     count: int = 8
 
 
+def _make_ai_service():
+    """Auto-selects GeminiService or OpenAIService based on available keys."""
+    import os
+    if os.getenv("OPENAI_API_KEY"):
+        from app.services.openai_service import OpenAIService
+        return OpenAIService()
+    from app.services.gemini_service import GeminiService
+    return GeminiService()
+
+
 def get_script_generator() -> ScriptGenerator:
-    """Dependency to get script generator instance"""
-    openai_service = OpenAIService()
-    return ScriptGenerator(openai_service)
+    return ScriptGenerator()
 
 
 def get_parrot_service() -> ParrotService:
-    openai_service = OpenAIService()
-    return ParrotService(openai_service)
+    return ParrotService()
 
 
 def get_trending_service() -> TrendingService:
-    openai_service = OpenAIService()
-    return TrendingService(openai_service)
+    return TrendingService()
 
 
 def get_optimize_service() -> OptimizeService:
-    return OptimizeService(OpenAIService())
+    return OptimizeService()
 
 
 def get_keyword_service() -> KeywordService:
-    return KeywordService(OpenAIService())
+    return KeywordService()
 
 
 @router.post("/generate", response_model=ContentScriptResponse, status_code=201)
@@ -485,7 +490,7 @@ class AskRequest(BaseModel):
 @router.post("/ask")
 async def ask_ai(
     request: AskRequest,
-    openai: OpenAIService = Depends(lambda: OpenAIService()),
+    openai=Depends(_make_ai_service),
 ):
     """
     **AI Assistant** — ask any question about the platform, content strategy,
@@ -715,7 +720,7 @@ class TopPerformersRequest(BaseModel):
 async def generate_from_top_performers(
     request: TopPerformersRequest,
     db: Session = Depends(get_db),
-    openai: OpenAIService = Depends(lambda: OpenAIService()),
+    openai=Depends(_make_ai_service),
 ):
     """
     **AI Feedback Loop** — generate new topic ideas biased toward what's

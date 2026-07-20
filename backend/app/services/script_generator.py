@@ -1,23 +1,33 @@
-from typing import Dict, Any, List
-from app.services.openai_service import OpenAIService
+from typing import Dict, Any, List, Union
 import logging
+import os
 import time
 import json
 
 logger = logging.getLogger(__name__)
 
 
+def _make_ai_service():
+    """Return GeminiService if OPENAI_API_KEY is absent, otherwise OpenAIService."""
+    if os.getenv("OPENAI_API_KEY"):
+        from app.services.openai_service import OpenAIService
+        return OpenAIService()
+    from app.services.gemini_service import GeminiService
+    return GeminiService()
+
+
 class ScriptGenerator:
-    """Service for generating video scripts using OpenAI"""
-    
-    def __init__(self, openai_service: OpenAIService):
+    """Service for generating video scripts (Gemini or OpenAI, auto-selected)."""
+
+    def __init__(self, openai_service=None):
         """
         Initialize script generator.
-        
+
         Args:
-            openai_service: OpenAI service instance
+            openai_service: Any service with generate_completion() — OpenAIService or
+                            GeminiService. If None, auto-selects based on env vars.
         """
-        self.openai = openai_service
+        self.openai = openai_service or _make_ai_service()
     
     async def generate_script(self, topic: str, niche: str = "AI tools") -> Dict[str, Any]:
         """
