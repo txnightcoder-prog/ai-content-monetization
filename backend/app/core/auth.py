@@ -72,7 +72,7 @@ def create_token(subject: str, role: str = "viewer", expires_hours: int = 12) ->
     now     = int(time.time())
     payload = _b64url(json.dumps({"sub": subject, "role": role, "exp": now + expires_hours * 3600, "iat": now}).encode())
     signing_input = f"{header}.{payload}".encode()
-    sig = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
+    sig = hmac.HMAC(secret.encode(), signing_input, digestmod=hashlib.sha256).digest()
     return f"{header}.{payload}.{_b64url(sig)}"
 
 
@@ -84,7 +84,7 @@ def verify_token(token: str) -> Optional[dict]:
     try:
         header, payload, sig = token.split(".")
         signing_input = f"{header}.{payload}".encode()
-        expected_sig = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
+        expected_sig = hmac.HMAC(secret.encode(), signing_input, digestmod=hashlib.sha256).digest()
         if not hmac.compare_digest(_b64url(expected_sig), sig):
             return None
         claims = json.loads(_b64url_decode(payload))
@@ -96,10 +96,15 @@ def verify_token(token: str) -> Optional[dict]:
 
 
 # ── TOTP (RFC 6238 — Google Authenticator compatible) ─────────────────────────
+# RFC 6238 §1.2 mandates HMAC-SHA1 for TOTP.  The algorithm is defined by the
+# standard and is not a security choice — changing it would break all authenticator
+# apps.  SHA1 is used here only as a counter-based HMAC (not for password hashing).
 
 def _hotp(key_bytes: bytes, counter: int) -> int:
     msg = struct.pack(">Q", counter)
-    h   = hmac.new(key_bytes, msg, hashlib.sha1).digest()
+    # nosec B324 — SHA1 required by RFC 6238; not used for password hashing
+    mac = hmac.HMAC(key_bytes, msg, digestmod=hashlib.sha1)
+    h   = mac.digest()
     offset = h[-1] & 0x0F
     code = struct.unpack(">I", h[offset:offset+4])[0] & 0x7FFFFFFF
     return code % 1_000_000

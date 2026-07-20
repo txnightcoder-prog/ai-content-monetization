@@ -5697,45 +5697,40 @@ Example:
     <div className="app">
       {/* ── Top navbar ── */}
       <nav className="navbar">
-        <div className="nav-brand">
-          🎬 KidVid Creator
+        {/* ── Brand + optional banner image ── */}
+        <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span>🎬 KidVid Creator</span>
           {videoProvider?.provider === 'veo' && (
-            <span style={{ marginLeft: '0.6rem', background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
+            <span style={{ background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>
               ✨ Veo 3
             </span>
           )}
           {videoProvider?.provider === 'local' && (
-            <span style={{ marginLeft: '0.6rem', background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
+            <span style={{ background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>
               🎞️ Local Pipeline
             </span>
           )}
         </div>
-        
-        <div className="nav-workflow">
-          <div className="nav-step">
-            <button className={`nav-step-btn ${currentPage === 'home' ? 'active' : ''}`} onClick={() => setCurrentPage('home')}>
-              <span className="nav-step-num">⌂</span>
-              <span>Home</span>
-            </button>
-            <span className="nav-step-arrow">→</span>
-          </div>
-          <div className="nav-step">
-            <button className={`nav-step-btn ${currentPage === 'source' ? 'active' : ''}`} onClick={() => setCurrentPage('source')}>
-              <span className="nav-step-num">1</span>
-              <span>Source</span>
-            </button>
-          </div>
+
+        {/* ── Centre banner image — swap src for any image URL ── */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', height: '44px' }}>
+          <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', textDecoration: 'none' }}>
+            <img
+              src="https://yt3.googleusercontent.com/ytc/AIdro_lsGJ3j5kf0PcTGBsgFKNEHMpMfJBgFgQ-qxG4R1Q=s88-c-k-c0x00ffffff-no-rj"
+              alt="@TxNightcoder"
+              style={{ height: '36px', width: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #e3e8ef' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+            <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1c2b33' }}>@TxNightcoder</span>
+          </a>
         </div>
+
         {/* nav right — live status pill + user controls */}
         <div className="nav-right">
           <div className="nav-pill">
             <span className="dot" />
             Live on Azure
           </div>
-          <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer"
-            style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid #fecaca', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-            ▶ @TxNightcoder
-          </a>
           <button onClick={() => { setCurrentPage('users' as any); loadUsers(); }}
             style={{ background: 'rgba(42,157,92,0.12)', color: '#2a9d5c', border: '1px solid #b7e4cc', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
             👥 Users

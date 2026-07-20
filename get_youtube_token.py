@@ -114,23 +114,18 @@ def get_refresh_token():
         print("-" * 70)
         print()
 
-        # Save to file — warn user to protect it and delete after use
-        with open('youtube_credentials.txt', 'w') as f:
-            f.write("# YouTube API Credentials — DELETE THIS FILE AFTER COPYING TO .env\n")
-            f.write("# Do not commit this file to git\n\n")
-            f.write(f"YOUTUBE_CLIENT_ID={client_id}\n")
-            f.write(f"YOUTUBE_CLIENT_SECRET={client_secret}\n")
-            f.write(f"YOUTUBE_REFRESH_TOKEN={refresh_token}\n")
-
-        print("Credentials saved to: youtube_credentials.txt")
-        print("IMPORTANT: Delete this file after copying to GitHub Secrets!")
+        # Credentials are printed to console only — never written to disk.
+        # Copy them from the terminal window and paste directly into GitHub Secrets.
+        print("Copy these values directly to GitHub Secrets (Settings → Secrets → Actions):")
+        print()
+        print(f"  YOUTUBE_CLIENT_ID     = {client_id}")
+        print(f"  YOUTUBE_CLIENT_SECRET = {client_secret}")
+        print(f"  YOUTUBE_REFRESH_TOKEN = {refresh_token}")
         print()
         print("Next steps:")
-        print("1. Open your .env file")
-        print("2. Find the YouTube section")
-        print("3. Paste the three lines above")
-        print("4. Save the file")
-        print("5. Restart your backend server")
+        print("1. Go to your GitHub repo → Settings → Secrets and variables → Actions")
+        print("2. Add the three secrets above")
+        print("3. Trigger a new deploy from the Actions tab")
         print()
         print("=" * 70)
         
