@@ -4130,68 +4130,139 @@ function App() {
     </div>
   );
 
-  const renderHome = () => (
-    <div className="home">
-      <h1>🎬 AI Content Monetization Platform</h1>
-      <p className="subtitle">
-        Generate viral video scripts, create content with AI, and automate your YouTube workflow
-      </p>
+  const renderHome = () => {
+    const metrics = dashboardMetrics;
+    const summary = analyticsSummary;
+    const totalViews   = summary?.totals?.total_views   ?? 0;
+    const totalLikes   = summary?.totals?.total_likes   ?? 0;
+    const totalPosts   = summary?.totals?.total_posts   ?? 0;
+    const revenue30d   = metrics?.overview?.revenue_30d ?? 0;
+    const totalVideos  = metrics?.overview?.total_videos ?? 0;
+    const totalScripts = metrics?.overview?.total_scripts ?? 0;
 
-      <section className="pipeline">
-        <h2>🚀 Your Content Pipeline</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
-          {([
-            { step: '1', icon: '🔍', label: 'Source', desc: 'Find trending topics & parrot viral videos', page: 'source' as const },
-            { step: '2', icon: '✍️', label: 'Script', desc: 'AI-powered scripts & blueprints', page: 'scripts' as const },
-            { step: '3', icon: videoProvider?.provider === 'veo' ? '🎬' : '🎞️', label: 'Video', desc: videoProvider?.provider === 'veo' ? 'Veo 3 AI-generated clips ✨' : videoProvider?.provider === 'local' ? 'Voiceover + stock footage' : 'Generate video', page: 'videos' as const },
-            { step: '4', icon: '📤', label: 'Publish', desc: 'Upload to YouTube automatically', page: 'videos' as const },
-          ] as { step: string; icon: string; label: string; desc: string; page: 'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' }[]).map(s => (
-            <button key={s.step} onClick={() => setCurrentPage(s.page)}
-              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '1rem', textAlign: 'left', cursor: 'pointer', transition: 'border-color 0.15s' }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(59,130,246,0.5)')}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)')}>
-              <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{s.icon}</div>
-              <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.9rem' }}>Step {s.step} — {s.label}</div>
-              <div style={{ color: '#64748b', fontSize: '0.8rem', marginTop: '0.2rem' }}>{s.desc}</div>
-              {s.step === '3' && videoProvider?.provider === 'veo' && (
-                <span style={{ display: 'inline-block', marginTop: '0.4rem', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.35)', color: '#34d399', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700 }}>
-                  Active
-                </span>
-              )}
-            </button>
+    return (
+      <div>
+        {/* ── Header ── */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em', marginBottom: '0.25rem' }}>
+            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'} 👋
+          </h1>
+          <p style={{ color: '#475569', fontSize: '0.875rem' }}>
+            KidVid Creator &nbsp;·&nbsp; Kids short-form video channel &nbsp;·&nbsp;
+            <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer" style={{ color: '#f87171', textDecoration: 'none', fontWeight: 600 }}>▶ @TxNightcoder</a>
+          </p>
+        </div>
+
+        {/* ── Auto-Generate Daily Video Banner ── */}
+        <div className="autogen-banner">
+          <div className="autogen-banner-text">
+            <h3>🤖 Auto-Generate Today's Video</h3>
+            <p>AI picks a trending kids topic → writes script → generates video → ready to publish to YouTube, TikTok & Instagram</p>
+          </div>
+          <button className="autogen-btn" disabled={loading || videoLoading}
+            onClick={async () => {
+              setLoading(true);
+              setCurrentPage('scripts');
+              setNiche('kids');
+              await getTopicIdeas();
+              setLoading(false);
+            }}>
+            {loading ? '⟳ Generating…' : '▶ Generate Today\'s Video'}
+          </button>
+        </div>
+
+        {/* ── Stats grid ── */}
+        <div className="stat-grid">
+          {[
+            { label: 'Revenue (30d)',    value: `$${revenue30d.toFixed(0)}`,                   color: 'green'  },
+            { label: 'Total Views',      value: totalViews >= 1000 ? `${(totalViews/1000).toFixed(1)}K` : String(totalViews), color: 'blue'   },
+            { label: 'Total Likes',      value: totalLikes >= 1000 ? `${(totalLikes/1000).toFixed(1)}K` : String(totalLikes), color: 'purple' },
+            { label: 'Posts Published',  value: String(totalPosts),                             color: 'teal'   },
+            { label: 'Videos Made',      value: String(totalVideos),                            color: 'amber'  },
+            { label: 'Scripts Written',  value: String(totalScripts),                           color: 'blue'   },
+          ].map(s => (
+            <div key={s.label} className={`stat-card ${s.color}`}>
+              <div className="stat-value">{s.value || '—'}</div>
+              <div className="stat-label">{s.label}</div>
+            </div>
           ))}
         </div>
-      </section>
 
-      <div className="quick-start-box" style={{
-        background: 'rgba(59, 130, 246, 0.1)',
-        border: '1px solid rgba(59, 130, 246, 0.3)',
-        borderRadius: '0.75rem',
-        padding: '1.5rem',
-        marginTop: '2rem',
-        marginBottom: '2rem'
-      }}>
-        <h3 style={{ color: '#60a5fa', marginTop: 0 }}>🎯 Quick Start Guide</h3>
-        <p style={{ marginBottom: '1rem' }}>New here? Check out the complete workflow guide to get started:</p>
-        <button
-          className="cta-button"
-          onClick={() => setCurrentPage('help')}
-          style={{ background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' }}
-        >
-          📖 View Workflow Guide
-        </button>
-      </div>
+        {/* ── Platform social stats ── */}
+        {summary?.by_platform && summary.by_platform.length > 0 && (
+          <div className="section-card">
+            <h2>Social Platforms</h2>
+            <div className="platform-grid">
+              {summary.by_platform.map(p => (
+                <div key={p.platform} className="platform-card">
+                  <div className="platform-card-head">
+                    <div className="platform-name">
+                      <span>{p.platform === 'youtube' ? '▶' : p.platform === 'tiktok' ? '🎵' : p.platform === 'instagram' ? '📸' : '👥'}</span>
+                      <span style={{ textTransform: 'capitalize' }}>{p.platform}</span>
+                    </div>
+                    <span style={{ fontSize: '0.72rem', color: '#475569' }}>{p.posts} posts</span>
+                  </div>
+                  <div className="platform-stat">{p.total_views >= 1000 ? `${(p.total_views/1000).toFixed(1)}K` : p.total_views}</div>
+                  <div className="platform-stat-label">views</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-      <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-        <button className="cta-button" onClick={() => setCurrentPage('scripts')}>
-          ⚡ Quick Scripts →
-        </button>
-        <button className="cta-button" onClick={() => setCurrentPage('blueprint')}>
-          📋 Video Blueprints →
-        </button>
+        {/* ── Daily workflow quick-actions ── */}
+        <div className="section-card">
+          <h2>Daily Workflow — Kids Video Channel</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '0.75rem' }}>
+            {[
+              { icon: '🔥', label: 'Find Trending Topic',    desc: 'See what kids are watching today',            page: 'trending'    as const, color: '#f59e0b' },
+              { icon: '📝', label: 'Write AI Script',        desc: 'Auto-generate kids video script',             page: 'scripts'     as const, color: '#6366f1' },
+              { icon: '🎬', label: 'Generate Video',         desc: videoProvider?.provider === 'veo' ? 'Veo 3 AI video ✨' : 'AI video from script', page: 'videos' as const, color: '#10b981' },
+              { icon: '📊', label: 'Check Performance',      desc: 'Views, likes, revenue across platforms',      page: 'monitor'     as const, color: '#3b82f6' },
+              { icon: '🛍️', label: 'View Orders',            desc: 'Gumroad personalised video orders',           page: 'orders'      as const, color: '#8b5cf6' },
+              { icon: '💰', label: 'Grow Revenue',           desc: 'Affiliate links, ad revenue tips',            page: 'monetize'    as const, color: '#ef4444' },
+            ].map(item => (
+              <button key={item.label}
+                onClick={() => {
+                  setCurrentPage(item.page);
+                  if (item.page === 'monitor') loadMonitorData(monitorDays);
+                  if (item.page === 'orders')  fetchOrders('all', 1);
+                }}
+                style={{ background: `${item.color}0d`, border: `1px solid ${item.color}30`, borderRadius: '0.75rem', padding: '1rem', textAlign: 'left', cursor: 'pointer', transition: 'border-color 0.15s' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = `${item.color}70`)}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = `${item.color}30`)}
+              >
+                <div style={{ fontSize: '1.4rem', marginBottom: '0.4rem' }}>{item.icon}</div>
+                <div style={{ color: '#f1f5f9', fontWeight: 700, fontSize: '0.875rem', marginBottom: '0.2rem' }}>{item.label}</div>
+                <div style={{ color: '#475569', fontSize: '0.78rem' }}>{item.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Connected platforms status ── */}
+        <div className="section-card">
+          <h2>Connected Accounts</h2>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {[
+              { label: 'YouTube',   color: '#ef4444', url: 'https://www.youtube.com/@TxNightcoder',  connected: true  },
+              { label: 'TikTok',    color: '#69c9d0', url: 'https://www.tiktok.com/',                connected: false },
+              { label: 'Instagram', color: '#e1306c', url: 'https://www.instagram.com/txnightcoder', connected: false },
+              { label: 'Gumroad',   color: '#f59e0b', url: 'https://app.gumroad.com/',               connected: true  },
+              { label: 'Google AI', color: '#34a853', url: 'https://aistudio.google.com/',           connected: true  },
+              { label: 'GoDaddy',   color: '#3b82f6', url: 'https://site-xnltxqiro.godaddysites.com', connected: true },
+            ].map(acct => (
+              <a key={acct.label} href={acct.url} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: acct.connected ? `${acct.color}12` : 'rgba(255,255,255,0.03)', border: `1px solid ${acct.connected ? acct.color + '40' : 'rgba(255,255,255,0.08)'}`, borderRadius: '999px', padding: '0.35rem 0.85rem', fontSize: '0.8125rem', fontWeight: 600, color: acct.connected ? acct.color : '#475569', textDecoration: 'none' }}>
+                <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: acct.connected ? acct.color : '#334155', display: 'inline-block', flexShrink: 0 }} />
+                {acct.label}
+              </a>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderScripts = () => (
     <div className="scripts-page">
@@ -4955,15 +5026,90 @@ Example:
     </div>
   );
 
+  // ── Sidebar navigation definition ──────────────────────────────────────────
+  const NAV_SECTIONS = [
+    {
+      label: 'Dashboard',
+      items: [
+        { id: 'home',        icon: '🏠', label: 'Dashboard',        badge: null },
+        { id: 'monitor',     icon: '📡', label: 'Performance',      badge: null },
+        { id: 'analytics',   icon: '📊', label: 'Analytics',        badge: null },
+        { id: 'orders',      icon: '🛍️', label: 'Orders',           badge: null },
+        { id: 'monetize',    icon: '💰', label: 'Monetize',         badge: null },
+      ],
+    },
+    {
+      label: 'Create',
+      items: [
+        { id: 'scripts',     icon: '📝', label: 'Scripts',          badge: null },
+        { id: 'blueprint',   icon: '🗺️', label: 'Blueprint',        badge: null },
+        { id: 'videos',      icon: '🎬', label: 'Video Generator',  badge: videoProvider?.provider === 'veo' ? 'Veo3' : null },
+        { id: 'visuals',     icon: '🎨', label: 'AI Visuals',       badge: null },
+      ],
+    },
+    {
+      label: 'Research',
+      items: [
+        { id: 'source',      icon: '🔍', label: 'Source',           badge: null },
+        { id: 'parrot',      icon: '🦜', label: 'Parrot',           badge: null },
+        { id: 'trending',    icon: '🔥', label: 'Trending',         badge: null },
+      ],
+    },
+    {
+      label: 'Settings',
+      items: [
+        { id: 'diagnostics', icon: '🔧', label: 'Diagnostics',      badge: null },
+        { id: 'help',        icon: '📖', label: 'Help & Guide',     badge: null },
+      ],
+    },
+  ] as const;
+
+  // ── What's Next helper ───────────────────────────────────────────────────────
+  const NEXT_PAGE: Record<string, { page: string; label: string; hint: string }> = {
+    home:        { page: 'scripts',   label: 'Write a Script →',       hint: 'Generate an AI script for your next kids video' },
+    scripts:     { page: 'blueprint', label: 'Build Blueprint →',      hint: 'Turn your script into a full video blueprint' },
+    blueprint:   { page: 'videos',    label: 'Generate Video →',       hint: 'Create the AI video from your blueprint' },
+    videos:      { page: 'monitor',   label: 'Check Performance →',    hint: 'See how your published videos are performing' },
+    monitor:     { page: 'analytics', label: 'View Analytics →',       hint: 'Deep dive into platform analytics' },
+    analytics:   { page: 'orders',    label: 'View Orders →',          hint: 'See Gumroad orders and pipeline status' },
+    orders:      { page: 'monetize',  label: 'Monetize →',             hint: 'Set up affiliate links and revenue streams' },
+    monetize:    { page: 'home',      label: '← Back to Dashboard',    hint: 'Return to your revenue dashboard' },
+    source:      { page: 'parrot',    label: 'Parrot a Video →',       hint: 'Clone the structure of a viral video' },
+    parrot:      { page: 'trending',  label: 'See Trending →',         hint: 'Find what is trending right now' },
+    trending:    { page: 'scripts',   label: 'Write Script →',         hint: 'Turn a trending topic into a script' },
+    visuals:     { page: 'videos',    label: 'Generate Video →',       hint: 'Use your visuals in a full video' },
+    diagnostics: { page: 'help',      label: 'Read Guide →',           hint: 'Full workflow guide and tips' },
+    help:        { page: 'home',      label: '← Dashboard',            hint: 'Return to your dashboard' },
+  };
+
+  const WhatsNext = ({ page }: { page: string }) => {
+    const next = NEXT_PAGE[page];
+    if (!next) return null;
+    return (
+      <div className="whats-next-bar">
+        <span className="whats-next-label">What's Next</span>
+        <span className="whats-next-text">{next.hint}</span>
+        <button className="whats-next-btn" onClick={() => {
+          setCurrentPage(next.page as any);
+          if (next.page === 'monitor') loadMonitorData(monitorDays);
+          if (next.page === 'analytics') fetchAnalytics();
+          if (next.page === 'orders') fetchOrders('all', 1);
+        }}>
+          {next.label}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="app">
+      {/* ── Top navbar ── */}
       <nav className="navbar">
         <div className="nav-brand">
-          AI Content Publisher
-          <span style={{ marginLeft: '0.5rem', color: '#475569', fontSize: '0.7rem', fontWeight: 400, verticalAlign: 'middle' }}>v1.0</span>
+          🎬 KidVid Creator
           {videoProvider?.provider === 'veo' && (
             <span style={{ marginLeft: '0.6rem', background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700, verticalAlign: 'middle' }}>
-              ✨ Veo 3 Active
+              ✨ Veo 3
             </span>
           )}
           {videoProvider?.provider === 'local' && (
@@ -4986,111 +5132,104 @@ Example:
               <span className="nav-step-num">1</span>
               <span>Source</span>
             </button>
-            <span className="nav-step-arrow">→</span>
-          </div>
-          <div className="nav-step">
-            <button className={`nav-step-btn ${currentPage === 'scripts' ? 'active' : ''}`} onClick={() => setCurrentPage('scripts')}>
-              <span className="nav-step-num">2</span>
-              <span>Script</span>
-            </button>
-            <span className="nav-step-arrow">→</span>
-          </div>
-          <div className="nav-step">
-            <button className={`nav-step-btn ${currentPage === 'videos' ? 'active' : ''}`} onClick={() => setCurrentPage('videos')}>
-              <span className="nav-step-num">3</span>
-              <span>Video</span>
-            </button>
           </div>
         </div>
-
-        <div className="nav-utils">
-          <button className={`nav-util-btn ${currentPage === 'visuals' ? 'active' : ''}`} onClick={() => setCurrentPage('visuals')} title="AI Visuals">
-            🎨
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'monitor' ? 'active' : ''}`} onClick={() => { setCurrentPage('monitor'); loadMonitorData(monitorDays); }} title="Performance Monitor">
-            📡
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'monetize' ? 'active' : ''}`} onClick={() => setCurrentPage('monetize')} title="Monetization">
-            💰
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'analytics' ? 'active' : ''}`} onClick={() => { setCurrentPage('analytics'); fetchAnalytics(); }} title="Analytics">
-            📊
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'orders' ? 'active' : ''}`} onClick={() => { setCurrentPage('orders'); fetchOrders('all', 1); }} title="Orders — Personalised Video Pipeline">
-            🛍️
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'diagnostics' ? 'active' : ''}`} onClick={() => setCurrentPage('diagnostics')} title="Diagnostics">
-            🔧
-          </button>
-          <button className={`nav-util-btn ${currentPage === 'help' ? 'active' : ''}`} onClick={() => setCurrentPage('help')} title="Help">
-            📖
-          </button>
+        {/* nav right — live status pill */}
+        <div className="nav-right">
+          <div className="nav-pill">
+            <span className="dot" />
+            Live on Azure
+          </div>
+          <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer"
+            style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+            ▶ @TxNightcoder
+          </a>
         </div>
       </nav>
 
-      {/* ── AI Assistant bar ── */}
-      <div style={{ background: 'rgba(15,23,42,0.95)', borderBottom: '1px solid rgba(59,130,246,0.2)', padding: '0.5rem 1rem' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ color: '#3b82f6', fontSize: '0.875rem', fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0 }}>🤖 Ask AI</span>
-            <input
-              type="text"
-              value={askQuestion}
-              onChange={e => setAskQuestion(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !askLoading) submitAsk(); }}
-              placeholder="Ask anything about the platform, content strategy, monetization…"
-              style={{ flex: 1, background: 'rgba(30,41,59,0.8)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '0.4rem', color: '#e2e8f0', padding: '0.4rem 0.75rem', fontSize: '0.875rem', outline: 'none' }}
-              disabled={askLoading}
-            />
-            <button onClick={() => submitAsk()} disabled={askLoading || !askQuestion.trim()}
-              style={{ background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', borderRadius: '0.4rem', padding: '0.4rem 0.85rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {askLoading ? '…' : 'Ask'}
-            </button>
-            <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
-              {['How do I make money?', 'How to generate a video?', 'What is the Parrot feature?'].map(q => (
-                <button key={q} onClick={() => { setAskQuestion(q); submitAsk(q); }}
-                  style={{ background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', color: '#94a3b8', borderRadius: '0.4rem', padding: '0.3rem 0.6rem', fontSize: '0.75rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {q}
-                </button>
-              ))}
-            </div>
+      {/* ── AI Ask bar ── */}
+      <div className="ask-bar">
+        <div className="ask-bar-inner">
+          <span className="ask-bar-label">🤖 Ask AI</span>
+          <input
+            type="text"
+            value={askQuestion}
+            onChange={e => setAskQuestion(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !askLoading) submitAsk(); }}
+            placeholder="Ask anything — content strategy, monetization, how to grow faster…"
+            disabled={askLoading}
+          />
+          <button className="ask-bar-btn" onClick={() => submitAsk()} disabled={askLoading || !askQuestion.trim()}>
+            {askLoading ? '…' : 'Ask'}
+          </button>
+          <div className="ask-bar-suggestions">
+            {['Make money?', 'Daily video plan', 'Parrot feature?'].map(q => (
+              <button key={q} className="ask-bar-suggestion" onClick={() => { setAskQuestion(q); submitAsk(q); }}>{q}</button>
+            ))}
           </div>
-
-          {/* Answer panel */}
-          {(askAnswer || askError) && askOpen && (
-            <div style={{ marginTop: '0.5rem', background: 'rgba(30,41,59,0.9)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '0.5rem', padding: '0.75rem 1rem', position: 'relative' }}>
-              <button onClick={() => setAskOpen(false)}
-                style={{ position: 'absolute', top: '0.5rem', right: '0.75rem', background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>
-                ✕
-              </button>
-              {askError
-                ? <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: 0 }}>⚠️ {askError}</p>
-                : <p style={{ color: '#e2e8f0', fontSize: '0.875rem', margin: 0, whiteSpace: 'pre-wrap', paddingRight: '1.5rem' }}>{askAnswer}</p>
-              }
-            </div>
-          )}
         </div>
+        {(askAnswer || askError) && askOpen && (
+          <div className="ask-answer">
+            <button onClick={() => setAskOpen(false)}
+              style={{ position: 'absolute', top: '0.5rem', right: '0.75rem', background: 'none', border: 'none', color: '#475569', cursor: 'pointer', fontSize: '0.9rem' }}>✕</button>
+            {askError
+              ? <p style={{ color: '#fca5a5', fontSize: '0.8125rem', margin: 0 }}>⚠️ {askError}</p>
+              : <p style={{ color: '#e2e8f0', fontSize: '0.8125rem', margin: 0, whiteSpace: 'pre-wrap', paddingRight: '1.5rem' }}>{askAnswer}</p>
+            }
+          </div>
+        )}
       </div>
 
-      <main className="main-content">
-        {currentPage === 'home' ? renderHome() :
-         currentPage === 'source' ? renderSource() :
-         currentPage === 'scripts' ? renderScripts() :
-         currentPage === 'blueprint' ? renderBlueprint() :
-         currentPage === 'videos' ? renderVideos() :
-         currentPage === 'parrot' ? renderParrot() :
-         currentPage === 'trending' ? renderTrending() :
-         currentPage === 'diagnostics' ? renderDiagnostics() :
-         currentPage === 'monitor' ? renderMonitor() :
-         currentPage === 'analytics' ? renderAnalytics() :
-         currentPage === 'orders' ? renderOrders() :
-         currentPage === 'monetize' ? renderMonetize() :
-         currentPage === 'visuals' ? renderVisuals() :
-         renderHelp()}
-      </main>
+      {/* ── Body: sidebar + content ── */}
+      <div className="app-body">
+        {/* Left sidebar */}
+        <nav className="sidebar">
+          {NAV_SECTIONS.map(section => (
+            <React.Fragment key={section.label}>
+              <div className="sidebar-section-label">{section.label}</div>
+              {section.items.map(item => (
+                <button
+                  key={item.id}
+                  className={`sidebar-btn ${currentPage === item.id ? 'active' : ''}`}
+                  onClick={() => {
+                    setCurrentPage(item.id as any);
+                    if (item.id === 'monitor')   loadMonitorData(monitorDays);
+                    if (item.id === 'analytics') fetchAnalytics();
+                    if (item.id === 'orders')    fetchOrders('all', 1);
+                  }}
+                >
+                  <span className="sidebar-icon">{item.icon}</span>
+                  {item.label}
+                  {item.badge && <span className="sidebar-badge">{item.badge}</span>}
+                </button>
+              ))}
+            </React.Fragment>
+          ))}
+        </nav>
+
+        {/* Main content */}
+        <main className="main-content">
+          {currentPage === 'home'        ? renderHome() :
+           currentPage === 'source'      ? renderSource() :
+           currentPage === 'scripts'     ? renderScripts() :
+           currentPage === 'blueprint'   ? renderBlueprint() :
+           currentPage === 'videos'      ? renderVideos() :
+           currentPage === 'parrot'      ? renderParrot() :
+           currentPage === 'trending'    ? renderTrending() :
+           currentPage === 'diagnostics' ? renderDiagnostics() :
+           currentPage === 'monitor'     ? renderMonitor() :
+           currentPage === 'analytics'   ? renderAnalytics() :
+           currentPage === 'orders'      ? renderOrders() :
+           currentPage === 'monetize'    ? renderMonetize() :
+           currentPage === 'visuals'     ? renderVisuals() :
+           renderHelp()}
+          {/* What's Next bar on every page */}
+          <WhatsNext page={currentPage} />
+        </main>
+      </div>
 
       <footer className="footer">
-        <p>AI Content Monetization Platform • Made with Bob</p>
+        KidVid Creator &nbsp;·&nbsp; Made with IBM Bob &nbsp;·&nbsp; <a href="https://www.youtube.com/@TxNightcoder" target="_blank" rel="noopener noreferrer" style={{ color: '#ef4444', textDecoration: 'none' }}>▶ @TxNightcoder</a>
       </footer>
     </div>
   );
