@@ -182,7 +182,6 @@ interface AIImage {
 function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
-  const [totp, setTotp]         = React.useState('');
   const [loading, setLoading]   = React.useState(false);
   const [error, setError]       = React.useState('');
 
@@ -193,7 +192,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
       const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, totp_code: totp }),
+        body: JSON.stringify({ username, password, totp_code: '' }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? 'Login failed');
@@ -230,16 +229,6 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
             type="password" value={password} onChange={e => setPassword(e.target.value)}
             placeholder="••••••••" autoComplete="current-password" required disabled={loading}
             style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9375rem', outline: 'none', background: '#f7f8fa' }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>2FA Code <span style={{ fontWeight: 400, color: '#8c959f' }}>(optional)</span></label>
-          <input
-            type="text" value={totp} onChange={e => setTotp(e.target.value)}
-            placeholder="6-digit code from Authenticator" autoComplete="one-time-code" disabled={loading}
-            inputMode="numeric" maxLength={6}
-            style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9375rem', outline: 'none', background: '#f7f8fa', letterSpacing: '0.2em' }}
           />
         </div>
 
