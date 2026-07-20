@@ -1,23 +1,25 @@
 # Core FastAPI and server
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
-pydantic==2.10.3
-pydantic-settings==2.6.1
-python-dotenv==1.0.1
+fastapi==0.115.12
+uvicorn[standard]==0.34.3
+pydantic==2.11.7
+pydantic-settings==2.7.1
+python-dotenv==1.1.0
 httpx==0.28.1
 email-validator==2.2.0
 
 # Database
-sqlalchemy==2.0.36
-alembic==1.14.0
+sqlalchemy==2.0.41
+alembic==1.14.1
 psycopg2-binary==2.9.10
 
 # Async task queue & caching
-celery==5.4.0
+celery==5.5.3
 redis==5.2.1
 
 # Authentication
-python-jose[cryptography]==3.3.0
+# Note: python-jose removed (CVE-2024-33663) — was unused in codebase
+python-jwt==4.1.0
+cryptography==45.0.4
 passlib[bcrypt]==1.7.4
 
 # Azure integration
@@ -25,7 +27,7 @@ azure-storage-blob==12.25.1
 azure-identity==1.20.0
 
 # OpenAI Integration
-openai==1.57.4
+openai==1.93.0
 
 # Additional utilities
 python-multipart==0.0.20
