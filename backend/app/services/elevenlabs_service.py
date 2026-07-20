@@ -26,7 +26,7 @@ class ElevenLabsService:
 
     def __init__(self, api_key: Optional[str] = None, voice_id: Optional[str] = None):
         self.api_key  = api_key  or os.getenv("ELEVENLABS_API_KEY")
-        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+        self.voice_id = voice_id or os.getenv("ELEVENLABS_VOICE_ID") or DEFAULT_VOICE_ID
 
         if not self.api_key:
             raise ValueError(
