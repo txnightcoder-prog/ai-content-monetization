@@ -250,7 +250,13 @@ class VideoPipelineService:
         platforms: Optional[List[str]] = None,
         caption: Optional[str] = None,
     ) -> List[Post]:
-        """Upload video to YouTube and create a Post DB record."""
+        """Upload video to the requested platforms and create Post DB records.
+
+        Platforms:
+          - youtube  → direct upload via YouTube Data API
+          - tiktok / instagram / facebook / twitter → Buffer API
+        Defaults to ['youtube'] if not specified.
+        """
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             raise ValueError(f"Video {video_id} not found")
@@ -259,36 +265,68 @@ class VideoPipelineService:
         if not video.video_url:
             raise ValueError(f"Video {video_id} has no video_url")
 
+        target_platforms = platforms or ["youtube"]
+
         if caption is None:
             script = self.db.query(ContentScript).filter(
                 ContentScript.id == video.script_id
             ).first()
             caption = _build_caption(script) if script else ""
 
-        post = Post(
-            video_id=video_id,
-            platform=Platform.youtube,
-            status=PostStatus.SCHEDULED,
-        )
-        self.db.add(post)
+        posts: List[Post] = []
 
-        try:
-            yt_id = await _upload_to_youtube(
-                video_url=str(video.video_url),
-                title=caption[:100] or "AI Generated Video",
-                description=caption,
+        for platform_name in target_platforms:
+            # Map string to Platform enum; skip unknown
+            platform_map = {p.value: p for p in Platform}
+            platform_enum = platform_map.get(platform_name.lower())
+            if platform_enum is None:
+                logger.warning("publish: unknown platform '%s' — skipping", platform_name)
+                continue
+
+            post = Post(
+                video_id=video_id,
+                platform=platform_enum,
+                status=PostStatus.SCHEDULED,
             )
-            post.external_id = yt_id
-            post.status      = PostStatus.POSTED
-            video.status     = VideoStatus.POSTED
-            logger.info("Video %s posted to YouTube as %s", video_id, yt_id)
-        except Exception as exc:
-            logger.error("YouTube upload failed for video %s: %s", video_id, exc)
-            post.status = PostStatus.FAILED
+            self.db.add(post)
+
+            try:
+                if platform_enum == Platform.youtube:
+                    yt_id = await _upload_to_youtube(
+                        video_url=str(video.video_url),
+                        title=caption[:100] or "AI Generated Video",
+                        description=caption,
+                    )
+                    post.external_id = yt_id
+                    post.status      = PostStatus.POSTED
+                    video.status     = VideoStatus.POSTED
+                    logger.info("Video %s posted to YouTube as %s", video_id, yt_id)
+                else:
+                    # Buffer handles TikTok, Instagram, Facebook, Twitter
+                    from app.services.buffer_service import BufferService  # noqa: PLC0415
+                    result = BufferService().post_to_all_platforms(
+                        text=caption,
+                        video_url=str(video.video_url),
+                        platforms=[platform_name.lower()],
+                    )
+                    buf_id = str(result.get("id", ""))
+                    post.external_id = buf_id or None
+                    post.status      = PostStatus.POSTED
+                    video.status     = VideoStatus.POSTED
+                    logger.info("Video %s posted to %s via Buffer (id=%s)", video_id, platform_name, buf_id)
+            except Exception as exc:
+                logger.error("%s publish failed for video %s: %s", platform_name, video_id, exc)
+                post.status = PostStatus.FAILED
+
+            posts.append(post)
+
+        if not posts:
+            raise ValueError(f"No valid platforms in {target_platforms}")
 
         self.db.commit()
-        self.db.refresh(post)
-        return [post]
+        for p in posts:
+            self.db.refresh(p)
+        return posts
 
     # ------------------------------------------------------------------
     def _set_failed(self, video: Video, error: str = "Unknown error") -> None:

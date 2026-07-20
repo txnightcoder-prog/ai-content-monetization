@@ -33,6 +33,7 @@ class Post(Base, TimestampMixin):
     post_url = Column(String(500), nullable=True)
     scheduled_at = Column(DateTime, nullable=True)
     posted_at = Column(DateTime, nullable=True)
+    external_id = Column(String(255), nullable=True)   # platform-assigned ID (e.g. YouTube video ID)
     status = Column(SQLEnum(PostStatus), default=PostStatus.SCHEDULED, nullable=False)
     
     # Relationships

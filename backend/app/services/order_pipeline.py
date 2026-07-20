@@ -124,7 +124,7 @@ async def process_order(order_id: UUID, db: Session) -> None:
         status_data = await video_svc.wait_for_completion(
             job_id,
             script=prompt,
-            character_image_path=character_image_path,
+            **({"character_image_path": character_image_path} if character_image_path and hasattr(video_svc, '_veo') else {}),
         )
         if status_data.get("status") == "failed":
             raise RuntimeError(status_data.get("error") or "Video generation failed")

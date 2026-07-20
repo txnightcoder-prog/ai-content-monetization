@@ -179,7 +179,7 @@ interface AIImage {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'script' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -5411,7 +5411,7 @@ Example:
         { id: 'blueprint',   icon: 'ðŸ—ºï¸', label: 'Blueprint',        badge: null },
         { id: 'videos',      icon: 'ðŸŽ¬', label: 'Video Generator',  badge: videoProvider?.provider === 'veo' ? 'Veo3' : null },
         { id: 'visuals',     icon: 'ðŸŽ¨', label: 'AI Visuals',       badge: null },
-        { id: 'influencer',  icon: '#AI', label: 'AI Influencer',    badge: 'New' },
+        { id: 'influencer',  icon: 'AI', label: 'AI Influencer',    badge: 'New' },
       ],
     },
     {
