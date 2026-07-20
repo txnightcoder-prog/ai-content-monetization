@@ -91,6 +91,8 @@ jobs:
           INSTAGRAM_ACCESS_TOKEN:      ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           GOOGLE_API_KEY:              ${{ secrets.GOOGLE_API_KEY }}
           GEMINI_MODEL:                ${{ secrets.GEMINI_MODEL }}
+          FAL_API_KEY:                 ${{ secrets.FAL_API_KEY }}
+          PIXABAY_API_KEY:             ${{ secrets.PIXABAY_API_KEY }}
           GUMROAD_WEBHOOK_SECRET:      ${{ secrets.GUMROAD_WEBHOOK_SECRET }}
           SENDGRID_API_KEY:            ${{ secrets.SENDGRID_API_KEY }}
           MAILGUN_API_KEY:             ${{ secrets.MAILGUN_API_KEY }}
@@ -129,6 +131,8 @@ jobs:
           [ -n "$INSTAGRAM_ACCESS_TOKEN" ]      && VARS="$VARS INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_ACCESS_TOKEN"
           [ -n "$GOOGLE_API_KEY" ]              && VARS="$VARS GOOGLE_API_KEY=$GOOGLE_API_KEY"
           [ -n "$GEMINI_MODEL" ]                && VARS="$VARS GEMINI_MODEL=$GEMINI_MODEL"
+          [ -n "$FAL_API_KEY" ]                 && VARS="$VARS FAL_API_KEY=$FAL_API_KEY"
+          [ -n "$PIXABAY_API_KEY" ]             && VARS="$VARS PIXABAY_API_KEY=$PIXABAY_API_KEY"
           [ -n "$GUMROAD_WEBHOOK_SECRET" ]      && VARS="$VARS GUMROAD_WEBHOOK_SECRET=$GUMROAD_WEBHOOK_SECRET"
           [ -n "$SENDGRID_API_KEY" ]            && VARS="$VARS SENDGRID_API_KEY=$SENDGRID_API_KEY"
           [ -n "$MAILGUN_API_KEY" ]             && VARS="$VARS MAILGUN_API_KEY=$MAILGUN_API_KEY"

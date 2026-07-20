@@ -8,6 +8,13 @@ Gumroad webhook has been received:
 
 Each step is isolated; if one fails the order is marked `failed` and
 the error is recorded for manual retry.
+
+Media sources used per step:
+  - Character image : ImageService (Imagen 3 → DALL-E 3)
+  - Voiceover       : TTSService   (ElevenLabs → Google TTS → OpenAI TTS)
+  - Video clips     : ClipService  (Veo 3 → Kling → Pexels → Pixabay)
+  - Storage         : StorageService (Azure Blob → S3 → local)
+  - Email           : EmailService   (SendGrid → Mailgun → SMTP)
 """
 
 import logging
@@ -21,6 +28,7 @@ from app.models.order import Order, OrderStatus, ChildProfile
 from app.services.prompt_builder import PromptBuilderService
 from app.services.storage_service import StorageService
 from app.services.email_service import EmailService
+from app.services.image_service import ImageService
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +78,31 @@ async def process_order(order_id: UUID, db: Session) -> None:
         logger.error("OrderPipeline: prompt build failed for %s: %s", order.id, exc)
         return
 
-    # ── Step 3: Generate video ───────────────────────────────────────────────
+    # ── Step 3a: Generate character image ────────────────────────────────────
+    character_image_path: Optional[str] = None
+    if profile:
+        try:
+            img_svc = ImageService()
+            img_output = f"/tmp/videos/char_{order.id}.jpg"
+            os.makedirs("/tmp/videos", exist_ok=True)
+            character_image_path = await img_svc.generate_character(
+                child_name     = profile.child_name or "the child",
+                age            = profile.age,
+                hair_colour    = profile.hair_colour,
+                eye_colour     = profile.eye_colour,
+                extra_features = profile.features,
+                output_path    = img_output,
+                style          = "cartoon",
+            )
+            logger.info(
+                "OrderPipeline: character image generated for order %s → %s",
+                order.id, character_image_path,
+            )
+        except Exception as exc:
+            # Non-fatal: video can still be generated without the image
+            logger.warning("OrderPipeline: character image failed for %s: %s (continuing)", order.id, exc)
+
+    # ── Step 3b: Generate video ──────────────────────────────────────────────
     _set_status(db, order, OrderStatus.GENERATING)
 
     video_path: Optional[str] = None
@@ -89,7 +121,11 @@ async def process_order(order_id: UUID, db: Session) -> None:
         if not job_id:
             raise RuntimeError("Video provider returned no job id")
 
-        status_data = await video_svc.wait_for_completion(job_id, script=prompt)
+        status_data = await video_svc.wait_for_completion(
+            job_id,
+            script=prompt,
+            character_image_path=character_image_path,
+        )
         if status_data.get("status") == "failed":
             raise RuntimeError(status_data.get("error") or "Video generation failed")
 

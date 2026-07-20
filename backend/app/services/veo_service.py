@@ -168,24 +168,29 @@ class VeoVideoService:
         caption_text: Optional[str] = None,
         niche: str = "technology",
         max_wait_seconds: int = _MAX_WAIT,
+        character_image_path: Optional[str] = None,   # from ImageService (kids pipeline)
     ) -> Dict[str, Any]:
         """
         Run the full Veo pipeline:
-          1. Generate voiceover via Google Cloud TTS (free, uses GOOGLE_API_KEY)
+          1. Generate voiceover via TTSService (Google TTS primary)
           2. Split script → scene prompts
           3. Generate each clip via Veo (concurrent)
           4. Assemble clips + voiceover → final MP4 via FFmpeg
         """
         from app.services.video_assembler import VideoAssembler, _get_ffmpeg
+        from app.services.tts_service import TTSService
 
         output_path = os.path.join(self._output_dir, f"{video_id}.mp4")
         voice_path  = os.path.join(self._output_dir, f"{video_id}_voice.mp3")
         thumb_path  = os.path.join(self._output_dir, f"{video_id}_thumb.jpg")
 
         try:
-            # ── 1. Generate voiceover via Google Cloud TTS (free) ─────────────
-            logger.info("VeoService: generating voiceover via Google TTS for job %s", video_id)
-            await self._google_tts(script, voice_path)
+            # ── 1. Generate voiceover via TTSService ──────────────────────────
+            logger.info("VeoService: generating voiceover for job %s", video_id)
+            tts = TTSService()
+            # Use "kids" voice style if character image was provided (personalised order)
+            voice_style = "kids" if character_image_path else "default"
+            await tts.speak(script, voice_path, voice_style=voice_style)
 
             # ── 2. Generate Veo clips concurrently ────────────────────────────
             scenes = _split_into_scenes(script, max_scenes=4)

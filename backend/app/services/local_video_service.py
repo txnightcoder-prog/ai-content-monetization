@@ -1,8 +1,12 @@
 """
 Local Video Generation Service
 ================================
-Orchestrates ElevenLabs TTS + Pexels stock clips + FFmpeg assembly
+Orchestrates multi-source TTS + multi-source clips + FFmpeg assembly
 into a single faceless MP4, with optional Whisper timed captions.
+
+Provider chains (via TTSService / ClipService):
+  Voiceover : ElevenLabs → Google Cloud TTS → OpenAI TTS
+  Clips     : Veo 3 → Kling → Pexels → Pixabay
 
 Cost: ~$0.002/video (ElevenLabs) + Pexels (free) + FFmpeg (free)
       + ~$0.006/min audio for Whisper captions (optional, uses OPENAI_API_KEY)
@@ -13,11 +17,11 @@ import logging
 import os
 import re
 import subprocess
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from app.services.elevenlabs_service import ElevenLabsService
-from app.services.pexels_service import PexelsService
+from app.services.tts_service import TTSService
+from app.services.clip_service import ClipService
 from app.services.video_assembler import VideoAssembler, _get_ffmpeg
 from app.services.whisper_captions import add_timed_captions
 
@@ -64,19 +68,27 @@ def _extract_thumbnail(mp4_path: str, thumb_path: str) -> bool:
 
 class LocalVideoService:
     """
-    Generates faceless videos locally:
-      script → ElevenLabs MP3 → Pexels clips → FFmpeg MP4 → Whisper captions
+    Generates faceless videos:
+      script → TTSService MP3 → ClipService clips → FFmpeg MP4 → Whisper captions
+
+    TTSService:  ElevenLabs → Google TTS → OpenAI TTS (auto-fallback)
+    ClipService: Veo 3 → Kling → Pexels → Pixabay    (auto-fallback)
     """
 
     def __init__(
         self,
-        elevenlabs: Optional[ElevenLabsService] = None,
-        pexels: Optional[PexelsService] = None,
+        elevenlabs=None,          # kept for backwards compat — passed to TTSService if provided
+        pexels=None,              # kept for backwards compat — ignored, ClipService handles it
         assembler: Optional[VideoAssembler] = None,
         timed_captions: bool = True,
+        tts_service: Optional[TTSService] = None,
+        clip_service: Optional[ClipService] = None,
     ):
-        self._tts = elevenlabs or ElevenLabsService()
-        self._pexels = pexels or PexelsService()
+        # TTSService wraps ElevenLabs + Google TTS + OpenAI TTS
+        self._tts = tts_service or TTSService(
+            elevenlabs_key=getattr(elevenlabs, "api_key", None) if elevenlabs else None,
+        )
+        self._clips = clip_service or ClipService()
         self._assembler = assembler or VideoAssembler()
         self._timed_captions = timed_captions
         os.makedirs(VIDEO_OUTPUT_DIR, exist_ok=True)
@@ -105,23 +117,24 @@ class LocalVideoService:
         thumb_path       = os.path.join(VIDEO_OUTPUT_DIR, f"{video_id}_thumb.jpg")
 
         try:
-            # 1. ElevenLabs voiceover
+            # 1. Voiceover via TTSService (ElevenLabs → Google TTS → OpenAI TTS)
             logger.info("LocalVideoService: generating voiceover for job %s", video_id)
-            await self._tts.text_to_speech(text=script, output_path=voice_path)
+            await self._tts.speak(text=script, output_path=voice_path, voice_style="default")
 
-            # 2. Pexels clips
+            # 2. Video clips via ClipService (Veo 3 → Kling → Pexels → Pixabay)
             keywords = _extract_keywords(script)
-            logger.info("LocalVideoService: fetching Pexels clips for '%s'", keywords)
-            clip_urls = await self._pexels.search_clips(query=keywords, count=6)
-            if not clip_urls:
-                raise RuntimeError(f"Pexels returned no clips for query '{keywords}'")
+            logger.info("LocalVideoService: fetching clips for '%s'", keywords)
+            clip_paths = await self._clips.get_clips(prompt=keywords, count=6, aspect_ratio="9:16")
+            if not clip_paths:
+                raise RuntimeError(f"All clip providers returned no clips for query '{keywords}'")
 
             # 3. FFmpeg assembly (raw — no captions yet)
+            # ClipService returns local paths, not URLs — pass them as "urls" (assembler handles both)
             logger.info("LocalVideoService: assembling video for job %s", video_id)
             asm_target = raw_output_path if self._timed_captions else output_path
             await asyncio.to_thread(
                 self._assemble_sync,
-                clip_urls,
+                clip_paths,
                 voice_path,
                 asm_target,
                 caption_text or script[:100],
@@ -196,5 +209,17 @@ class LocalVideoService:
         )
 
     async def get_account_info(self) -> Dict[str, Any]:
-        el_info = await self._tts.get_account_info()
-        return {"elevenlabs": el_info, "pexels": "key configured"}
+        providers = {
+            "tts":  {
+                "elevenlabs": "configured" if os.getenv("ELEVENLABS_API_KEY") else "not set",
+                "google_tts": "configured" if os.getenv("GOOGLE_API_KEY") else "not set",
+                "openai_tts": "configured" if os.getenv("OPENAI_API_KEY") else "not set",
+            },
+            "clips": {
+                "veo":     "configured" if os.getenv("GOOGLE_API_KEY") else "not set",
+                "kling":   "configured" if os.getenv("FAL_API_KEY") else "not set",
+                "pexels":  "configured" if os.getenv("PEXELS_API_KEY") else "not set",
+                "pixabay": "configured" if os.getenv("PIXABAY_API_KEY") else "not set",
+            },
+        }
+        return providers

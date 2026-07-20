@@ -107,8 +107,10 @@ class VideoAssembler:
         Full assembly pipeline.
 
         Args:
-            clip_urls:       List of Pexels MP4 URLs to use as visuals.
-            voice_mp3_path:  Path to the ElevenLabs voiceover MP3.
+            clip_urls:       List of MP4 URLs *or* local file paths.
+                             ClipService returns local paths; Pexels returns URLs.
+                             Both are handled transparently.
+            voice_mp3_path:  Path to the voiceover MP3.
             output_path:     Where to write the finished MP4.
             caption_text:    Short caption burned onto the video (hook line).
             bg_music_path:   Optional background music MP3 (mixed at low volume).
@@ -119,10 +121,10 @@ class VideoAssembler:
         with tempfile.TemporaryDirectory(prefix="vidasm_") as tmpdir:
             tmp = Path(tmpdir)
 
-            # 1. Download clips in parallel (Fix Warn #11)
-            clip_paths = await self._download_clips(clip_urls, tmp)
+            # 1. Resolve clips — local paths are used directly; remote URLs are downloaded
+            clip_paths = await self._resolve_clips(clip_urls, tmp)
             if not clip_paths:
-                raise RuntimeError("No video clips could be downloaded from Pexels.")
+                raise RuntimeError("No video clips could be resolved (tried all providers).")
 
             # 2. Re-encode each clip to common 9:16 format
             normalised = self._normalise_clips(clip_paths, tmp)
@@ -157,27 +159,42 @@ class VideoAssembler:
     # Private helpers
     # ------------------------------------------------------------------
 
-    async def _download_clips(self, urls: List[str], tmpdir: Path) -> List[str]:
-        """Download all clips in parallel (Fix Warn #11)."""
-        async def _fetch_one(client: httpx.AsyncClient, i: int, url: str) -> Optional[str]:
+    async def _resolve_clips(self, urls: List[str], tmpdir: Path) -> List[str]:
+        """
+        Resolve clip sources to local paths in parallel.
+        - Already-local paths (from ClipService) are used directly without copying.
+        - HTTP/HTTPS URLs are stream-downloaded to tmpdir.
+        """
+        async def _one(i: int, src: str) -> Optional[str]:
             try:
-                r = await client.get(url)
-                r.raise_for_status()
+                # Local path — already on disk from ClipService
+                if src.startswith("/") or (len(src) >= 2 and src[1] == ":") or src.startswith("file://"):
+                    local = src.replace("file://", "")
+                    if Path(local).exists():
+                        logger.debug("Assembler: using local clip %d: %s", i, local)
+                        return local
+                    logger.warning("Assembler: local clip path not found: %s", local)
+                    return None
+
+                # Remote URL — download to temp dir
+                async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+                    r = await client.get(src)
+                    r.raise_for_status()
                 p = str(tmpdir / f"clip_{i}.mp4")
                 with open(p, "wb") as f:
                     f.write(r.content)
-                logger.debug("Downloaded clip %d: %s", i, url)
+                logger.debug("Assembler: downloaded clip %d from %s", i, src[:80])
                 return p
             except Exception as exc:
-                logger.warning("Failed to download clip %s: %s", url, exc)
+                logger.warning("Assembler: failed to resolve clip %s: %s", src[:80], exc)
                 return None
 
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            results = await asyncio.gather(
-                *[_fetch_one(client, i, url) for i, url in enumerate(urls)]
-            )
-
+        results = await asyncio.gather(*[_one(i, u) for i, u in enumerate(urls)])
         return [p for p in results if p is not None]
+
+    # kept for backwards compat — used by veo_service._assemble_sync
+    async def _download_clips(self, urls: List[str], tmpdir: Path) -> List[str]:
+        return await self._resolve_clips(urls, tmpdir)
 
     def _normalise_clips(self, paths: List[str], tmpdir: Path) -> List[str]:
         """Re-encode each clip to 1080x1920 @ 30fps, stripping audio."""
