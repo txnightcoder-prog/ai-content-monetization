@@ -178,8 +178,106 @@ interface AIImage {
   provider: string;
 }
 
+// ── Login screen ─────────────────────────────────────────────────────────────
+function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
+  const [username, setUsername] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [totp, setTotp]         = React.useState('');
+  const [loading, setLoading]   = React.useState(false);
+  const [error, setError]       = React.useState('');
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true); setError('');
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, totp_code: totp }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? 'Login failed');
+      localStorage.setItem('auth_token', data.access_token);
+      onLogin(data.access_token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f7f8fa' }}>
+      <form onSubmit={submit} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '1rem', padding: '2.5rem 2rem', width: '100%', maxWidth: '380px', display: 'flex', flexDirection: 'column', gap: '1.25rem', boxShadow: '0 4px 24px rgba(0,0,0,0.06)' }}>
+        <div style={{ textAlign: 'center', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>🎬</div>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#1f2328', margin: 0 }}>KidVid Creator</h1>
+          <p style={{ color: '#57606a', fontSize: '0.875rem', margin: '0.3rem 0 0' }}>Sign in to your dashboard</p>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Username</label>
+          <input
+            type="text" value={username} onChange={e => setUsername(e.target.value)}
+            placeholder="admin" autoComplete="username" required disabled={loading}
+            style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9375rem', outline: 'none', background: '#f7f8fa' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Password</label>
+          <input
+            type="password" value={password} onChange={e => setPassword(e.target.value)}
+            placeholder="••••••••" autoComplete="current-password" required disabled={loading}
+            style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9375rem', outline: 'none', background: '#f7f8fa' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+          <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em' }}>2FA Code <span style={{ fontWeight: 400, color: '#8c959f' }}>(optional)</span></label>
+          <input
+            type="text" value={totp} onChange={e => setTotp(e.target.value)}
+            placeholder="6-digit code from Authenticator" autoComplete="one-time-code" disabled={loading}
+            inputMode="numeric" maxLength={6}
+            style={{ padding: '0.65rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9375rem', outline: 'none', background: '#f7f8fa', letterSpacing: '0.2em' }}
+          />
+        </div>
+
+        {error && (
+          <div style={{ background: '#fff0f0', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#dc2626', fontSize: '0.875rem' }}>
+            {error}
+          </div>
+        )}
+
+        <button type="submit" disabled={loading || !username || !password}
+          style={{ background: loading ? '#93c5a8' : '#2a9d5c', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.8rem', fontWeight: 800, fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer' }}>
+          {loading ? 'Signing in…' : 'Sign in'}
+        </button>
+
+        <p style={{ textAlign: 'center', color: '#8c959f', fontSize: '0.78rem', margin: 0 }}>
+          Credentials are set via GitHub Secrets
+        </p>
+      </form>
+    </div>
+  );
+}
+
 function App() {
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer'>('home');
+  // ── Auth state ── (must be declared before any other hooks — no early return)
+  const [authToken, setAuthToken] = React.useState<string | null>(() => localStorage.getItem('auth_token'));
+
+  const handleLogin = (token: string) => setAuthToken(token);
+  const handleLogout = () => { localStorage.removeItem('auth_token'); setAuthToken(null); };
+
+  // apiFetch: auto-inject Bearer token on every /api/ call
+  const apiFetch = React.useCallback((url: string, init?: RequestInit): Promise<Response> => {
+    const token = localStorage.getItem('auth_token');
+    const headers: Record<string, string> = { ...(init?.headers as Record<string, string> ?? {}) };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(url, { ...init, headers });
+  }, []);
+
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -5469,6 +5567,132 @@ Example:
     );
   };
 
+  // ── User Management page (admin only) ─────────────────────────────────────
+  const [usersList, setUsersList]           = React.useState<any[]>([]);
+  const [usersLoading, setUsersLoading]     = React.useState(false);
+  const [usersError, setUsersError]         = React.useState('');
+  const [newEmail, setNewEmail]             = React.useState('');
+  const [newPassword, setNewPassword]       = React.useState('');
+  const [newRole, setNewRole]               = React.useState<'admin'|'viewer'>('viewer');
+  const [addingUser, setAddingUser]         = React.useState(false);
+  const [addUserError, setAddUserError]     = React.useState('');
+  const [addUserSuccess, setAddUserSuccess] = React.useState('');
+
+  const loadUsers = async () => {
+    setUsersLoading(true); setUsersError('');
+    try {
+      const res = await apiFetch(`${API_BASE}/api/v1/auth/users`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setUsersList(await res.json());
+    } catch (err) { setUsersError(err instanceof Error ? err.message : 'Failed to load users'); }
+    finally { setUsersLoading(false); }
+  };
+
+  const addUser = async () => {
+    if (!newEmail.trim() || !newPassword.trim()) return;
+    setAddingUser(true); setAddUserError(''); setAddUserSuccess('');
+    try {
+      const res = await apiFetch(`${API_BASE}/api/v1/auth/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail.trim(), password: newPassword, role: newRole }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      setAddUserSuccess(`User ${newEmail.trim()} added!`);
+      setNewEmail(''); setNewPassword(''); setNewRole('viewer');
+      await loadUsers();
+    } catch (err) { setAddUserError(err instanceof Error ? err.message : 'Failed to add user'); }
+    finally { setAddingUser(false); }
+  };
+
+  const deleteUser = async (id: string, email: string) => {
+    if (!window.confirm(`Delete ${email}?`)) return;
+    try {
+      const res = await apiFetch(`${API_BASE}/api/v1/auth/users/${id}`, { method: 'DELETE' });
+      if (!res.ok && res.status !== 204) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
+      await loadUsers();
+    } catch (err) { setUsersError(err instanceof Error ? err.message : 'Delete failed'); }
+  };
+
+  const renderUsers = () => {
+    if (usersLoading && usersList.length === 0) {
+      return <div style={{ padding: '2rem', color: '#57606a' }}>Loading users…</div>;
+    }
+    return (
+      <div style={{ padding: '2rem', maxWidth: '720px' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f2328', marginBottom: '0.25rem' }}>👥 User Management</h1>
+        <p style={{ color: '#57606a', marginBottom: '1.75rem' }}>Admin-only. Add or remove dashboard users.</p>
+
+        {/* Add user form */}
+        <div style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1f2328', margin: 0 }}>Add new user</h3>
+          <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="Email" disabled={addingUser}
+              style={{ flex: '2 1 200px', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.875rem', background: '#fff' }} />
+            <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password" disabled={addingUser}
+              style={{ flex: '1 1 160px', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.875rem', background: '#fff' }} />
+            <select value={newRole} onChange={e => setNewRole(e.target.value as 'admin'|'viewer')} disabled={addingUser}
+              style={{ flex: '0 0 auto', padding: '0.6rem 0.8rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.875rem', background: '#fff', color: '#1f2328' }}>
+              <option value="viewer">Viewer</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button onClick={addUser} disabled={addingUser || !newEmail.trim() || !newPassword.trim()}
+              style={{ padding: '0.6rem 1.1rem', background: '#2a9d5c', color: '#fff', border: 'none', borderRadius: '0.5rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', opacity: addingUser ? 0.6 : 1 }}>
+              {addingUser ? 'Adding…' : '+ Add User'}
+            </button>
+          </div>
+          {addUserError   && <div style={{ color: '#dc2626', fontSize: '0.8rem' }}>{addUserError}</div>}
+          {addUserSuccess && <div style={{ color: '#2a9d5c', fontSize: '0.8rem' }}>{addUserSuccess}</div>}
+        </div>
+
+        {/* Users table */}
+        {usersError && <div style={{ color: '#dc2626', marginBottom: '1rem', fontSize: '0.875rem' }}>{usersError}</div>}
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.75rem', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ background: '#f7f8fa', borderBottom: '1px solid #e5e7eb' }}>
+                <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 700, color: '#57606a' }}>Email</th>
+                <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 700, color: '#57606a' }}>Role</th>
+                <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 700, color: '#57606a' }}>Status</th>
+                <th style={{ padding: '0.65rem 1rem', textAlign: 'left', fontWeight: 700, color: '#57606a' }}>Added</th>
+                <th style={{ padding: '0.65rem 1rem' }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {usersList.length === 0 ? (
+                <tr><td colSpan={5} style={{ padding: '1.5rem', textAlign: 'center', color: '#8c959f' }}>No users yet</td></tr>
+              ) : usersList.map((u, i) => (
+                <tr key={u.id} style={{ borderBottom: i < usersList.length - 1 ? '1px solid #e5e7eb' : 'none', background: i % 2 === 0 ? '#fff' : '#fafbfc' }}>
+                  <td style={{ padding: '0.7rem 1rem', color: '#1f2328', fontWeight: u.role === 'admin' ? 700 : 400 }}>{u.email}</td>
+                  <td style={{ padding: '0.7rem 1rem' }}>
+                    <span style={{ background: u.role === 'admin' ? 'rgba(42,157,92,0.12)' : 'rgba(59,130,246,0.1)', color: u.role === 'admin' ? '#2a9d5c' : '#3b82f6', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem' }}>
+                    <span style={{ color: u.is_active ? '#2a9d5c' : '#ef4444', fontSize: '0.8rem' }}>{u.is_active ? 'Active' : 'Disabled'}</span>
+                  </td>
+                  <td style={{ padding: '0.7rem 1rem', color: '#8c959f', fontSize: '0.8rem' }}>{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+                  <td style={{ padding: '0.7rem 1rem', textAlign: 'right' }}>
+                    <button onClick={() => deleteUser(u.id, u.email)}
+                      style={{ background: 'rgba(239,68,68,0.08)', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '0.375rem', padding: '0.3rem 0.65rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button onClick={loadUsers} style={{ marginTop: '1rem', background: 'none', border: '1px solid #d0d7de', borderRadius: '0.5rem', padding: '0.45rem 0.9rem', color: '#57606a', fontSize: '0.8rem', cursor: 'pointer' }}>
+          ↻ Refresh
+        </button>
+      </div>
+    );
+  };
+
+  if (!authToken) return <LoginScreen onLogin={handleLogin} />;
+
   return (
     <div className="app">
       {/* ── Top navbar ── */}
@@ -5502,7 +5726,7 @@ Example:
             </button>
           </div>
         </div>
-        {/* nav right — live status pill */}
+        {/* nav right — live status pill + user controls */}
         <div className="nav-right">
           <div className="nav-pill">
             <span className="dot" />
@@ -5512,6 +5736,14 @@ Example:
             style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid #fecaca', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
             ▶ @TxNightcoder
           </a>
+          <button onClick={() => { setCurrentPage('users' as any); loadUsers(); }}
+            style={{ background: 'rgba(42,157,92,0.12)', color: '#2a9d5c', border: '1px solid #b7e4cc', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            👥 Users
+          </button>
+          <button onClick={handleLogout}
+            style={{ background: 'rgba(100,116,139,0.10)', color: '#57606a', border: '1px solid #d0d7de', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            Sign out
+          </button>
         </div>
       </nav>
 
@@ -5577,7 +5809,8 @@ Example:
 
         {/* Main content */}
         <main className="main-content">
-          {currentPage === 'home'        ? renderHome() :
+          {(currentPage as string) === 'users' ? renderUsers() :
+           currentPage === 'home'        ? renderHome() :
            currentPage === 'source'      ? renderSource() :
            currentPage === 'scripts'     ? renderScripts() :
            currentPage === 'blueprint'   ? renderBlueprint() :

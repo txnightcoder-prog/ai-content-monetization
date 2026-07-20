@@ -8,6 +8,7 @@ from app.models.conversion import Conversion
 from app.models.analytics import Analytics
 from app.models.integration import Integration
 from app.models.order import Order, ChildProfile, OrderStatus
+from app.models.dashboard_user import DashboardUser
 
 __all__ = [
     "Base",
@@ -22,6 +23,7 @@ __all__ = [
     "Order",
     "ChildProfile",
     "OrderStatus",
+    "DashboardUser",
 ]
 
 # Made with Bob

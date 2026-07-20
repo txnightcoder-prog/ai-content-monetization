@@ -6,6 +6,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Least-privilege token — only read repo + write packages (ACR login)
+permissions:
+  contents: read
+  packages: write
+
 env:
   ACR_LOGIN_SERVER:    txnightcoderregistry.azurecr.io
   BACKEND_IMAGE:       txnightcoderregistry.azurecr.io/backend
@@ -70,6 +75,10 @@ jobs:
 
       - name: Set backend environment variables
         env:
+          DASHBOARD_USERNAME:          ${{ secrets.DASHBOARD_USERNAME }}
+          DASHBOARD_PASSWORD:          ${{ secrets.DASHBOARD_PASSWORD }}
+          DASHBOARD_SECRET:            ${{ secrets.DASHBOARD_SECRET }}
+          DASHBOARD_TOTP_SECRET:       ${{ secrets.DASHBOARD_TOTP_SECRET }}
           DATABASE_URL:                ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY:              ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY:          ${{ secrets.ELEVENLABS_API_KEY }}
@@ -110,6 +119,10 @@ jobs:
         run: |
           VARS="VIDEO_OUTPUT_DIR=/tmp/videos"
           VARS="$VARS ALLOWED_ORIGINS=https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+          [ -n "$DASHBOARD_USERNAME" ]          && VARS="$VARS DASHBOARD_USERNAME=$DASHBOARD_USERNAME"
+          [ -n "$DASHBOARD_PASSWORD" ]          && VARS="$VARS DASHBOARD_PASSWORD=$DASHBOARD_PASSWORD"
+          [ -n "$DASHBOARD_SECRET" ]            && VARS="$VARS DASHBOARD_SECRET=$DASHBOARD_SECRET"
+          [ -n "$DASHBOARD_TOTP_SECRET" ]       && VARS="$VARS DASHBOARD_TOTP_SECRET=$DASHBOARD_TOTP_SECRET"
           [ -n "$DATABASE_URL" ]                && VARS="$VARS DATABASE_URL=$DATABASE_URL"
           [ -n "$OPENAI_API_KEY" ]              && VARS="$VARS OPENAI_API_KEY=$OPENAI_API_KEY"
           [ -n "$ELEVENLABS_API_KEY" ]          && VARS="$VARS ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"

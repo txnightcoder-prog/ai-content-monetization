@@ -35,12 +35,17 @@ async def _fetch_channel_stats(channel_input: str, api_key: str) -> Dict[str, An
     Fetch channel statistics from YouTube Data API.
     channel_input can be a channel ID (UC...), handle (@name), or channel URL.
     """
-    # Extract channel identifier
-    if "youtube.com/" in channel_input:
-        # Parse URL — handle /channel/ID, /@handle, /c/name formats
-        import re
-        m = re.search(r"youtube\.com/(?:channel/|@|c/)([\w@-]+)", channel_input)
-        channel_input = m.group(1) if m else channel_input.split("/")[-1]
+    # Extract channel identifier from URL using proper host validation
+    from urllib.parse import urlparse  # noqa: PLC0415
+    import re  # noqa: PLC0415
+    parsed = urlparse(channel_input)
+    if parsed.scheme in ("http", "https"):
+        # Enforce exact hostname to prevent bypass via attacker.com/youtube.com/
+        hostname = parsed.hostname or ""
+        if hostname not in ("youtube.com", "www.youtube.com"):
+            raise ValueError(f"URL hostname must be youtube.com, got: {hostname}")
+        m = re.search(r"/(?:channel/|@|c/)([\w@-]+)", parsed.path)
+        channel_input = m.group(1) if m else parsed.path.strip("/").split("/")[-1]
 
     # Try as channel ID first (starts with UC)
     params: Dict[str, Any] = {

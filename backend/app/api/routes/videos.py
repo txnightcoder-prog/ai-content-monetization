@@ -210,11 +210,36 @@ async def import_video_from_url(
     The URL must point directly to an MP4 file and be publicly accessible
     (no login required to download).
     """
-    import httpx
-    import tempfile
+    import ipaddress  # noqa: PLC0415
+    from urllib.parse import urlparse  # noqa: PLC0415
+    import socket  # noqa: PLC0415
 
-    if not request.url.startswith(("http://", "https://")):
+    # ── SSRF prevention — validate URL before making any outbound request ────
+    _parsed = urlparse(request.url)
+    if _parsed.scheme not in ("http", "https"):
         raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+
+    _hostname = _parsed.hostname or ""
+    if not _hostname:
+        raise HTTPException(status_code=400, detail="Invalid URL — no hostname")
+
+    # Block private/loopback/link-local IPs (cloud metadata, internal services)
+    _BLOCKED_RANGES = [
+        ipaddress.ip_network("127.0.0.0/8"),    # loopback
+        ipaddress.ip_network("10.0.0.0/8"),     # private
+        ipaddress.ip_network("172.16.0.0/12"),  # private
+        ipaddress.ip_network("192.168.0.0/16"), # private
+        ipaddress.ip_network("169.254.0.0/16"), # link-local (AWS/Azure metadata)
+        ipaddress.ip_network("::1/128"),        # IPv6 loopback
+        ipaddress.ip_network("fc00::/7"),       # IPv6 private
+    ]
+    try:
+        _ip = ipaddress.ip_address(socket.gethostbyname(_hostname))
+        for _blocked in _BLOCKED_RANGES:
+            if _ip in _blocked:
+                raise HTTPException(status_code=400, detail="URL resolves to a private/internal address")
+    except (socket.gaierror, ValueError):
+        raise HTTPException(status_code=400, detail="Could not resolve URL hostname")
 
     # Stream-download the file so we don't load the whole thing into memory
     output_dir = Path(os.getenv("VIDEO_OUTPUT_DIR", "/tmp/videos"))

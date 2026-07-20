@@ -100,9 +100,10 @@ async def gumroad_webhook(
     try:
         payload = GumroadWebhookPayload(**data)
     except Exception as exc:
+        # Log full detail server-side only — never expose to caller
         logger.warning("Gumroad webhook payload validation error: %s | raw keys: %s", exc, list(data.keys()))
         # Still return 200 so Gumroad doesn't retry indefinitely
-        return {"status": "ignored", "reason": str(exc)}
+        return {"status": "ignored", "reason": "Invalid payload"}
 
     # ── Idempotency — skip duplicate sale events ─────────────────────────────
     existing = db.query(Order).filter(

@@ -103,25 +103,27 @@ def get_refresh_token():
         print()
         print("Your YouTube API credentials are ready!")
         print()
-        print("📋 Copy these lines to your .env file:")
+        print("Copy these lines to your .env file:")
         print("-" * 70)
         print()
-        print(f"YOUTUBE_CLIENT_ID={client_id}")
-        print(f"YOUTUBE_CLIENT_SECRET={client_secret}")
-        print(f"YOUTUBE_REFRESH_TOKEN={refresh_token}")
+        # Do not print full secret values to terminal (CodeQL CWE-312/CWE-359)
+        print(f"YOUTUBE_CLIENT_ID={client_id[:8]}...[REDACTED]")
+        print(f"YOUTUBE_CLIENT_SECRET=[REDACTED - {len(client_secret)} chars]")
+        print(f"YOUTUBE_REFRESH_TOKEN=[REDACTED - {len(refresh_token)} chars]")
         print()
         print("-" * 70)
         print()
-        
-        # Save to file for easy copying
+
+        # Save to file — warn user to protect it and delete after use
         with open('youtube_credentials.txt', 'w') as f:
-            f.write("# YouTube API Credentials\n")
-            f.write("# Copy these lines to your .env file\n\n")
+            f.write("# YouTube API Credentials — DELETE THIS FILE AFTER COPYING TO .env\n")
+            f.write("# Do not commit this file to git\n\n")
             f.write(f"YOUTUBE_CLIENT_ID={client_id}\n")
             f.write(f"YOUTUBE_CLIENT_SECRET={client_secret}\n")
             f.write(f"YOUTUBE_REFRESH_TOKEN={refresh_token}\n")
-        
-        print("✅ Credentials also saved to: youtube_credentials.txt")
+
+        print("Credentials saved to: youtube_credentials.txt")
+        print("IMPORTANT: Delete this file after copying to GitHub Secrets!")
         print()
         print("Next steps:")
         print("1. Open your .env file")

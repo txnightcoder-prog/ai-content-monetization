@@ -12,6 +12,10 @@ on:
 env:
   BACKEND_URL: https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io
 
+# Least-privilege — only needs to read repo and call external HTTP endpoint
+permissions:
+  contents: read
+
 jobs:
   daily-diagnostic:
     name: Run Daily Health Check

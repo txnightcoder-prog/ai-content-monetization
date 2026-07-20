@@ -28,8 +28,11 @@ from app.api.routes.analytics import router as analytics_router
 from app.api.routes.health_checks import router as health_router
 from app.api.routes.openart import router as openart_router
 from app.api.routes.orders import router as orders_router
+from app.api.routes.auth import router as auth_router
+from app.core.auth import verify_token, seed_admin
 from app.core.database import init_db
 from sqlalchemy import text
+from fastapi.responses import JSONResponse
 
 
 def _migrate_add_columns():
@@ -80,6 +83,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing database...")
     init_db()
     _migrate_add_columns()
+    seed_admin()
     logger.info("Database initialized successfully!")
 
     yield
@@ -149,6 +153,38 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
 
+
+# ── Global auth guard — protect all /api/v1/* except /api/v1/auth/* ──────────
+_PUBLIC_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+
+@app.middleware("http")
+async def require_auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Allow: non-API paths, docs, health, and the login endpoint itself
+    if (
+        not path.startswith("/api/v1/")
+        or path.startswith("/api/v1/auth/")
+        or path in _PUBLIC_PATHS
+    ):
+        return await call_next(request)
+
+    # OPTIONS pre-flight — must pass through for CORS
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
+    # Validate Bearer token
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip() if auth_header.startswith("Bearer ") else ""
+    if not token or verify_token(token) is None:
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "Not authenticated"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return await call_next(request)
+
+
+app.include_router(auth_router)
 app.include_router(dashboard_router)
 app.include_router(scripts_router)
 app.include_router(videos_router)

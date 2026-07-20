@@ -77,8 +77,9 @@ def approve():
             asyncio.run(_schedule_buffer_post(item["caption"], item["url"], post_time))
             item["status"]    = "approved"
             item["posted_at"] = now.isoformat()
-        except Exception as e:
-            return _cors(jsonify({"error": str(e)}), 500)
+        except Exception:
+            logger.error("Failed to approve video %s", video_id, exc_info=True)
+            return _cors(jsonify({"error": "Failed to approve video"}), 500)
     else:
         _delete_blob(item.get("blob_name", ""))
         queue = [v for v in queue if v["id"] != video_id]
@@ -115,8 +116,8 @@ def trigger_run():
             _last_result = result
             logger.info(f"Pipeline complete: {result}")
         except Exception as e:
-            _last_result = {"error": str(e)}
-            logger.error(f"Pipeline error: {e}", exc_info=True)
+            _last_result = {"error": "Pipeline run failed"}
+            logger.error("Pipeline error: %s", e, exc_info=True)
         finally:
             _pipeline_running = False
 

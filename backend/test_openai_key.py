@@ -29,14 +29,14 @@ def test_openai_key():
     
     # Check if it's a placeholder
     if api_key.startswith("sk-proj-replace") or api_key == "your-openai-api-key-here":
-        print("⚠️  WARNING: Using placeholder API key")
-        print(f"   Current key: {api_key[:20]}...")
-        print("\n📝 To fix:")
+        print("WARNING: Using placeholder API key")
+        print("   Current key: [REDACTED]")
+        print("\nTo fix:")
         print("1. Get your real API key from https://platform.openai.com/api-keys")
         print("2. Replace the placeholder in .env file")
         return False
-    
-    print(f"✅ API key found: {api_key[:10]}...{api_key[-4:]}")
+
+    print(f"API key found: [REDACTED - {len(api_key)} chars]")
     print(f"   Length: {len(api_key)} characters")
     
     # Test the API key with a simple request
