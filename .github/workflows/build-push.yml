@@ -158,11 +158,42 @@ jobs:
           az containerapp update \
             --name ${{ env.FRONTEND_APP_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            --image ${{ env.FRONTEND_IMAGE }}:${{ github.sha }} \
+            --min-replicas 1
 
-      # ── 8. Summary ───────────────────────────────────────────────────────────
+      # ── 8. Health-check — wait for new revision to serve ─────────────────────
+      - name: Verify frontend is live
+        run: |
+          FRONTEND_URL="https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+          echo "Waiting for new image to be served..."
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Frontend is live!"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Verify backend is live
+        run: |
+          BACKEND_URL="https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+          for i in $(seq 1 12); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/health")
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "200" ]; then
+              echo "Backend is live!"
+              break
+            fi
+            sleep 10
+          done
+
+      # ── 9. Summary ───────────────────────────────────────────────────────────
       - name: Print deployed image URLs
         run: |
           echo "Backend : ${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
           echo "Frontend: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
           echo "Deployed to resource group: ${{ env.RESOURCE_GROUP }}"
+          echo "Frontend: https://ai-content-frontend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io"
+          echo "Backend : https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/docs"
