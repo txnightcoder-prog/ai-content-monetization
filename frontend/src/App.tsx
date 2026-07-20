@@ -5697,20 +5697,6 @@ Example:
     <div className="app">
       {/* ── Top navbar ── */}
       <nav className="navbar">
-        {/* ── Brand + optional banner image ── */}
-        <div className="nav-brand" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span>🎬 KidVid Creator</span>
-          {videoProvider?.provider === 'veo' && (
-            <span style={{ background: '#10b981', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>
-              ✨ Veo 3
-            </span>
-          )}
-          {videoProvider?.provider === 'local' && (
-            <span style={{ background: '#3b82f6', color: '#fff', borderRadius: '999px', padding: '0.15rem 0.55rem', fontSize: '0.7rem', fontWeight: 700 }}>
-              🎞️ Local Pipeline
-            </span>
-          )}
-        </div>
 
         {/* ── Centre banner image — swap src for any image URL ── */}
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden', height: '44px' }}>
