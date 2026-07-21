@@ -275,12 +275,18 @@ function App() {
   const handleLogin = (token: string) => setAuthToken(token);
   const handleLogout = () => { localStorage.removeItem('auth_token'); setAuthToken(null); };
 
-  // apiFetch: auto-inject Bearer token on every /api/ call
+  // apiFetch: auto-inject Bearer token; auto-logout on 401 (expired token)
   const apiFetch = React.useCallback((url: string, init?: RequestInit): Promise<Response> => {
     const token = localStorage.getItem('auth_token');
     const headers: Record<string, string> = { ...(init?.headers as Record<string, string> ?? {}) };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    return fetch(url, { ...init, headers });
+    return fetch(url, { ...init, headers }).then(res => {
+      if (res.status === 401) {
+        localStorage.removeItem('auth_token');
+        setAuthToken(null);
+      }
+      return res;
+    });
   }, []);
 
   const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny' | 'voice' | 'chat'>('home');
