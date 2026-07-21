@@ -483,8 +483,44 @@ async def get_trending(
         raise HTTPException(status_code=500, detail=f"Trending failed: {exc}")
 
 
+class ChatMessage(BaseModel):
+    role: str   # "user" | "assistant"
+    content: str
+
+
 class AskRequest(BaseModel):
     question: str
+    history: list[ChatMessage] = []   # previous turns for multi-turn conversation
+
+
+_ASK_SYSTEM = (
+    "You are Bob, an expert AI assistant built into the AI Content Monetization Platform. "
+    "You help creators grow their YouTube, TikTok, and Instagram channels using AI tools. "
+    "\n\nPlatform capabilities you know about:\n"
+    "- Script Generator: writes viral hook/body/CTA scripts by niche\n"
+    "- Blueprint: full video blueprint with sections, thumbnails, monetization\n"
+    "- Video Generator: Veo 3 (Google AI) or ElevenLabs+Pexels+FFmpeg pipeline\n"
+    "- Voice Studio: ElevenLabs TTS — 12 voices, stability/style sliders, MP3 download\n"
+    "- Parrot: clone the structure of any viral YouTube video\n"
+    "- Trending: live trending topics from YouTube, TikTok, Instagram\n"
+    "- Gumroad Studio: AI-generated PDF product ideas and promo scripts\n"
+    "- X & Email Funnel: X threads, lead magnets, email sequences\n"
+    "- Granny Spills Studio: warm Southern grandmother character for subscription content\n"
+    "- AI Influencer: design + brand a full AI education influencer\n"
+    "- AI Visuals: thumbnails, social packs, image prompts\n"
+    "- Growth Advisor: AI-powered prioritised action plan\n"
+    "- Analytics & Performance Monitor: views, likes, revenue tracking\n"
+    "- Diagnostics: health checks for all API keys and services\n"
+    "\nYou also know deeply about:\n"
+    "- Content strategy, virality, hooks, CTAs\n"
+    "- YouTube SEO, TikTok algorithm, Instagram Reels\n"
+    "- Monetization: ads, affiliates, digital products, subscriptions, brand deals\n"
+    "- ElevenLabs, Veo 3, Google AI Studio, fal.ai, HeyGen, CapCut\n"
+    "- Email marketing, Beehiiv, Gumroad, lead magnets\n"
+    "\nBe direct and specific. Use short paragraphs. "
+    "When the user asks about a platform feature, tell them exactly which page to go to "
+    "and what to click. Never be vague. Keep answers under 400 words unless asked for more."
+)
 
 
 @router.post("/ask")
@@ -493,35 +529,36 @@ async def ask_ai(
     openai=Depends(_make_ai_service),
 ):
     """
-    **AI Assistant** — ask any question about the platform, content strategy,
-    monetization, script writing, or how to grow your YouTube/TikTok channel.
-
-    The assistant knows all about this platform's features and will give
-    actionable, specific advice.
+    **AI Assistant (Bob)** — multi-turn conversation with full platform context.
+    Pass ``history`` for follow-up questions that build on previous answers.
     """
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
-    system_message = (
-        "You are an expert AI assistant for the AI Content Monetization Platform — "
-        "a tool that lets creators generate viral video scripts, create blueprints, "
-        "produce faceless videos with ElevenLabs voiceover + Pexels stock footage + FFmpeg, "
-        "auto-upload to YouTube, schedule posts, and track analytics. "
-        "You also know about content strategy, growing a YouTube/TikTok/Instagram channel, "
-        "monetization (YouTube ads, affiliate marketing, sponsorships, digital products), "
-        "and AI tools for creators. "
-        "Be concise, specific, and actionable. If the question is about a platform feature, "
-        "explain exactly how to use it. Keep responses under 300 words."
-    )
+    # Build messages list for multi-turn: inject history before the new question
+    # Most AI services only expose generate_completion(prompt, system) — so we
+    # manually weave history into the prompt as a conversation transcript.
+    history_text = ""
+    for msg in request.history[-12:]:   # keep last 12 turns to stay in token budget
+        prefix = "User" if msg.role == "user" else "Bob"
+        history_text += f"\n{prefix}: {msg.content}"
+
+    if history_text:
+        full_prompt = (
+            f"Previous conversation:{history_text}\n\n"
+            f"User: {request.question.strip()}\n\nBob:"
+        )
+    else:
+        full_prompt = request.question.strip()
 
     try:
         answer = await openai.generate_completion(
-            prompt=request.question.strip(),
-            system_message=system_message,
+            prompt=full_prompt,
+            system_message=_ASK_SYSTEM,
             temperature=0.7,
-            max_tokens=400,
+            max_tokens=600,
         )
-        return {"answer": answer}
+        return {"answer": answer.strip()}
     except Exception as exc:
         logger.exception("AI ask failed")
         raise HTTPException(status_code=500, detail=f"AI assistant unavailable: {exc}")

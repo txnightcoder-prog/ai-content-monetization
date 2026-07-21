@@ -283,7 +283,7 @@ function App() {
     return fetch(url, { ...init, headers });
   }, []);
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny' | 'voice'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny' | 'voice' | 'chat'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -5194,6 +5194,176 @@ function App() {
     </div>
   );
 
+
+  // ── Chat / Ask Bob state ─────────────────────────────────────────────────
+  interface ChatMsg { role: 'user' | 'assistant'; content: string; ts: string; }
+  const [chatMsgs,    setChatMsgs]    = useState<ChatMsg[]>([]);
+  const [chatInput,   setChatInput]   = useState('');
+  const [chatBusy,    setChatBusy]    = useState(false);
+  const [chatErr,     setChatErr]     = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const sendChat = React.useCallback(async (text?: string) => {
+    const q = (text ?? chatInput).trim();
+    if (!q || chatBusy) return;
+    setChatInput('');
+    setChatErr('');
+    const userMsg: ChatMsg = { role: 'user', content: q, ts: new Date().toLocaleTimeString() };
+    setChatMsgs(prev => [...prev, userMsg]);
+    setChatBusy(true);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: q,
+          history: chatMsgs.slice(-12).map(m => ({ role: m.role, content: m.content })),
+        }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'AI failed'); }
+      const data = await r.json();
+      const botMsg: ChatMsg = { role: 'assistant', content: data.answer, ts: new Date().toLocaleTimeString() };
+      setChatMsgs(prev => [...prev, botMsg]);
+    } catch (err) {
+      setChatErr(err instanceof Error ? err.message : 'AI unavailable');
+    } finally {
+      setChatBusy(false);
+    }
+  }, [chatInput, chatMsgs, chatBusy, apiFetch]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMsgs]);
+
+  const renderChat = () => {
+    const SUGGESTED: { label: string; q: string; color: string }[] = [
+      { label: '📈 Grow faster',      q: 'What is the single most effective thing I can do right now to grow my channel faster?',                        color: '#3b82f6' },
+      { label: '💰 Make money',       q: 'How do I start making money from my content? Walk me through the fastest path from 0 to first $100.',           color: '#10b981' },
+      { label: '🎬 Video ideas',      q: 'Give me 5 viral video ideas for the AI tools niche that I can script and generate today.',                       color: '#8b5cf6' },
+      { label: '🔧 Fix Veo error',    q: 'My Veo video generation is failing with 403 PERMISSION_DENIED. What should I do right now?',                   color: '#ef4444' },
+      { label: '📬 Email funnel',     q: 'Explain how to set up a full X → Lead Magnet → Email → Gumroad funnel using this platform step by step.',       color: '#f59e0b' },
+      { label: '👵 Granny Spills',    q: 'What is the Granny Spills business model and how do I launch the subscription newsletter?',                     color: '#d97706' },
+      { label: '🎙️ Voice + video',    q: 'How do I use Voice Studio to create a voiceover video and import it back into the dashboard?',                  color: '#06b6d4' },
+      { label: '📊 Analytics setup',  q: 'How do I connect my YouTube channel to the analytics dashboard and start tracking performance?',                color: '#6366f1' },
+      { label: '🛒 Sell a product',   q: 'Walk me through creating and selling a PDF product on Gumroad using this platform from scratch.',               color: '#84cc16' },
+      { label: '🔑 Fix Buffer',       q: 'My Buffer token is invalid and social auto-posting is broken. How do I fix it step by step?',                   color: '#f97316' },
+    ];
+
+    const isEmpty = chatMsgs.length === 0;
+
+    const renderContent = (text: string) => {
+      const lines = text.split('\n');
+      return lines.map((line, i) => {
+        if (line.startsWith('- ') || line.startsWith('• ')) {
+          return <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.2rem' }}><span style={{ color: '#9ca3af', flexShrink: 0 }}>•</span><span>{line.slice(2)}</span></div>;
+        }
+        if (/^\d+\./.test(line)) {
+          return <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.2rem' }}><span style={{ color: '#9ca3af', flexShrink: 0, minWidth: '18px' }}>{line.match(/^\d+/)?.[0]}.</span><span>{line.replace(/^\d+\.\s*/, '')}</span></div>;
+        }
+        const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*)/g);
+        const rendered = parts.map((p, j) => {
+          if (p.startsWith('`') && p.endsWith('`')) return <code key={j} style={{ background: '#f0f0f0', borderRadius: '0.25rem', padding: '0.1rem 0.3rem', fontFamily: 'monospace', fontSize: '0.85em', color: '#1c2b33' }}>{p.slice(1,-1)}</code>;
+          if (p.startsWith('**') && p.endsWith('**')) return <strong key={j}>{p.slice(2,-2)}</strong>;
+          return <span key={j}>{p}</span>;
+        });
+        return line ? <div key={i} style={{ marginBottom: '0.25rem', lineHeight: 1.65 }}>{rendered}</div> : <div key={i} style={{ height: '0.5rem' }} />;
+      });
+    };
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)', minHeight: '500px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0, flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', flexShrink: 0 }}>🤖</div>
+            <div>
+              <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#1c2b33', margin: 0 }}>Ask Bob</h1>
+              <p style={{ color: '#637381', fontSize: '0.8125rem', margin: 0 }}>AI assistant · knows every feature · multi-turn conversation</p>
+            </div>
+          </div>
+          {chatMsgs.length > 0 && (
+            <button onClick={() => { setChatMsgs([]); setChatErr(''); }}
+              style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.4rem 0.85rem', fontSize: '0.8125rem', fontWeight: 700, color: '#637381', cursor: 'pointer' }}>
+              🗑 New conversation
+            </button>
+          )}
+        </div>
+
+        {/* Messages */}
+        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.85rem', paddingBottom: '0.5rem' }}>
+          {isEmpty && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '2rem 1rem', textAlign: 'center' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🤖</div>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1c2b33', marginBottom: '0.4rem' }}>Hi, I'm Bob</h2>
+              <p style={{ color: '#637381', fontSize: '0.9rem', maxWidth: '420px', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+                I know every feature of this platform and can help with content strategy, monetization, fixing errors, and growing your channel. Ask me anything.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: '0.5rem', width: '100%', maxWidth: '660px' }}>
+                {SUGGESTED.map(s => (
+                  <button key={s.label} onClick={() => sendChat(s.q)}
+                    style={{ background: '#fff', border: `1px solid ${s.color}30`, borderRadius: '0.6rem', padding: '0.65rem 0.85rem', textAlign: 'left', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = `${s.color}80`)}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = `${s.color}30`)}>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1c2b33' }}>{s.label}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {chatMsgs.map((msg, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: msg.role === 'user' ? 'row-reverse' : 'row', gap: '0.65rem', alignItems: 'flex-start' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: msg.role === 'user' ? '#e5e7eb' : 'linear-gradient(135deg,#3b82f6,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', flexShrink: 0, color: msg.role === 'user' ? '#1c2b33' : '#fff', fontWeight: 700 }}>
+                {msg.role === 'user' ? '👤' : '🤖'}
+              </div>
+              <div style={{ maxWidth: '76%', background: msg.role === 'user' ? '#1c2b33' : '#fff', border: msg.role === 'assistant' ? '1px solid #e5e7eb' : 'none', borderRadius: msg.role === 'user' ? '1rem 0.25rem 1rem 1rem' : '0.25rem 1rem 1rem 1rem', padding: '0.75rem 1rem', color: msg.role === 'user' ? '#fff' : '#1c2b33', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {msg.role === 'assistant' ? renderContent(msg.content) : <span>{msg.content}</span>}
+                <div style={{ fontSize: '0.68rem', color: msg.role === 'user' ? 'rgba(255,255,255,0.45)' : '#9ca3af', marginTop: '0.4rem', textAlign: 'right' }}>{msg.ts}</div>
+              </div>
+            </div>
+          ))}
+
+          {chatBusy && (
+            <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start' }}>
+              <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', flexShrink: 0, color: '#fff' }}>🤖</div>
+              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.25rem 1rem 1rem 1rem', padding: '0.75rem 1rem', display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                {[0,1,2].map(d => <span key={d} style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#9ca3af', display: 'inline-block', animation: `chatbounce 1.2s ${d*0.2}s ease-in-out infinite` }} />)}
+              </div>
+            </div>
+          )}
+          {chatErr && <div style={{ background: '#fff0f0', border: '1px solid #fca5a5', borderRadius: '0.6rem', padding: '0.6rem 0.85rem', color: '#dc2626', fontSize: '0.8125rem' }}>⚠️ {chatErr}</div>}
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Quick prompts when conversation active */}
+        {!isEmpty && !chatBusy && (
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', padding: '0.5rem 0', flexShrink: 0 }}>
+            {SUGGESTED.slice(0,5).map(s => (
+              <button key={s.label} onClick={() => sendChat(s.q)}
+                style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '999px', padding: '0.25rem 0.7rem', fontSize: '0.75rem', cursor: 'pointer', color: '#637381', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Input */}
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-end', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb', flexShrink: 0 }}>
+          <textarea value={chatInput} onChange={e => setChatInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } }}
+            placeholder="Ask anything… (Enter to send, Shift+Enter for newline)"
+            disabled={chatBusy} rows={2}
+            style={{ flex: 1, resize: 'none', borderRadius: '0.75rem', border: '1px solid #e5e7eb', padding: '0.75rem 1rem', fontSize: '0.9375rem', fontFamily: 'inherit', lineHeight: 1.5, outline: 'none', background: chatBusy ? '#f7f8fa' : '#fff' }}
+          />
+          <button onClick={() => sendChat()} disabled={chatBusy || !chatInput.trim()}
+            style={{ background: chatBusy || !chatInput.trim() ? '#e5e7eb' : 'linear-gradient(135deg,#3b82f6,#8b5cf6)', color: chatBusy || !chatInput.trim() ? '#9ca3af' : '#fff', border: 'none', borderRadius: '0.75rem', padding: '0 1.25rem', fontWeight: 800, fontSize: '1.25rem', cursor: chatBusy || !chatInput.trim() ? 'not-allowed' : 'pointer', alignSelf: 'stretch' }}>
+            ↑
+          </button>
+        </div>
+        <style>{`@keyframes chatbounce{0%,80%,100%{transform:translateY(0);opacity:.4}40%{transform:translateY(-6px);opacity:1}}`}</style>
+      </div>
+    );
+  };
+
+
   // ── Growth Advisor page ───────────────────────────────────────────────────
   const renderAdvisor = () => {
     const catMeta: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -7513,6 +7683,7 @@ Example:
       label: 'Dashboard',
       items: [
         { id: 'home',        icon: '🏠', label: 'Dashboard',        badge: null },
+        { id: 'chat',        icon: '🤖', label: 'Ask Bob',          badge: 'AI' },
         { id: 'advisor',     icon: '🧭', label: 'Growth Advisor',   badge: 'AI' },
         { id: 'monitor',     icon: '📡', label: 'Performance',      badge: null },
         { id: 'analytics',   icon: '📊', label: 'Analytics',        badge: null },
@@ -7553,7 +7724,8 @@ Example:
 
   // ── What's Next helper ───────────────────────────────────────────────────────
   const NEXT_PAGE: Record<string, { page: string; label: string; hint: string }> = {
-    home:        { page: 'advisor',   label: 'Get Action Plan →',      hint: 'AI advisor tells you exactly what to do next' },
+    home:        { page: 'chat',      label: 'Ask Bob →',              hint: 'Ask the AI assistant anything about this platform' },
+    chat:        { page: 'advisor',   label: 'Get Action Plan →',      hint: 'AI advisor tells you exactly what to do next' },
     advisor:     { page: 'scripts',   label: 'Write a Script →',       hint: 'Generate an AI script for your next video' },
     scripts:     { page: 'blueprint', label: 'Build Blueprint →',      hint: 'Turn your script into a full video blueprint' },
     blueprint:   { page: 'videos',    label: 'Generate Video →',       hint: 'Create the AI video from your blueprint' },
@@ -7835,6 +8007,7 @@ Example:
            currentPage === 'influencer'  ? renderInfluencer() :
            currentPage === 'granny'      ? renderGranny() :
            currentPage === 'voice'       ? renderVoice() :
+           currentPage === 'chat'        ? renderChat() :
            renderHelp()}
           {/* What's Next bar on every page */}
           <WhatsNext page={currentPage} />
