@@ -35,7 +35,7 @@ class LoginRequest(BaseModel):
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in: int = 43200
+    expires_in: int = 2592000   # 30 days in seconds
     role: str
 
 class UserOut(BaseModel):

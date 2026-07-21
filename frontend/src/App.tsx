@@ -4,6 +4,28 @@ import './App.css';
 const API_BASE = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
 if (!API_BASE) console.warn('[App] VITE_API_URL is not set — all API calls will fail. Check your Azure build args.');
 
+/** Decode JWT exp claim without a library. Returns expiry epoch (seconds) or 0 on error. */
+function jwtExpiry(token: string): number {
+  try {
+    const payload = token.split('.')[1];
+    const pad = 4 - (payload.length % 4);
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/') + (pad < 4 ? '='.repeat(pad) : ''));
+    return JSON.parse(json).exp ?? 0;
+  } catch { return 0; }
+}
+
+/** Returns true if the token is missing or expires within the next 60 seconds. */
+function tokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  return jwtExpiry(token) - Math.floor(Date.now() / 1000) < 60;
+}
+
+// Discard any token that is already expired before React even mounts.
+(function pruneExpiredToken() {
+  const t = localStorage.getItem('auth_token');
+  if (tokenExpired(t)) localStorage.removeItem('auth_token');
+})();
+
 interface Script {
   id: string;
   topic: string;
@@ -275,9 +297,15 @@ function App() {
   const handleLogin = (token: string) => setAuthToken(token);
   const handleLogout = () => { localStorage.removeItem('auth_token'); setAuthToken(null); };
 
-  // apiFetch: auto-inject Bearer token; auto-logout on 401 (expired token)
+  // apiFetch: check expiry before sending; auto-logout on 401 as a safety net
   const apiFetch = React.useCallback((url: string, init?: RequestInit): Promise<Response> => {
     const token = localStorage.getItem('auth_token');
+    // Proactive expiry check — kick to login before the server even sees the request
+    if (tokenExpired(token)) {
+      localStorage.removeItem('auth_token');
+      setAuthToken(null);
+      return Promise.reject(new Error('Session expired — please sign in again'));
+    }
     const headers: Record<string, string> = { ...(init?.headers as Record<string, string> ?? {}) };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     return fetch(url, { ...init, headers }).then(res => {

@@ -64,7 +64,7 @@ def _b64url_decode(s: str) -> bytes:
     pad = 4 - len(s) % 4
     return base64.urlsafe_b64decode(s + "=" * (pad % 4))
 
-def create_token(subject: str, role: str = "viewer", expires_hours: int = 12) -> str:
+def create_token(subject: str, role: str = "viewer", expires_hours: int = 720) -> str:
     secret = os.getenv("DASHBOARD_SECRET", "")
     if not secret:
         raise RuntimeError("DASHBOARD_SECRET env var is not set")
