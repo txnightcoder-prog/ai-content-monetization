@@ -406,6 +406,10 @@ function App() {
   const [autoQueueLoading, setAutoQueueLoading] = useState(false);
   const [autoQueueResult, setAutoQueueResult]   = useState<{count:number;topics:string[];scripts:{id:string;topic:string;hook:string}[]} | null>(null);
   const [autoQueueError, setAutoQueueError]     = useState('');
+  const [bulkGenLoading,  setBulkGenLoading]    = useState(false);
+  const [bulkGenProgress, setBulkGenProgress]   = useState<{done:number;total:number;current:string;log:string[]}>({ done:0, total:0, current:'', log:[] });
+  const [bulkGenError,    setBulkGenError]      = useState('');
+  const [bulkGenDone,     setBulkGenDone]       = useState(false);
   // Script preview + edit
   const [previewScript, setPreviewScript]       = useState<Script | null>(null);
   const [scriptPreviewLoading, setScriptPreviewLoading] = useState(false);
@@ -538,6 +542,8 @@ function App() {
   // Auto-queue: fetch trending → generate scripts for all in one click
   const runAutoQueue = async () => {
     setAutoQueueLoading(true); setAutoQueueError(''); setAutoQueueResult(null);
+    setBulkGenDone(false); setBulkGenError('');
+    setBulkGenProgress({ done: 0, total: 0, current: '', log: [] });
     try {
       const res = await apiFetch(`${API_BASE}/api/v1/scripts/trending-to-queue`, {
         method: 'POST',
@@ -547,7 +553,6 @@ function App() {
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const data = await res.json();
       setAutoQueueResult(data);
-      // Add generated scripts to the scripts list
       if (data.scripts?.length) {
         setScripts(prev => [...(data.scripts as Script[]), ...prev]);
       }
@@ -555,6 +560,82 @@ function App() {
       setAutoQueueError(err instanceof Error ? err.message : 'Auto-queue failed');
     } finally {
       setAutoQueueLoading(false);
+    }
+  };
+
+  // Bulk: generate a Veo video for every script then publish to all connected platforms
+  const runGenerateAndPublishAll = async () => {
+    if (!autoQueueResult?.scripts?.length) return;
+    const scripts = autoQueueResult.scripts;
+    setBulkGenLoading(true); setBulkGenError(''); setBulkGenDone(false);
+    setBulkGenProgress({ done: 0, total: scripts.length, current: '', log: [] });
+
+    const addLog = (msg: string) =>
+      setBulkGenProgress(p => ({ ...p, log: [...p.log, msg] }));
+
+    try {
+      for (let i = 0; i < scripts.length; i++) {
+        const s = scripts[i];
+        setBulkGenProgress(p => ({ ...p, current: s.topic, done: i }));
+
+        // ── 1. Kick off video generation ──────────────────────────────────
+        addLog(`🎬 [${i + 1}/${scripts.length}] Generating video: "${s.topic}"`);
+        let videoId: string;
+        try {
+          const genRes = await apiFetch(`${API_BASE}/api/v1/videos/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ script_id: s.id }),
+          });
+          if (!genRes.ok) { const e = await genRes.json(); throw new Error(e.detail ?? genRes.statusText); }
+          const video: VideoRecord = await genRes.json();
+          videoId = video.id;
+        } catch (err) {
+          addLog(`  ❌ Generation failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+          continue;
+        }
+
+        // ── 2. Poll until ready (max 5 min) ───────────────────────────────
+        addLog(`  ⏳ Waiting for Veo 3 to finish…`);
+        let ready = false;
+        for (let attempt = 0; attempt < 30; attempt++) {
+          await new Promise(r => setTimeout(r, 10_000));
+          try {
+            const pollRes = await apiFetch(`${API_BASE}/api/v1/videos/${videoId}`);
+            if (pollRes.ok) {
+              const v: VideoRecord = await pollRes.json();
+              if (v.status === 'ready') { ready = true; break; }
+              if (v.status === 'failed') { addLog(`  ❌ Veo generation failed: ${v.error_message ?? 'unknown'}`); break; }
+            }
+          } catch { /* transient — keep polling */ }
+        }
+        if (!ready) { addLog(`  ⚠️ Timed out waiting for video — skipping publish`); continue; }
+
+        // ── 3. Publish to all platforms via Buffer ────────────────────────
+        addLog(`  📤 Publishing to social media…`);
+        try {
+          const pubRes = await apiFetch(`${API_BASE}/api/v1/videos/${videoId}/publish`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ platforms: ['youtube', 'tiktok', 'instagram', 'facebook'] }),
+          });
+          if (!pubRes.ok) { const e = await pubRes.json(); throw new Error(e.detail ?? pubRes.statusText); }
+          const posts = await pubRes.json();
+          const platforms = Array.isArray(posts) ? posts.map((p: {platform?:string}) => p.platform ?? '').filter(Boolean).join(', ') : 'queued';
+          addLog(`  ✅ Posted to: ${platforms || 'all platforms'}`);
+        } catch (err) {
+          addLog(`  ⚠️ Publish failed: ${err instanceof Error ? err.message : 'unknown'}`);
+        }
+
+        setBulkGenProgress(p => ({ ...p, done: i + 1 }));
+      }
+      setBulkGenDone(true);
+      addLog(`🎉 Done! ${scripts.length} videos generated and posted.`);
+    } catch (err) {
+      setBulkGenError(err instanceof Error ? err.message : 'Bulk pipeline failed');
+    } finally {
+      setBulkGenLoading(false);
+      setBulkGenProgress(p => ({ ...p, current: '' }));
     }
   };
 
@@ -1767,8 +1848,39 @@ function App() {
                 </div>
               ))}
             </div>
+            {/* Generate & Post All button */}
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(245,158,11,0.2)' }}>
+              <button
+                onClick={runGenerateAndPublishAll}
+                disabled={bulkGenLoading || autoQueueLoading}
+                style={{ width: '100%', background: bulkGenLoading ? 'rgba(59,130,246,0.25)' : bulkGenDone ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#3b82f6,#2563eb)', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.85rem 1.25rem', fontWeight: 800, fontSize: '1rem', cursor: bulkGenLoading ? 'not-allowed' : 'pointer', opacity: bulkGenLoading ? 0.8 : 1 }}>
+                {bulkGenLoading
+                  ? `⏳ Processing ${bulkGenProgress.done}/${bulkGenProgress.total}…`
+                  : bulkGenDone
+                  ? '✅ All Videos Posted!'
+                  : '🚀 Generate & Post All Videos'}
+              </button>
+              <p style={{ color: '#637381', fontSize: '0.75rem', marginTop: '0.4rem', marginBottom: 0, textAlign: 'center' }}>
+                Generates a Veo 3 video for each script above, then posts to YouTube, TikTok, Instagram &amp; Facebook
+              </p>
+            </div>
+
+            {/* Live progress log */}
+            {(bulkGenLoading || bulkGenProgress.log.length > 0) && (
+              <div style={{ marginTop: '0.75rem', background: 'rgba(0,0,0,0.04)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '0.5rem', padding: '0.75rem 1rem', fontFamily: 'monospace', fontSize: '0.78rem', maxHeight: '220px', overflowY: 'auto' }}>
+                {bulkGenProgress.current && (
+                  <div style={{ color: '#3b82f6', fontWeight: 700, marginBottom: '0.4rem' }}>▶ {bulkGenProgress.current}</div>
+                )}
+                {bulkGenProgress.log.map((line, i) => (
+                  <div key={i} style={{ color: line.startsWith('  ❌') ? '#dc2626' : line.startsWith('  ⚠️') ? '#d97706' : line.startsWith('  ✅') ? '#059669' : line.startsWith('🎉') ? '#059669' : '#374151', paddingLeft: line.startsWith('  ') ? '1rem' : 0 }}>{line}</div>
+                ))}
+                {bulkGenLoading && <div style={{ color: '#94a3b8', marginTop: '0.25rem' }}>▌</div>}
+              </div>
+            )}
+            {bulkGenError && <div className="error-message" style={{ marginTop: '0.5rem' }}>{bulkGenError}</div>}
+
             <p style={{ color: '#637381', fontSize: '0.8rem', marginTop: '0.75rem', marginBottom: 0 }}>
-              Go to <button className="inline-link" onClick={() => setCurrentPage('videos')}>🎬 Videos</button> and paste a Script ID to generate a video from any of these.
+              Or go to <button className="inline-link" onClick={() => setCurrentPage('videos')}>🎬 Videos</button> to generate individual videos from any script ID above.
             </p>
           </div>
         )}
