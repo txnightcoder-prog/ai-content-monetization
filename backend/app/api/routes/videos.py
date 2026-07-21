@@ -834,4 +834,70 @@ async def schedule_video(
     return created
 
 
+# ── ElevenLabs TTS endpoints ─────────────────────────────────────────────────
+
+class TTSRequest(BaseModel):
+    text:     str  = Field(..., min_length=1, max_length=5000, description="Text to convert to speech")
+    voice_id: str  = Field(default="21m00Tcm4TlvDq8ikWAM",   description="ElevenLabs voice ID")
+    stability:       float = Field(default=0.50, ge=0.0, le=1.0)
+    similarity_boost: float = Field(default=0.75, ge=0.0, le=1.0)
+    style:           float = Field(default=0.00, ge=0.0, le=1.0)
+    model_id: str = Field(default="eleven_multilingual_v2")
+
+
+@router.post("/tts", status_code=200)
+async def generate_tts(request: TTSRequest):
+    """
+    Convert text to speech using ElevenLabs and return the MP3 as a streaming response.
+    The frontend can play it directly or download it.
+    """
+    import os as _os, io as _io
+    import httpx as _httpx
+    from fastapi.responses import StreamingResponse as _SR
+
+    api_key = _os.getenv("ELEVENLABS_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ELEVENLABS_API_KEY not configured")
+
+    payload = {
+        "text": request.text,
+        "model_id": request.model_id,
+        "voice_settings": {
+            "stability":        request.stability,
+            "similarity_boost": request.similarity_boost,
+            "style":            request.style,
+            "use_speaker_boost": True,
+        },
+    }
+    try:
+        async with _httpx.AsyncClient(timeout=60.0) as client:
+            r = await client.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{request.voice_id}",
+                json=payload,
+                headers={"xi-api-key": api_key, "Accept": "audio/mpeg"},
+            )
+            if r.status_code == 401:
+                raise HTTPException(status_code=401, detail="Invalid ElevenLabs API key")
+            if r.status_code == 422:
+                raise HTTPException(status_code=422, detail=f"ElevenLabs rejected request: {r.text[:200]}")
+            r.raise_for_status()
+            audio_bytes = r.content
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"ElevenLabs TTS failed: {exc}")
+
+    return _SR(
+        content=_io.BytesIO(audio_bytes),
+        media_type="audio/mpeg",
+        headers={"Content-Disposition": 'attachment; filename="voiceover.mp3"'},
+    )
+
+
+@router.get("/tts/voices")
+async def list_tts_voices():
+    """Return the full list of ElevenLabs voices available in the app."""
+    return {"voices": ELEVENLABS_VOICES}
+
+
 # Made with Bob

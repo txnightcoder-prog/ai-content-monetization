@@ -283,7 +283,7 @@ function App() {
     return fetch(url, { ...init, headers });
   }, []);
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny' | 'voice'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -6280,6 +6280,343 @@ Example:
     </div>
   );
 
+  // ── ElevenLabs Voice Studio state ────────────────────────────────────────
+  const EL_VOICES = [
+    { id: '21m00Tcm4TlvDq8ikWAM', label: 'Rachel',  desc: 'Neutral female · calm, clear',      tags: ['narration','neutral'] },
+    { id: '29vD33N1CtxCmqQRPOHJ', label: 'Drew',    desc: 'Deep male · authoritative',          tags: ['narration','male'] },
+    { id: '2EiwWnXFnvU5JabPnv8n', label: 'Clyde',   desc: 'Warm male · conversational',         tags: ['casual','male'] },
+    { id: 'EXAVITQu4vr4xnSDxMaL', label: 'Bella',   desc: 'Soft female · soothing',             tags: ['calm','female'] },
+    { id: 'AZnzlk1XvdvUeBnXmlld', label: 'Domi',    desc: 'Energetic female · engaging',        tags: ['upbeat','female'] },
+    { id: 'ErXwobaYiN019PkySvjV', label: 'Antoni',  desc: 'Conversational male · friendly',     tags: ['casual','male'] },
+    { id: 'GBv7mTt0atIp3Br8iCZE', label: 'Thomas',  desc: 'Calm male · professional',           tags: ['calm','male'] },
+    { id: 'IKne3meq5aSn9XLyUdCD', label: 'Charlie', desc: 'Australian male · bright',           tags: ['upbeat','male'] },
+    { id: 'MF3mGyEYCl7XYWbV9V6O', label: 'Emily',   desc: 'Calm female · gentle',               tags: ['calm','female'] },
+    { id: 'TxGEqnHWrfWFTfGW9XjX', label: 'Josh',    desc: 'Deep male · dramatic',               tags: ['narration','male'] },
+    { id: 'ThT5KcBeYPX3keUQqHPh', label: 'Dorothy', desc: 'British female · refined',           tags: ['narration','female'] },
+    { id: 'pNInz6obpgDQGcFmaJgB', label: 'Adam',    desc: 'Deep male · serious',                tags: ['narration','male'] },
+  ];
+
+  const [voiceText,       setVoiceText]       = useState('');
+  const [voiceId,         setVoiceId2]        = useState('21m00Tcm4TlvDq8ikWAM');
+  const [voiceStability,  setVoiceStability]  = useState(0.50);
+  const [voiceSimilarity, setVoiceSimilarity] = useState(0.75);
+  const [voiceStyle,      setVoiceStyle]      = useState(0.00);
+  const [voiceLoading,    setVoiceLoading]    = useState(false);
+  const [voiceError,      setVoiceError]      = useState('');
+  const [voiceAudioUrl,   setVoiceAudioUrl]   = useState<string | null>(null);
+  const [voiceAudioBlob,  setVoiceAudioBlob]  = useState<Blob | null>(null);
+  const [voiceCharCount,  setVoiceCharCount]  = useState(0);
+  const [voiceHistory,    setVoiceHistory]    = useState<{text:string;voice:string;url:string;ts:string}[]>([]);
+  const [voiceTab,        setVoiceTab]        = useState<'studio'|'history'|'tips'>('studio');
+
+  const generateVoice = async () => {
+    if (!voiceText.trim()) return;
+    setVoiceLoading(true); setVoiceError(''); setVoiceAudioUrl(null); setVoiceAudioBlob(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/videos/tts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: voiceText,
+          voice_id: voiceId,
+          stability: voiceStability,
+          similarity_boost: voiceSimilarity,
+          style: voiceStyle,
+        }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'ElevenLabs failed'); }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      setVoiceAudioUrl(url);
+      setVoiceAudioBlob(blob);
+      const vLabel = EL_VOICES.find(v => v.id === voiceId)?.label ?? voiceId;
+      setVoiceHistory(prev => [
+        { text: voiceText.slice(0, 80) + (voiceText.length > 80 ? '…' : ''), voice: vLabel, url, ts: new Date().toLocaleTimeString() },
+        ...prev.slice(0, 9),
+      ]);
+    } catch (err) { setVoiceError(err instanceof Error ? err.message : 'Failed'); }
+    finally { setVoiceLoading(false); }
+  };
+
+  const downloadVoice = () => {
+    if (!voiceAudioBlob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(voiceAudioBlob);
+    a.download = `voiceover-${Date.now()}.mp3`;
+    a.click();
+  };
+
+  const renderVoice = () => {
+    const selectedVoice = EL_VOICES.find(v => v.id === voiceId) ?? EL_VOICES[0];
+    const charLimit = 5000;
+    const charsUsed = voiceText.length;
+    const charPct = Math.min(100, Math.round(charsUsed / charLimit * 100));
+
+    // Preset scripts
+    const PRESETS = [
+      { label: '30-sec intro',   text: 'Hey, welcome back! Today I want to share something that completely changed how I think about this topic. Stick around because by the end of this video you\'ll never look at it the same way again.' },
+      { label: 'CTA outro',      text: 'If you found this helpful, do me a favor and hit that subscribe button right now. I drop new videos every week and I would hate for you to miss the next one. See you in the next video!' },
+      { label: 'Product promo',  text: 'I\'ve been using this for the past three months and honestly it has saved me hours every single week. If you want to try it yourself, I left a link in the description. You can thank me later.' },
+      { label: 'Granny opening', text: 'Now honey, let me tell you something. I\'ve been around long enough to know that the most important things in life are never the ones we rush. So pull up a chair and let Granny tell you something good.' },
+      { label: 'Story hook',     text: 'Three years ago I was completely broke, burnt out, and about to quit. What happened next changed everything — and I wish someone had told me this sooner.' },
+      { label: 'News-style',     text: 'Breaking down everything you need to know about today\'s biggest story in under sixty seconds. Here\'s what happened, why it matters, and what comes next.' },
+    ];
+
+    return (
+      <div>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1c2b33', margin: '0 0 0.25rem' }}>🎙️ ElevenLabs Voice Studio</h1>
+            <p style={{ color: '#637381', fontSize: '0.875rem', margin: 0 }}>
+              Convert any text to a professional voiceover · 12 voices · Download as MP3 · Use in your videos
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.25rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, color: '#15803d' }}>
+              ✅ API key active
+            </span>
+            <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer"
+              style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.5rem', padding: '0.4rem 0.85rem', fontSize: '0.8125rem', fontWeight: 700, textDecoration: 'none' }}>
+              elevenlabs.io →
+            </a>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="tab-bar" style={{ marginBottom: '1.5rem' }}>
+          {([
+            { id: 'studio'  as const, label: '🎙️ Voice Studio' },
+            { id: 'history' as const, label: `📼 History${voiceHistory.length ? ` (${voiceHistory.length})` : ''}` },
+            { id: 'tips'    as const, label: '💡 Voice Tips' },
+          ]).map(t => (
+            <button key={t.id} className={`tab-btn ${voiceTab === t.id ? 'active' : ''}`} onClick={() => setVoiceTab(t.id)}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* ── STUDIO TAB ── */}
+        {voiceTab === 'studio' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: '1.25rem' }}>
+
+            {/* Left — text + controls */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div className="section-card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <h2 style={{ margin: 0 }}>Script / Text</h2>
+                  <span style={{ fontSize: '0.78rem', color: charPct > 90 ? '#ef4444' : '#637381', fontWeight: 600 }}>
+                    {charsUsed.toLocaleString()} / {charLimit.toLocaleString()} chars
+                  </span>
+                </div>
+                <textarea
+                  value={voiceText}
+                  onChange={e => { setVoiceText(e.target.value); setVoiceCharCount(e.target.value.length); }}
+                  rows={8}
+                  placeholder="Paste your script, narration, or any text here…&#10;&#10;Tip: write naturally — ElevenLabs reads punctuation as pauses."
+                  style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '0.9rem', padding: '0.75rem', borderRadius: '0.5rem', border: '1px solid #e5e7eb', background: '#fafafa', lineHeight: 1.7 }}
+                />
+                {/* Char bar */}
+                <div style={{ height: '4px', background: '#e5e7eb', borderRadius: '999px', marginTop: '0.4rem', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${charPct}%`, background: charPct > 90 ? '#ef4444' : '#10b981', borderRadius: '999px', transition: 'width 0.2s' }} />
+                </div>
+
+                {/* Preset scripts */}
+                <div style={{ marginTop: '0.85rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#637381', textTransform: 'uppercase', marginBottom: '0.4rem' }}>Quick Presets</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                    {PRESETS.map(p => (
+                      <button key={p.label} onClick={() => setVoiceText(p.text)}
+                        style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '999px', padding: '0.25rem 0.7rem', fontSize: '0.75rem', cursor: 'pointer', color: '#1c2b33', fontWeight: 500 }}>
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Error */}
+              {voiceError && (
+                <div style={{ background: '#fff0f0', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.75rem 1rem', color: '#dc2626', fontSize: '0.875rem' }}>
+                  ⚠️ {voiceError}
+                </div>
+              )}
+
+              {/* Generate button */}
+              <button onClick={generateVoice} disabled={voiceLoading || !voiceText.trim()}
+                style={{ background: voiceLoading ? '#e5e7eb' : '#1c2b33', color: voiceLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.9rem', fontWeight: 800, fontSize: '1rem', cursor: voiceLoading ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                {voiceLoading ? '⏳ Generating voiceover…' : '🎙️ Generate Voiceover'}
+              </button>
+
+              {/* Audio player */}
+              {voiceAudioUrl && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '1rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#15803d', marginBottom: '0.6rem' }}>✅ Ready — {selectedVoice.label} voice</div>
+                  <audio src={voiceAudioUrl} controls style={{ width: '100%', marginBottom: '0.6rem' }} />
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button onClick={downloadVoice}
+                      style={{ background: '#15803d', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                      ⬇️ Download MP3
+                    </button>
+                    <button onClick={() => { setVoiceAudioUrl(null); setVoiceText(''); }}
+                      style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', color: '#637381' }}>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right — voice picker + settings */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {/* Voice selector */}
+              <div className="section-card">
+                <h2 style={{ marginBottom: '0.75rem' }}>Choose Voice</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', maxHeight: '340px', overflowY: 'auto' }}>
+                  {EL_VOICES.map(v => (
+                    <button key={v.id} onClick={() => setVoiceId2(v.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: voiceId === v.id ? '#eff6ff' : '#f7f8fa', border: `1px solid ${voiceId === v.id ? '#3b82f6' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '0.6rem 0.75rem', cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: voiceId === v.id ? '#3b82f6' : '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.875rem', flexShrink: 0, color: voiceId === v.id ? '#fff' : '#637381', fontWeight: 800 }}>
+                        {v.label[0]}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1c2b33' }}>{v.label}</div>
+                        <div style={{ fontSize: '0.75rem', color: '#637381' }}>{v.desc}</div>
+                      </div>
+                      {voiceId === v.id && <span style={{ color: '#3b82f6', fontSize: '0.9rem', fontWeight: 900 }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Settings sliders */}
+              <div className="section-card">
+                <h2 style={{ marginBottom: '0.85rem' }}>Voice Settings</h2>
+                {[
+                  { label: 'Stability', val: voiceStability, set: setVoiceStability, lo: 'Variable', hi: 'Stable', tip: 'Higher = more consistent. Lower = more expressive.' },
+                  { label: 'Clarity / Similarity', val: voiceSimilarity, set: setVoiceSimilarity, lo: 'Different', hi: 'Similar', tip: 'How closely it matches the original voice.' },
+                  { label: 'Style Exaggeration', val: voiceStyle, set: setVoiceStyle, lo: 'Natural', hi: 'Exaggerated', tip: '0 = natural. Raise for more dramatic delivery.' },
+                ].map(s => (
+                  <div key={s.label} style={{ marginBottom: '1rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1c2b33' }}>{s.label}</span>
+                      <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#3b82f6' }}>{(s.val * 100).toFixed(0)}%</span>
+                    </div>
+                    <input type="range" min="0" max="1" step="0.05" value={s.val}
+                      onChange={e => s.set(parseFloat(e.target.value))}
+                      style={{ width: '100%', accentColor: '#3b82f6' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#9ca3af' }}>
+                      <span>{s.lo}</span><span>{s.hi}</span>
+                    </div>
+                    <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.15rem 0 0' }}>{s.tip}</p>
+                  </div>
+                ))}
+
+                {/* Model selector */}
+                <div>
+                  <div style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#1c2b33', marginBottom: '0.4rem' }}>Model</div>
+                  <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                    {[
+                      { id: 'eleven_multilingual_v2', label: 'Multilingual v2', desc: 'Best quality' },
+                      { id: 'eleven_turbo_v2_5',      label: 'Turbo v2.5',      desc: 'Fastest' },
+                      { id: 'eleven_flash_v2_5',      label: 'Flash v2.5',      desc: 'Lowest latency' },
+                    ].map(m => (
+                      <button key={m.id} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.4rem', padding: '0.35rem 0.6rem', fontSize: '0.75rem', cursor: 'pointer', color: '#637381' }}>
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── HISTORY TAB ── */}
+        {voiceTab === 'history' && (
+          <div className="section-card">
+            <h2>Recent Generations</h2>
+            {voiceHistory.length === 0 ? (
+              <p style={{ color: '#637381', fontSize: '0.875rem' }}>No voiceovers generated yet this session.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {voiceHistory.map((h, i) => (
+                  <div key={i} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.6rem', padding: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1c2b33' }}>{h.voice}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{h.ts}</span>
+                    </div>
+                    <p style={{ fontSize: '0.8125rem', color: '#637381', margin: '0 0 0.6rem', fontStyle: 'italic' }}>"{h.text}"</p>
+                    <audio src={h.url} controls style={{ width: '100%', height: '32px' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── TIPS TAB ── */}
+        {voiceTab === 'tips' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.25rem' }}>
+            {[
+              {
+                title: '✍️ Write for the ear',
+                tips: [
+                  'Use short sentences — they sound more natural',
+                  'Add commas and periods where you want pauses',
+                  'Use "..." for a longer dramatic pause',
+                  'Avoid bullet points or lists — they sound robotic',
+                  'Write how you talk, not how you type',
+                ],
+                color: '#3b82f6',
+              },
+              {
+                title: '🎚️ Best settings by use case',
+                tips: [
+                  'Narration/documentary: Stability 70%, Clarity 75%',
+                  'Casual social video: Stability 40%, Style 20%',
+                  'Granny Spills character: Stability 80%, Style 0%',
+                  'Energetic promo: Stability 30%, Clarity 80%',
+                  'News-style: Stability 90%, Clarity 80%',
+                ],
+                color: '#10b981',
+              },
+              {
+                title: '⏱️ Longer videos',
+                tips: [
+                  'Split scripts into sections — generate each separately',
+                  '5,000 chars ≈ 5-6 minutes of audio at normal pace',
+                  'Stitch MP3s together in CapCut or Audacity (free)',
+                  'Import each MP3 into HeyGen for lip-sync video',
+                  'Use one voice consistently across all segments',
+                ],
+                color: '#8b5cf6',
+              },
+              {
+                title: '📲 Workflow: Voice → Video',
+                tips: [
+                  '1. Generate script here in Voice Studio',
+                  '2. Download MP3',
+                  '3. Upload to HeyGen or CapCut',
+                  '4. Add Granny / influencer image for lip-sync',
+                  '5. Import finished video back via Videos → Import URL',
+                ],
+                color: '#f59e0b',
+              },
+            ].map(card => (
+              <div key={card.title} className="section-card">
+                <h2 style={{ color: card.color, marginBottom: '0.75rem' }}>{card.title}</h2>
+                <ul style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  {card.tips.map((t, i) => (
+                    <li key={i} style={{ color: '#1c2b33', fontSize: '0.875rem', lineHeight: 1.5 }}>{t}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Granny Spills Studio state ───────────────────────────────────────────
   const [grannyTab,         setGrannyTab]         = useState<'bible' | 'scripts' | 'subscription' | 'calendar' | 'video'>('bible');
   const [grannyTopic,       setGrannyTopic]       = useState('');
@@ -7188,6 +7525,7 @@ Example:
     {
       label: 'Create',
       items: [
+        { id: 'voice',       icon: '🎙️', label: 'Voice Studio',     badge: 'EL' },
         { id: 'scripts',     icon: '📝', label: 'Scripts',          badge: null },
         { id: 'blueprint',   icon: '🗺️', label: 'Blueprint',        badge: null },
         { id: 'videos',      icon: '🎬', label: 'Video Generator',  badge: videoProvider?.provider === 'veo' ? 'Veo3' : null },
@@ -7227,6 +7565,7 @@ Example:
     source:      { page: 'parrot',    label: 'Parrot a Video →',       hint: 'Clone the structure of a viral video' },
     parrot:      { page: 'trending',  label: 'See Trending →',         hint: 'Find what is trending right now' },
     trending:    { page: 'scripts',   label: 'Write Script →',         hint: 'Turn a trending topic into a script' },
+    voice:       { page: 'videos',    label: 'Generate Video →',       hint: 'Use your voiceover in a full video' },
     visuals:     { page: 'videos',    label: 'Generate Video →',       hint: 'Use your visuals in a full video' },
     influencer:  { page: 'granny',    label: 'Granny Spills →', hint: 'Build the Granny Spills subscription character' },
     granny:      { page: 'visuals',   label: 'AI Visuals →',    hint: 'Generate Granny images for video thumbnails' },
@@ -7495,6 +7834,7 @@ Example:
            currentPage === 'visuals'     ? renderVisuals() :
            currentPage === 'influencer'  ? renderInfluencer() :
            currentPage === 'granny'      ? renderGranny() :
+           currentPage === 'voice'       ? renderVoice() :
            renderHelp()}
           {/* What's Next bar on every page */}
           <WhatsNext page={currentPage} />
