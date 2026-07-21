@@ -746,6 +746,89 @@ async def generate_from_top_performers(
         raise HTTPException(status_code=500, detail=f"Failed: {exc}")
 
 
+class GrowthAdvisorRequest(BaseModel):
+    niche: str = "AI tools"
+    total_videos: int = 0
+    total_scripts: int = 0
+    total_posts: int = 0
+    total_views: int = 0
+    total_likes: int = 0
+    revenue_30d: float = 0.0
+    connected_platforms: list[str] = []
+    missing_platforms: list[str] = []
+    has_openai: bool = True
+    has_google_api: bool = False
+    has_buffer: bool = False
+
+
+@router.post("/growth-advisor")
+async def growth_advisor(
+    request: GrowthAdvisorRequest,
+    openai=Depends(_make_ai_service),
+):
+    """
+    **AI Growth Advisor** — analyzes the current state of the creator's channel
+    and returns prioritized, actionable tasks across four categories:
+    grow_followers, fix_issues, sell_products, content_ideas.
+    """
+    platform_list = ", ".join(request.connected_platforms) if request.connected_platforms else "none"
+    missing_list  = ", ".join(request.missing_platforms)   if request.missing_platforms  else "none"
+
+    prompt = (
+        f"You are a world-class YouTube/TikTok growth strategist and online business advisor.\n\n"
+        f"Analyze this creator's current situation and give them exactly 12 highly specific, actionable tasks.\n\n"
+        f"CREATOR STATS:\n"
+        f"- Niche: {request.niche}\n"
+        f"- Total videos generated: {request.total_videos}\n"
+        f"- Total scripts written: {request.total_scripts}\n"
+        f"- Posts published to social: {request.total_posts}\n"
+        f"- Total views across platforms: {request.total_views}\n"
+        f"- Total likes: {request.total_likes}\n"
+        f"- Revenue last 30 days: ${request.revenue_30d:.2f}\n"
+        f"- Connected platforms: {platform_list}\n"
+        f"- Missing/disconnected platforms: {missing_list}\n"
+        f"- Has AI script generation: yes\n"
+        f"- Has video generation (Veo3): {'yes' if request.has_google_api else 'no'}\n"
+        f"- Has social auto-posting (Buffer): {'yes' if request.has_buffer else 'no'}\n\n"
+        "Return ONLY a valid JSON object with this exact structure — no markdown, no explanation:\n"
+        "{\n"
+        '  "summary": "2-sentence honest assessment of where they are and what to focus on",\n'
+        '  "score": <integer 0-100 representing channel health>,\n'
+        '  "tasks": [\n'
+        "    {\n"
+        '      "id": "unique_snake_case_id",\n'
+        '      "category": "grow_followers" | "fix_issues" | "sell_products" | "content_ideas",\n'
+        '      "priority": "high" | "medium" | "low",\n'
+        '      "title": "Short action title (max 8 words)",\n'
+        '      "detail": "Specific 1-2 sentence explanation of exactly what to do and why",\n'
+        '      "impact": "Expected outcome if this is done (e.g., +500 followers/week)",\n'
+        '      "page": "home" | "scripts" | "videos" | "trending" | "analytics" | "gumroad" | "funnel" | "diagnostics" | "monitor" | null\n'
+        "    }\n"
+        "  ],\n"
+        '  "quick_wins": ["3-5 things they can do RIGHT NOW in under 5 minutes"],\n'
+        '  "weekly_focus": "The single most important thing to do this week"\n'
+        "}"
+    )
+
+    try:
+        raw = await openai.generate_completion(
+            prompt=prompt,
+            system_message="You are a creator growth strategist. Return ONLY valid JSON, no markdown.",
+            temperature=0.7,
+            max_tokens=2000,
+        )
+        import json, re
+        text = raw.strip()
+        m = re.search(r'\{.*\}', text, re.DOTALL)
+        if m:
+            text = m.group(0)
+        data = json.loads(text)
+        return data
+    except Exception as exc:
+        logger.exception("growth-advisor failed")
+        raise HTTPException(status_code=500, detail=f"Growth advisor failed: {exc}")
+
+
 # Made with Bob
 
 
@@ -803,5 +886,132 @@ async def pdf_product_ideas(
         return {"ideas": ideas, "niche": request.niche}
     except Exception as exc:
         logger.exception("PDF product ideas failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate ideas: {exc}")
+
+
+
+# ── X / Email Funnel endpoints ────────────────────────────────────────────────
+
+class XThreadRequest(BaseModel):
+    topic: str
+    niche: str = "AI tools"
+    style: str = "educational"   # educational | story | tip-list | controversial
+
+
+class EmailSequenceRequest(BaseModel):
+    niche: str = "AI tools"
+    lead_magnet: str           # e.g. "30 Enterprise AI Agent Use Cases"
+    product_name: str          # Gumroad product to pitch at the end
+    product_price: str = "$29"
+
+
+class LeadMagnetRequest(BaseModel):
+    niche: str = "AI tools"
+    trending_topics: list[str] = []
+
+
+@router.post("/x-thread")
+async def generate_x_thread(
+    request: XThreadRequest,
+    openai=Depends(_make_ai_service),
+):
+    """Generate a viral X (Twitter) thread to drive followers and email signups."""
+    prompt = (
+        f"Write a viral X (Twitter) thread about '{request.topic}' for the '{request.niche}' niche.\n"
+        f"Style: {request.style}\n\n"
+        "Rules:\n"
+        "- Tweet 1 (hook): bold, scroll-stopping, under 200 chars, ends with '🧵'\n"
+        "- Tweets 2-8: each under 280 chars, numbered (2/ 3/ etc), packed with value\n"
+        "- Tweet 9 (CTA): ask them to follow + mention a free resource they can get\n"
+        "- Use plain language, no jargon, line breaks for readability\n\n"
+        "Return ONLY a JSON array of 9 strings (one per tweet). No markdown, no explanation."
+    )
+    try:
+        raw = await openai.generate_completion(prompt=prompt,
+            system_message="You are a viral X/Twitter content expert who writes threads that drive followers and email signups.",
+            temperature=0.85, max_tokens=1200)
+        import json, re
+        match = re.search(r"\[[\s\S]*\]", raw)
+        if not match:
+            raise ValueError("No JSON array in response")
+        tweets = json.loads(match.group())
+        return {"tweets": tweets, "topic": request.topic, "niche": request.niche}
+    except Exception as exc:
+        logger.exception("X thread generation failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate thread: {exc}")
+
+
+@router.post("/email-sequence")
+async def generate_email_sequence(
+    request: EmailSequenceRequest,
+    openai=Depends(_make_ai_service),
+):
+    """Generate a 5-email welcome/nurture sequence that ends with a Gumroad product pitch."""
+    prompt = (
+        f"Write a 5-email welcome sequence for '{request.niche}' subscribers.\n"
+        f"Lead magnet they downloaded: '{request.lead_magnet}'\n"
+        f"Product to pitch at the end: '{request.product_name}' ({request.product_price})\n\n"
+        "Email schedule:\n"
+        "- Email 1 (Day 0): Deliver the free guide + warm welcome\n"
+        "- Email 2 (Day 2): One high-value tip from the niche\n"
+        "- Email 3 (Day 5): Case study or success story\n"
+        "- Email 4 (Day 8): Another insight + tease the paid product\n"
+        "- Email 5 (Day 12): Soft pitch for the Gumroad product with clear CTA\n\n"
+        "For each email return a JSON object with:\n"
+        "- day (number)\n"
+        "- subject (string): compelling email subject line\n"
+        "- preview (string): preview text, max 90 chars\n"
+        "- body (string): full email body, conversational, 150-250 words\n"
+        "- cta (string): the one call-to-action for this email\n\n"
+        "Return ONLY a JSON array of 5 objects. No markdown, no explanation."
+    )
+    try:
+        raw = await openai.generate_completion(prompt=prompt,
+            system_message="You are an email marketing expert who writes high-converting nurture sequences.",
+            temperature=0.75, max_tokens=2500)
+        import json, re
+        match = re.search(r"\[[\s\S]*\]", raw)
+        if not match:
+            raise ValueError("No JSON array in response")
+        emails = json.loads(match.group())
+        return {"emails": emails, "lead_magnet": request.lead_magnet, "product_name": request.product_name}
+    except Exception as exc:
+        logger.exception("Email sequence generation failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate sequence: {exc}")
+
+
+@router.post("/lead-magnet-ideas")
+async def generate_lead_magnet_ideas(
+    request: LeadMagnetRequest,
+    openai=Depends(_make_ai_service),
+):
+    """Generate lead magnet ideas that convert X followers into email subscribers."""
+    trending_context = ""
+    if request.trending_topics:
+        trending_context = "\n\nCurrently trending topics:\n" + "\n".join(f"- {t}" for t in request.trending_topics[:8])
+
+    prompt = (
+        f"Generate 6 high-converting lead magnet ideas for the '{request.niche}' niche.{trending_context}\n\n"
+        "For each idea return a JSON object with:\n"
+        "- title (string): the lead magnet name\n"
+        "- format (string): PDF / Checklist / Template / Swipe File / Mini-Course / Toolkit\n"
+        "- hook (string): one-sentence X post to promote it (under 200 chars)\n"
+        "- landing_page_headline (string): headline for the signup page\n"
+        "- expected_conversion (string): e.g. '15-25% of link clicks'\n"
+        "- why_it_works (string): one sentence on why this converts\n\n"
+        "Return ONLY a JSON array of 6 objects. No markdown, no explanation."
+    )
+    try:
+        raw = await openai.generate_completion(prompt=prompt,
+            system_message="You are a growth marketer who builds email lists using irresistible lead magnets.",
+            temperature=0.8, max_tokens=1500)
+        import json, re
+        match = re.search(r"\[[\s\S]*\]", raw)
+        if not match:
+            raise ValueError("No JSON array in response")
+        ideas = json.loads(match.group())
+        return {"ideas": ideas, "niche": request.niche}
+    except Exception as exc:
+        logger.exception("Lead magnet ideas failed")
         raise HTTPException(status_code=500, detail=f"Failed to generate ideas: {exc}")
 

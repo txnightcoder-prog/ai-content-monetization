@@ -283,7 +283,7 @@ function App() {
     return fetch(url, { ...init, headers });
   }, []);
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -314,6 +314,73 @@ function App() {
   const [analyticsSyncing, setAnalyticsSyncing]     = useState(false);
   const [analyticsSyncMsg, setAnalyticsSyncMsg]     = useState('');
   const [analyticsTopMetric, setAnalyticsTopMetric] = useState<'views'|'likes'|'comments'|'shares'>('views');
+
+  // ── Growth Advisor state ──────────────────────────────────────────────────
+  interface AdvisorTask {
+    id: string;
+    category: 'grow_followers' | 'fix_issues' | 'sell_products' | 'content_ideas';
+    priority: 'high' | 'medium' | 'low';
+    title: string;
+    detail: string;
+    impact: string;
+    page: string | null;
+  }
+  interface AdvisorData {
+    summary: string;
+    score: number;
+    tasks: AdvisorTask[];
+    quick_wins: string[];
+    weekly_focus: string;
+  }
+  const [advisorData, setAdvisorData]         = useState<AdvisorData | null>(null);
+  const [advisorLoading, setAdvisorLoading]   = useState(false);
+  const [advisorError, setAdvisorError]       = useState('');
+  const [advisorDone, setAdvisorDone]         = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('advisor_done') || '[]')); } catch { return new Set(); }
+  });
+  const [advisorFilter, setAdvisorFilter]     = useState<string>('all');
+
+  const fetchAdvisor = React.useCallback(async () => {
+    setAdvisorLoading(true); setAdvisorError('');
+    try {
+      const metrics = dashboardMetrics;
+      const summary = analyticsSummary;
+      const body = {
+        niche: niche || 'AI tools',
+        total_videos:  metrics?.overview?.total_videos  ?? 0,
+        total_scripts: metrics?.overview?.total_scripts ?? 0,
+        total_posts:   summary?.totals?.total_posts     ?? 0,
+        total_views:   summary?.totals?.total_views     ?? 0,
+        total_likes:   summary?.totals?.total_likes     ?? 0,
+        revenue_30d:   metrics?.overview?.revenue_30d   ?? 0,
+        connected_platforms: ['youtube', 'gumroad'],
+        missing_platforms:   ['tiktok', 'instagram'],
+        has_google_api: true,
+        has_buffer: true,
+      };
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/growth-advisor`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Advisor failed'); }
+      const data: AdvisorData = await r.json();
+      setAdvisorData(data);
+    } catch (err) {
+      setAdvisorError(err instanceof Error ? err.message : 'Failed to load advisor');
+    } finally {
+      setAdvisorLoading(false);
+    }
+  }, [dashboardMetrics, analyticsSummary, niche, apiFetch]);
+
+  const toggleAdvisorDone = (id: string) => {
+    setAdvisorDone(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      localStorage.setItem('advisor_done', JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   // ── Performance Monitor state ─────────────────────────────────────────────
   interface MonitorData {
@@ -4075,6 +4142,426 @@ function App() {
     );
   };
 
+  // ── X & Email Funnel page ─────────────────────────────────────────────────
+  const [fnTab,          setFnTab]          = useState<'leads'|'x'|'email'|'schedule'>('leads');
+  const [fnNiche,        setFnNiche]        = useState('AI tools');
+  const [fnLeads,        setFnLeads]        = useState<any[]>([]);
+  const [fnLeadsLoading, setFnLeadsLoading] = useState(false);
+  const [fnLeadsError,   setFnLeadsError]   = useState('');
+  const [fnLeadExpanded, setFnLeadExpanded] = useState<number|null>(null);
+  const [fnXTopic,       setFnXTopic]       = useState('');
+  const [fnXStyle,       setFnXStyle]       = useState('educational');
+  const [fnXTweets,      setFnXTweets]      = useState<string[]>([]);
+  const [fnXLoading,     setFnXLoading]     = useState(false);
+  const [fnXError,       setFnXError]       = useState('');
+  const [fnXCopied,      setFnXCopied]      = useState<number|null>(null);
+  const [fnMagnet,       setFnMagnet]       = useState('');
+  const [fnProduct,      setFnProduct]      = useState('');
+  const [fnProductPrice, setFnProductPrice] = useState('$29');
+  const [fnEmails,       setFnEmails]       = useState<any[]>([]);
+  const [fnEmailLoading, setFnEmailLoading] = useState(false);
+  const [fnEmailError,   setFnEmailError]   = useState('');
+  const [fnEmailExp,     setFnEmailExp]     = useState<number|null>(null);
+  const [fnEmailCopied,  setFnEmailCopied]  = useState<number|null>(null);
+
+  const fetchLeadMagnets = async () => {
+    setFnLeadsLoading(true); setFnLeadsError(''); setFnLeads([]);
+    try {
+      const trendingTopics = autoQueueResult?.scripts?.map((s: any) => s.topic) ?? [];
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/lead-magnet-ideas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: fnNiche, trending_topics: trendingTopics }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Failed'); }
+      const d = await r.json(); setFnLeads(d.ideas ?? []);
+    } catch (e) { setFnLeadsError(e instanceof Error ? e.message : 'Error'); }
+    finally { setFnLeadsLoading(false); }
+  };
+
+  const generateXThread = async () => {
+    if (!fnXTopic.trim()) { setFnXError('Enter a topic first'); return; }
+    setFnXLoading(true); setFnXError(''); setFnXTweets([]);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/x-thread`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: fnXTopic.trim(), niche: fnNiche, style: fnXStyle }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Failed'); }
+      const d = await r.json(); setFnXTweets(d.tweets ?? []);
+    } catch (e) { setFnXError(e instanceof Error ? e.message : 'Error'); }
+    finally { setFnXLoading(false); }
+  };
+
+  const generateEmailSeq = async () => {
+    if (!fnMagnet.trim() || !fnProduct.trim()) { setFnEmailError('Fill in lead magnet and product name'); return; }
+    setFnEmailLoading(true); setFnEmailError(''); setFnEmails([]);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/email-sequence`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: fnNiche, lead_magnet: fnMagnet.trim(), product_name: fnProduct.trim(), product_price: fnProductPrice }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Failed'); }
+      const d = await r.json(); setFnEmails(d.emails ?? []);
+    } catch (e) { setFnEmailError(e instanceof Error ? e.message : 'Error'); }
+    finally { setFnEmailLoading(false); }
+  };
+
+  const copyTweet = (i: number, text: string) => {
+    navigator.clipboard.writeText(text); setFnXCopied(i); setTimeout(() => setFnXCopied(null), 2000);
+  };
+
+  const copyEmail = (i: number, email: any) => {
+    navigator.clipboard.writeText(`Subject: ${email.subject}\n\n${email.body}\n\nCTA: ${email.cta}`);
+    setFnEmailCopied(i); setTimeout(() => setFnEmailCopied(null), 2000);
+  };
+
+  const renderFunnel = () => {
+    const TAB = (id: typeof fnTab, label: string) => (
+      <button onClick={() => setFnTab(id)}
+        style={{ padding: '0.5rem 1.25rem', borderRadius: '999px', border: '2px solid #1da1f2', background: fnTab === id ? '#1da1f2' : 'transparent', color: fnTab === id ? '#fff' : '#1da1f2', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+        {label}
+      </button>
+    );
+
+    const WEEKLY_SCHEDULE = [
+      { day: 'Mon', type: 'SQL / Tech Tip', hook: 'Share a quick tip from your niche' },
+      { day: 'Tue', type: 'Azure / Cloud Tip', hook: 'Something people can use today' },
+      { day: 'Wed', type: 'AI Agent Insight', hook: 'A diagram, workflow, or architecture' },
+      { day: 'Thu', type: 'Career Advice', hook: 'Something relatable about your journey' },
+      { day: 'Fri', type: 'Architecture Breakdown', hook: 'Show how something complex works simply' },
+      { day: 'Sat', type: 'Project Lesson', hook: 'What you learned from a real project' },
+      { day: 'Sun', type: '🎯 Lead Magnet Promo', hook: 'Drive followers to your free resource + email signup' },
+    ];
+
+    return (
+      <div className="videos-page">
+        <h1>📧 X & Email Funnel</h1>
+        <p className="subtitle">Build followers on X, convert them to email subscribers, then sell your Gumroad products on autopilot</p>
+
+        <WorkflowSteps steps={[
+          { n: 1, label: 'Create a lead magnet', detail: 'A free PDF, checklist or template people give their email for' },
+          { n: 2, label: 'Post X threads daily', detail: 'Value-packed threads drive followers to your lead magnet link' },
+          { n: 3, label: 'Subscriber joins email list', detail: 'Beehiiv or ConvertKit delivers the free guide automatically' },
+          { n: 4, label: '5-email sequence runs', detail: 'Automated emails nurture subscribers and pitch your Gumroad product on Day 12' },
+        ]} />
+
+        {/* Funnel diagram */}
+        <div style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
+          <p style={{ fontWeight: 700, color: '#1f2328', margin: '0 0 0.75rem', fontSize: '0.9rem' }}>📊 Your Funnel at a Glance</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', fontSize: '0.875rem' }}>
+            {[
+              { icon: '𝕏', label: 'X Thread', color: '#1da1f2' },
+              { icon: '→', label: '', color: '#94a3b8' },
+              { icon: '🎁', label: 'Free Lead Magnet', color: '#8b5cf6' },
+              { icon: '→', label: '', color: '#94a3b8' },
+              { icon: '📬', label: 'Email Signup', color: '#059669' },
+              { icon: '→', label: '', color: '#94a3b8' },
+              { icon: '✉️', label: '5-Email Sequence', color: '#f59e0b' },
+              { icon: '→', label: '', color: '#94a3b8' },
+              { icon: '🛒', label: 'Gumroad Sale', color: '#ef4444' },
+            ].map((s, i) => s.label ? (
+              <span key={i} style={{ background: `${s.color}15`, border: `1px solid ${s.color}40`, borderRadius: '999px', padding: '0.3rem 0.85rem', fontWeight: 700, color: s.color, whiteSpace: 'nowrap' }}>{s.icon} {s.label}</span>
+            ) : <span key={i} style={{ color: s.color, fontWeight: 700, fontSize: '1rem' }}>{s.icon}</span>)}
+          </div>
+          <p style={{ color: '#57606a', fontSize: '0.78rem', margin: '0.75rem 0 0' }}>
+            At 5 new subscribers/day → ~1,800/year. The email list is the business asset — followers bring attention, subscribers become customers.
+          </p>
+        </div>
+
+        {/* Niche selector */}
+        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <label style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1f2328', flexShrink: 0 }}>Your Niche:</label>
+          <select value={fnNiche} onChange={e => setFnNiche(e.target.value)}
+            style={{ padding: '0.5rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.875rem' }}>
+            <option value="AI tools">💰 AI Tools / Online Business</option>
+            <option value="data engineering">🗄️ Data Engineering / SQL</option>
+            <option value="Azure / cloud">☁️ Azure / Cloud Architecture</option>
+            <option value="ServiceNow">⚙️ ServiceNow</option>
+            <option value="technology">💻 Technology</option>
+            <option value="education">📚 Education</option>
+            <option value="side hustles">💸 Side Hustles</option>
+            <option value="finance">📈 Finance / Investing</option>
+            <option value="productivity">⚡ Productivity</option>
+            <option value="marketing">📣 Marketing</option>
+          </select>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+          {TAB('leads', '🎁 Lead Magnets')}
+          {TAB('x', '𝕏 X Threads')}
+          {TAB('email', '✉️ Email Sequence')}
+          {TAB('schedule', '📅 Weekly Schedule')}
+        </div>
+
+        {/* ── LEAD MAGNETS TAB ─────────────────────────────────────────── */}
+        {fnTab === 'leads' && (
+          <div>
+            <div className="generator-form" style={{ marginBottom: '1.5rem' }}>
+              <button className="generate-button" onClick={fetchLeadMagnets} disabled={fnLeadsLoading}>
+                {fnLeadsLoading ? '⏳ Generating ideas…' : '🎁 Generate Lead Magnet Ideas'}
+              </button>
+              {autoQueueResult?.scripts?.length ? (
+                <p style={{ color: '#2a9d5c', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>✅ Using {autoQueueResult.scripts.length} trending topics to personalise ideas</p>
+              ) : (
+                <p style={{ color: '#57606a', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>Tip: Run Auto-Script on the Trending page first to anchor ideas to what's getting views</p>
+              )}
+              {fnLeadsError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{fnLeadsError}</div>}
+            </div>
+
+            <div style={{ background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.2)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+              <p style={{ fontWeight: 700, color: '#7c3aed', margin: '0 0 0.5rem', fontSize: '0.875rem' }}>💡 Example Lead Magnets for Your Background</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                {['Azure SQL Health Check Checklist', 'Data Engineer Interview Kit', 'AI Agent Architecture Templates', 'SQL Performance Playbook', '30 Enterprise AI Agent Use Cases', 'ServiceNow + Azure AI Blueprint'].map(m => (
+                  <button key={m} onClick={() => setFnMagnet(m)}
+                    style={{ background: '#fff', border: '1px solid #d0d7de', borderRadius: '999px', padding: '0.3rem 0.75rem', fontSize: '0.78rem', cursor: 'pointer', color: '#374151', fontWeight: 600 }}>
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {fnLeads.map((idea, i) => (
+              <div key={i} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', marginBottom: '0.875rem', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1.25rem', cursor: 'pointer', flexWrap: 'wrap', gap: '0.5rem' }}
+                  onClick={() => setFnLeadExpanded(fnLeadExpanded === i ? null : i)}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '0.375rem', padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>{idea.format}</span>
+                      <span style={{ fontWeight: 800, color: '#1f2328', fontSize: '0.9375rem' }}>{idea.title}</span>
+                    </div>
+                    <p style={{ color: '#57606a', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>{idea.why_it_works}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                    <span style={{ background: 'rgba(5,150,105,0.1)', color: '#059669', border: '1px solid rgba(5,150,105,0.3)', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>{idea.expected_conversion}</span>
+                    <span style={{ color: '#94a3b8' }}>{fnLeadExpanded === i ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+                {fnLeadExpanded === i && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#57606a', textTransform: 'uppercase', margin: '0 0 0.35rem' }}>🏠 Landing Page Headline</p>
+                      <p style={{ color: '#1f2328', fontSize: '0.9rem', fontWeight: 600, margin: 0 }}>{idea.landing_page_headline}</p>
+                    </div>
+                    <div style={{ background: 'rgba(29,161,242,0.06)', border: '1px solid rgba(29,161,242,0.25)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#1da1f2', textTransform: 'uppercase', margin: '0 0 0.35rem' }}>𝕏 X Post Hook</p>
+                      <p style={{ color: '#1f2328', fontSize: '0.875rem', margin: 0, fontStyle: 'italic' }}>{idea.hook}</p>
+                      <button onClick={() => navigator.clipboard.writeText(idea.hook)}
+                        style={{ marginTop: '0.5rem', background: 'none', border: '1px solid #e5e7eb', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontSize: '0.75rem', cursor: 'pointer', color: '#57606a' }}>📋 Copy</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => { setFnMagnet(idea.title); setFnTab('email'); }}
+                        style={{ background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                        ✉️ Build Email Sequence for This →
+                      </button>
+                      <button onClick={() => { setFnXTopic(idea.title); setFnTab('x'); }}
+                        style={{ background: 'linear-gradient(135deg,#1da1f2,#0d8fd9)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.55rem 1rem', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                        𝕏 Write X Thread for This →
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── X THREADS TAB ────────────────────────────────────────────── */}
+        {fnTab === 'x' && (
+          <div>
+            <div className="generator-form" style={{ marginBottom: '1.5rem' }}>
+              <div className="form-group">
+                <label>Thread Topic *</label>
+                <input value={fnXTopic} onChange={e => setFnXTopic(e.target.value)}
+                  placeholder="e.g. 5 Azure SQL mistakes that cost companies thousands"
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+              </div>
+              <div className="form-group">
+                <label>Thread Style</label>
+                <select value={fnXStyle} onChange={e => setFnXStyle(e.target.value)}
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }}>
+                  <option value="educational">📚 Educational — step-by-step tips</option>
+                  <option value="story">📖 Story — personal experience/journey</option>
+                  <option value="tip-list">⚡ Tip List — quick wins numbered list</option>
+                  <option value="controversial">🔥 Controversial — challenge a common belief</option>
+                </select>
+              </div>
+              <button className="generate-button" onClick={generateXThread} disabled={fnXLoading}>
+                {fnXLoading ? '⏳ Writing thread…' : '𝕏 Generate X Thread'}
+              </button>
+              {fnXError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{fnXError}</div>}
+            </div>
+
+            {fnXTweets.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <p style={{ fontWeight: 700, color: '#1f2328', margin: 0 }}>𝕏 Your Thread ({fnXTweets.length} tweets)</p>
+                  <button onClick={() => navigator.clipboard.writeText(fnXTweets.join('\n\n'))}
+                    style={{ background: '#1da1f2', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.45rem 1rem', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+                    📋 Copy Full Thread
+                  </button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {fnXTweets.map((tweet, i) => (
+                    <div key={i} style={{ background: i === 0 ? 'rgba(29,161,242,0.06)' : '#f7f8fa', border: `1px solid ${i === 0 ? 'rgba(29,161,242,0.3)' : '#e5e7eb'}`, borderRadius: '0.75rem', padding: '0.875rem 1.25rem', position: 'relative' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <p style={{ color: '#1f2328', fontSize: '0.875rem', margin: 0, lineHeight: 1.6, flex: 1, whiteSpace: 'pre-wrap' }}>{tweet}</p>
+                        <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0, flexDirection: 'column', alignItems: 'flex-end' }}>
+                          <span style={{ color: tweet.length > 280 ? '#ef4444' : '#94a3b8', fontSize: '0.72rem', fontWeight: 700 }}>{tweet.length}/280</span>
+                          <button onClick={() => copyTweet(i, tweet)}
+                            style={{ background: fnXCopied === i ? '#1da1f2' : 'none', color: fnXCopied === i ? '#fff' : '#94a3b8', border: '1px solid #e5e7eb', borderRadius: '0.375rem', padding: '0.2rem 0.55rem', fontSize: '0.72rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {fnXCopied === i ? '✓' : '📋'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '1rem', background: 'rgba(29,161,242,0.06)', border: '1px solid rgba(29,161,242,0.2)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem' }}>
+                  <p style={{ fontWeight: 700, color: '#1da1f2', margin: '0 0 0.35rem', fontSize: '0.875rem' }}>⚡ Schedule with Buffer</p>
+                  <p style={{ color: '#57606a', fontSize: '0.8rem', margin: 0 }}>Copy each tweet above and schedule via <a href="https://publish.buffer.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1da1f2' }}>Buffer →</a> or <a href="https://typefully.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1da1f2' }}>Typefully →</a> for the best engagement time (Tue–Thu, 9–11am)</p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── EMAIL SEQUENCE TAB ───────────────────────────────────────── */}
+        {fnTab === 'email' && (
+          <div>
+            <div className="generator-form" style={{ marginBottom: '1.5rem' }}>
+              <div className="form-group">
+                <label>Lead Magnet Name *</label>
+                <input value={fnMagnet} onChange={e => setFnMagnet(e.target.value)}
+                  placeholder="e.g. 30 Enterprise AI Agent Use Cases"
+                  style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '0.75rem' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Gumroad Product to Pitch *</label>
+                  <input value={fnProduct} onChange={e => setFnProduct(e.target.value)}
+                    placeholder="e.g. ServiceNow + Azure AI Blueprint"
+                    style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Product Price</label>
+                  <input value={fnProductPrice} onChange={e => setFnProductPrice(e.target.value)}
+                    placeholder="$29"
+                    style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+                </div>
+              </div>
+              <button className="generate-button" onClick={generateEmailSeq} disabled={fnEmailLoading} style={{ marginTop: '0.75rem' }}>
+                {fnEmailLoading ? '⏳ Writing sequence…' : '✉️ Generate 5-Email Sequence'}
+              </button>
+              {fnEmailError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{fnEmailError}</div>}
+            </div>
+
+            {fnEmails.length > 0 && (
+              <div>
+                <p style={{ fontWeight: 700, color: '#1f2328', margin: '0 0 0.75rem' }}>✉️ Your 5-Email Welcome Sequence</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {fnEmails.map((email, i) => (
+                    <div key={i} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', overflow: 'hidden' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.875rem 1.25rem', cursor: 'pointer', flexWrap: 'wrap', gap: '0.5rem' }}
+                        onClick={() => setFnEmailExp(fnEmailExp === i ? null : i)}>
+                        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1 }}>
+                          <span style={{ background: i === 4 ? '#ef4444' : '#059669', color: '#fff', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>Day {email.day}</span>
+                          <div>
+                            <p style={{ fontWeight: 700, color: '#1f2328', margin: 0, fontSize: '0.875rem' }}>{email.subject}</p>
+                            <p style={{ color: '#57606a', fontSize: '0.78rem', margin: '0.1rem 0 0' }}>{email.preview}</p>
+                          </div>
+                        </div>
+                        <span style={{ color: '#94a3b8' }}>{fnEmailExp === i ? '▲' : '▼'}</span>
+                      </div>
+                      {fnEmailExp === i && (
+                        <div style={{ borderTop: '1px solid #e5e7eb', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.875rem', whiteSpace: 'pre-wrap', fontSize: '0.875rem', color: '#1f2328', lineHeight: 1.65 }}>{email.body}</div>
+                          <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.5rem', padding: '0.65rem 1rem' }}>
+                            <span style={{ fontWeight: 700, color: '#d97706', fontSize: '0.78rem' }}>CTA: </span>
+                            <span style={{ color: '#1f2328', fontSize: '0.875rem' }}>{email.cta}</span>
+                          </div>
+                          <button onClick={() => copyEmail(i, email)}
+                            style={{ alignSelf: 'flex-start', background: fnEmailCopied === i ? '#059669' : 'none', color: fnEmailCopied === i ? '#fff' : '#57606a', border: '1px solid #e5e7eb', borderRadius: '0.375rem', padding: '0.35rem 0.85rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: 600 }}>
+                            {fnEmailCopied === i ? '✅ Copied!' : '📋 Copy Email'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '1rem', background: 'rgba(5,150,105,0.06)', border: '1px solid rgba(5,150,105,0.25)', borderRadius: '0.75rem', padding: '0.875rem 1.25rem' }}>
+                  <p style={{ fontWeight: 700, color: '#059669', margin: '0 0 0.35rem' }}>📬 Add to Beehiiv or ConvertKit</p>
+                  <p style={{ color: '#57606a', fontSize: '0.8rem', margin: 0 }}>
+                    Copy each email above into your email platform's automation flow. Set up a 5-email sequence triggered when someone subscribes.{' '}
+                    <a href="https://www.beehiiv.com" target="_blank" rel="noopener noreferrer" style={{ color: '#059669' }}>Beehiiv →</a>{' '}
+                    <a href="https://convertkit.com" target="_blank" rel="noopener noreferrer" style={{ color: '#059669' }}>ConvertKit →</a>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── WEEKLY SCHEDULE TAB ──────────────────────────────────────── */}
+        {fnTab === 'schedule' && (
+          <div>
+            <div style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', padding: '1.25rem', marginBottom: '1.5rem' }}>
+              <p style={{ fontWeight: 700, color: '#1f2328', margin: '0 0 0.75rem' }}>📅 Recommended Weekly X Schedule</p>
+              <p style={{ color: '#57606a', fontSize: '0.8125rem', margin: '0 0 1rem' }}>Spend one hour on Sunday — batch-create a week of content using the X Threads tab, then schedule all 7 in Buffer or Typefully.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {WEEKLY_SCHEDULE.map((d, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', padding: '0.75rem 1rem', background: d.day === 'Sun' ? 'rgba(139,92,246,0.06)' : '#fff', border: `1px solid ${d.day === 'Sun' ? 'rgba(139,92,246,0.25)' : '#e5e7eb'}`, borderRadius: '0.5rem' }}>
+                    <span style={{ fontWeight: 800, color: d.day === 'Sun' ? '#8b5cf6' : '#3b82d4', minWidth: '36px', fontSize: '0.875rem' }}>{d.day}</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 700, color: '#1f2328', margin: 0, fontSize: '0.875rem' }}>{d.type}</p>
+                      <p style={{ color: '#57606a', fontSize: '0.78rem', margin: '0.15rem 0 0' }}>{d.hook}</p>
+                    </div>
+                    <button onClick={() => { setFnXTopic(d.type); setFnTab('x'); }}
+                      style={{ background: 'linear-gradient(135deg,#1da1f2,#0d8fd9)', color: '#fff', border: 'none', borderRadius: '0.375rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                      ✍️ Write Thread
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '1rem' }}>
+              {[
+                { name: 'Buffer', desc: 'Schedule across X, Instagram, Facebook, LinkedIn — already connected', url: 'https://publish.buffer.com', color: '#1da1f2' },
+                { name: 'Typefully', desc: 'Best for X threads — shows thread preview, analytics, optimal timing', url: 'https://typefully.com', color: '#1f2328' },
+                { name: 'Beehiiv', desc: 'Newsletter + email automation + built-in referral program', url: 'https://www.beehiiv.com', color: '#059669' },
+                { name: 'ConvertKit', desc: 'Email sequences + landing pages + subscriber tagging', url: 'https://convertkit.com', color: '#f59e0b' },
+              ].map(t => (
+                <a key={t.name} href={t.url} target="_blank" rel="noopener noreferrer"
+                  style={{ display: 'block', background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '1rem', textDecoration: 'none' }}>
+                  <p style={{ fontWeight: 800, color: t.color, margin: '0 0 0.35rem', fontSize: '0.9375rem' }}>{t.name} →</p>
+                  <p style={{ color: '#57606a', fontSize: '0.8rem', margin: 0 }}>{t.desc}</p>
+                </a>
+              ))}
+            </div>
+
+            <div style={{ marginTop: '1.5rem', background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.25)', borderRadius: '0.875rem', padding: '1.25rem' }}>
+              <p style={{ fontWeight: 700, color: '#7c3aed', margin: '0 0 0.75rem' }}>🔄 Repurpose Everything — 1 idea, 4 pieces of content</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                {[
+                  ['✍️', 'Write a post about a ServiceNow AI Agent or Azure architecture'],
+                  ['𝕏', 'Turn it into an X thread (use the X Threads tab above)'],
+                  ['📬', 'Expand it into a Beehiiv newsletter issue'],
+                  ['🛒', 'Bundle it into a future Gumroad PDF guide'],
+                ].map(([icon, text], i) => (
+                  <div key={i} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.5rem 0', borderBottom: i < 3 ? '1px solid rgba(139,92,246,0.1)' : 'none' }}>
+                    <span style={{ fontSize: '1rem', flexShrink: 0 }}>{icon}</span>
+                    <span style={{ color: '#374151', fontSize: '0.875rem' }}>{text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Monetize page ─────────────────────────────────────────────────────────
   const renderMonetize = () => (
     <div className="videos-page">
@@ -4667,6 +5154,196 @@ function App() {
       </div>
     </div>
   );
+
+  // ── Growth Advisor page ───────────────────────────────────────────────────
+  const renderAdvisor = () => {
+    const catMeta: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+      grow_followers: { label: 'Grow Followers', color: '#3b82f6', bg: '#eff6ff', icon: '📈' },
+      fix_issues:     { label: 'Fix Issues',     color: '#ef4444', bg: '#fff0f0', icon: '🔧' },
+      sell_products:  { label: 'Sell Products',  color: '#f59e0b', bg: '#fffbeb', icon: '💰' },
+      content_ideas:  { label: 'Content Ideas',  color: '#10b981', bg: '#f0fdf4', icon: '💡' },
+    };
+    const priBadge: Record<string, { label: string; color: string }> = {
+      high:   { label: 'High',   color: '#ef4444' },
+      medium: { label: 'Medium', color: '#f59e0b' },
+      low:    { label: 'Low',    color: '#6b7280' },
+    };
+    const categories = ['all', 'grow_followers', 'fix_issues', 'sell_products', 'content_ideas'];
+    const tasks = advisorData?.tasks ?? [];
+    const filtered = advisorFilter === 'all' ? tasks : tasks.filter(t => t.category === advisorFilter);
+    const doneCount = tasks.filter(t => advisorDone.has(t.id)).length;
+    const score = advisorData?.score ?? 0;
+    const scoreColor = score >= 70 ? '#10b981' : score >= 40 ? '#f59e0b' : '#ef4444';
+
+    return (
+      <div>
+        {/* Header */}
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1c2b33', margin: '0 0 0.25rem' }}>🧭 Growth Advisor</h1>
+            <p style={{ color: '#637381', fontSize: '0.875rem', margin: 0 }}>
+              AI-powered action plan — what to do next to grow followers, fix issues, and sell more
+            </p>
+          </div>
+          <button
+            onClick={fetchAdvisor}
+            disabled={advisorLoading}
+            style={{ background: advisorLoading ? '#e5e7eb' : '#1c2b33', color: advisorLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.65rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: advisorLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}
+          >
+            {advisorLoading ? '⟳ Analysing…' : advisorData ? '↺ Refresh AI Advice' : '✦ Get My Action Plan'}
+          </button>
+        </div>
+
+        {/* Error */}
+        {advisorError && (
+          <div style={{ background: '#fff0f0', border: '1px solid #fca5a5', borderRadius: '0.75rem', padding: '0.75rem 1rem', color: '#dc2626', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            ⚠️ {advisorError}
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!advisorData && !advisorLoading && !advisorError && (
+          <div style={{ background: '#f7f8fa', border: '2px dashed #e5e7eb', borderRadius: '1rem', padding: '3rem 2rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🧭</div>
+            <h2 style={{ color: '#1c2b33', fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.5rem' }}>Your personalized action plan</h2>
+            <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem' }}>
+              Click "Get My Action Plan" and the AI will analyze your channel stats and give you exactly what to do next — prioritized by impact.
+            </p>
+            <button
+              onClick={fetchAdvisor}
+              style={{ background: '#1c2b33', color: '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.75rem 2rem', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer' }}
+            >
+              ✦ Get My Action Plan
+            </button>
+          </div>
+        )}
+
+        {/* Loading skeleton */}
+        {advisorLoading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} style={{ background: '#f7f8fa', borderRadius: '0.75rem', padding: '1.25rem', height: '80px', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            ))}
+            <p style={{ color: '#637381', fontSize: '0.8125rem', textAlign: 'center' }}>AI is analyzing your channel… this takes about 10 seconds</p>
+          </div>
+        )}
+
+        {/* Results */}
+        {advisorData && !advisorLoading && (
+          <>
+            {/* Score + Summary */}
+            <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '1rem', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', alignItems: 'center' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '2.5rem', fontWeight: 900, color: scoreColor, lineHeight: 1 }}>{score}</div>
+                <div style={{ fontSize: '0.72rem', color: '#637381', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '0.25rem' }}>Channel Score</div>
+                <div style={{ width: '100%', height: '6px', background: '#e5e7eb', borderRadius: '999px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${score}%`, background: scoreColor, borderRadius: '999px', transition: 'width 0.5s ease' }} />
+                </div>
+              </div>
+              <div>
+                <p style={{ color: '#1c2b33', fontSize: '0.9375rem', margin: '0 0 0.5rem', lineHeight: 1.5 }}>{advisorData.summary}</p>
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.5rem', padding: '0.5rem 0.75rem', display: 'inline-block' }}>
+                  <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#92400e' }}>🎯 This week: </span>
+                  <span style={{ fontSize: '0.8125rem', color: '#78350f' }}>{advisorData.weekly_focus}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {tasks.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem', background: '#f7f8fa', borderRadius: '0.6rem', padding: '0.6rem 1rem' }}>
+                <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '999px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.round(doneCount / tasks.length * 100)}%`, background: '#10b981', borderRadius: '999px', transition: 'width 0.3s ease' }} />
+                </div>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: '#637381', whiteSpace: 'nowrap' }}>{doneCount}/{tasks.length} done</span>
+                {doneCount > 0 && (
+                  <button onClick={() => { setAdvisorDone(new Set()); localStorage.removeItem('advisor_done'); }}
+                    style={{ fontSize: '0.75rem', color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>reset</button>
+                )}
+              </div>
+            )}
+
+            {/* Quick wins */}
+            {advisorData.quick_wins && advisorData.quick_wins.length > 0 && (
+              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.25rem' }}>
+                <h3 style={{ color: '#065f46', fontSize: '0.875rem', fontWeight: 800, margin: '0 0 0.6rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>⚡ Quick Wins — Do These Right Now</h3>
+                <ul style={{ margin: 0, paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  {advisorData.quick_wins.map((w, i) => (
+                    <li key={i} style={{ color: '#065f46', fontSize: '0.875rem', lineHeight: 1.5 }}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Category filter tabs */}
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              {categories.map(cat => {
+                const isActive = advisorFilter === cat;
+                const meta = cat === 'all' ? null : catMeta[cat];
+                const count = cat === 'all' ? tasks.length : tasks.filter(t => t.category === cat).length;
+                return (
+                  <button key={cat} onClick={() => setAdvisorFilter(cat)}
+                    style={{ background: isActive ? (meta?.bg ?? '#1c2b33') : '#f7f8fa', color: isActive ? (meta?.color ?? '#fff') : '#637381', border: `1px solid ${isActive ? (meta?.color ?? '#1c2b33') + '60' : '#e5e7eb'}`, borderRadius: '999px', padding: '0.35rem 0.9rem', fontSize: '0.8125rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {meta ? `${meta.icon} ${meta.label}` : 'All'} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Task cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+              {filtered.map(task => {
+                const done = advisorDone.has(task.id);
+                const meta = catMeta[task.category] ?? catMeta.content_ideas;
+                const pri  = priBadge[task.priority] ?? priBadge.medium;
+                return (
+                  <div key={task.id}
+                    style={{ background: done ? '#f7f8fa' : '#fff', border: `1px solid ${done ? '#e5e7eb' : meta.color + '30'}`, borderRadius: '0.75rem', padding: '1rem', display: 'grid', gridTemplateColumns: '1.5rem 1fr auto', gap: '0.75rem', alignItems: 'flex-start', opacity: done ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                    {/* Checkbox */}
+                    <button onClick={() => toggleAdvisorDone(task.id)}
+                      style={{ width: '22px', height: '22px', borderRadius: '50%', border: `2px solid ${done ? '#10b981' : meta.color}`, background: done ? '#10b981' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginTop: '0.1rem' }}>
+                      {done && <span style={{ color: '#fff', fontSize: '0.75rem', fontWeight: 900 }}>✓</span>}
+                    </button>
+                    {/* Content */}
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.3rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: meta.color, background: meta.bg, borderRadius: '999px', padding: '0.15rem 0.6rem', border: `1px solid ${meta.color}30` }}>
+                          {meta.icon} {meta.label}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: pri.color, border: `1px solid ${pri.color}30`, borderRadius: '999px', padding: '0.15rem 0.5rem' }}>
+                          {pri.label} priority
+                        </span>
+                      </div>
+                      <div style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#1c2b33', marginBottom: '0.3rem', textDecoration: done ? 'line-through' : 'none' }}>
+                        {task.title}
+                      </div>
+                      <p style={{ color: '#637381', fontSize: '0.8125rem', margin: '0 0 0.4rem', lineHeight: 1.5 }}>{task.detail}</p>
+                      {task.impact && (
+                        <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 600 }}>📊 {task.impact}</span>
+                      )}
+                    </div>
+                    {/* Go button */}
+                    {task.page && !done && (
+                      <button
+                        onClick={() => {
+                          setCurrentPage(task.page as any);
+                          if (task.page === 'monitor') loadMonitorData(monitorDays);
+                          if (task.page === 'analytics') fetchAnalytics();
+                          if (task.page === 'orders') fetchOrders('all', 1);
+                        }}
+                        style={{ background: meta.bg, color: meta.color, border: `1px solid ${meta.color}40`, borderRadius: '0.5rem', padding: '0.4rem 0.75rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap', alignSelf: 'center' }}>
+                        Go →
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const renderHome = () => {
     const metrics = dashboardMetrics;
@@ -5936,10 +6613,12 @@ Example:
       label: 'Dashboard',
       items: [
         { id: 'home',        icon: '🏠', label: 'Dashboard',        badge: null },
+        { id: 'advisor',     icon: '🧭', label: 'Growth Advisor',   badge: 'AI' },
         { id: 'monitor',     icon: '📡', label: 'Performance',      badge: null },
         { id: 'analytics',   icon: '📊', label: 'Analytics',        badge: null },
         { id: 'orders',      icon: '🛍️', label: 'Orders',           badge: null },
-        { id: 'gumroad',     icon: '🛒', label: 'Gumroad Studio',   badge: 'New' },
+        { id: 'gumroad',     icon: '🛒', label: 'Gumroad Studio',   badge: null },
+        { id: 'funnel',      icon: '📧', label: 'X & Email Funnel', badge: 'New' },
         { id: 'monetize',    icon: '💰', label: 'Monetize',         badge: null },
       ],
     },
@@ -5972,7 +6651,8 @@ Example:
 
   // ── What's Next helper ───────────────────────────────────────────────────────
   const NEXT_PAGE: Record<string, { page: string; label: string; hint: string }> = {
-    home:        { page: 'scripts',   label: 'Write a Script →',       hint: 'Generate an AI script for your next kids video' },
+    home:        { page: 'advisor',   label: 'Get Action Plan →',      hint: 'AI advisor tells you exactly what to do next' },
+    advisor:     { page: 'scripts',   label: 'Write a Script →',       hint: 'Generate an AI script for your next video' },
     scripts:     { page: 'blueprint', label: 'Build Blueprint →',      hint: 'Turn your script into a full video blueprint' },
     blueprint:   { page: 'videos',    label: 'Generate Video →',       hint: 'Create the AI video from your blueprint' },
     videos:      { page: 'monitor',   label: 'Check Performance →',    hint: 'See how your published videos are performing' },
@@ -6244,6 +6924,8 @@ Example:
            currentPage === 'analytics'   ? renderAnalytics() :
            currentPage === 'orders'      ? renderOrders() :
            currentPage === 'gumroad'     ? renderGumroad() :
+           currentPage === 'funnel'      ? renderFunnel() :
+           currentPage === 'advisor'     ? renderAdvisor() :
            currentPage === 'monetize'    ? renderMonetize() :
            currentPage === 'visuals'     ? renderVisuals() :
            currentPage === 'influencer'  ? renderInfluencer() :
