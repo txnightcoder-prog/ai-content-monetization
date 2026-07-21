@@ -283,7 +283,7 @@ function App() {
     return fetch(url, { ...init, headers });
   }, []);
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad' | 'funnel' | 'advisor' | 'granny'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -6241,6 +6241,530 @@ Example:
     </div>
   );
 
+  // ── Granny Spills Studio state ───────────────────────────────────────────
+  const [grannyTab,         setGrannyTab]         = useState<'bible' | 'scripts' | 'subscription' | 'calendar' | 'video'>('bible');
+  const [grannyTopic,       setGrannyTopic]       = useState('');
+  const [grannyType,        setGrannyType]        = useState('life_lesson');
+  const [grannyDuration,    setGrannyDuration]    = useState('30_seconds');
+  const [grannyScript,      setGrannyScript]      = useState<{script:string;elevenlabs_prompt:string;thumbnail_idea:string;hook_caption:string} | null>(null);
+  const [grannyLoading,     setGrannyLoading]     = useState(false);
+  const [grannyError,       setGrannyError]       = useState('');
+  const [grannyCopied,      setGrannyCopied]      = useState('');
+
+  const generateGrannyScript = async () => {
+    if (!grannyTopic.trim()) return;
+    setGrannyLoading(true); setGrannyError(''); setGrannyScript(null);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/granny-script`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: grannyTopic, script_type: grannyType, duration: grannyDuration }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Failed'); }
+      setGrannyScript(await r.json());
+    } catch (err) { setGrannyError(err instanceof Error ? err.message : 'Failed'); }
+    finally { setGrannyLoading(false); }
+  };
+
+  const grannyCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).catch(() => {});
+    setGrannyCopied(key);
+    setTimeout(() => setGrannyCopied(''), 2000);
+  };
+
+  const renderGranny = () => {
+    const GRANNY_TOPICS = [
+      'Being kind costs nothing', 'Calling someone you love', 'Slow down and breathe',
+      'Forgiveness is for you, not them', 'The value of a good night\'s sleep',
+      'Why comparison steals your joy', 'Saying thank you and meaning it',
+      'Making time for what matters', 'Writing letters instead of texts',
+      'The best things in life take time',
+    ];
+    const TYPE_LABELS: Record<string, string> = {
+      life_lesson: '🌿 Life Lesson',
+      morning_reminder: '☀️ Morning Reminder',
+      weekly_wisdom: '📬 Weekly Wisdom',
+      newsletter_welcome: '💌 Newsletter Welcome',
+      subscription_pitch: '🎁 Subscribe Invite',
+    };
+    const DUR_LABELS: Record<string, string> = {
+      '30_seconds': '30 sec',
+      '60_seconds': '60 sec',
+      '2_minutes':  '2 min',
+    };
+
+    return (
+      <div>
+        {/* Header */}
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'flex-start', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'linear-gradient(135deg,#f59e0b,#d97706)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', flexShrink: 0 }}>👵🏻</div>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1c2b33', margin: '0 0 0.25rem' }}>Granny Spills Studio</h1>
+            <p style={{ color: '#637381', fontSize: '0.875rem', margin: '0 0 0.5rem' }}>
+              Warm Southern grandmother character · Life lessons · Subscription newsletter business
+            </p>
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {['ElevenLabs Voice', 'Weekly Newsletter', 'Subscription Model', 'Short-form Video'].map(tag => (
+                <span key={tag} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '0.2rem 0.65rem', fontSize: '0.75rem', fontWeight: 600, color: '#92400e' }}>{tag}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Quote banner */}
+        <div style={{ background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fde68a', borderRadius: '1rem', padding: '1rem 1.25rem', marginBottom: '1.5rem', fontStyle: 'italic', color: '#78350f', fontSize: '1rem', lineHeight: 1.7 }}>
+          "Now honey, life goes by faster than you think... Don't wait until tomorrow to tell somebody you love them today. Trust me on that one."
+          <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', fontWeight: 700, color: '#d97706', fontStyle: 'normal' }}>— Granny Spills</div>
+        </div>
+
+        {/* Tabs */}
+        <div className="tab-bar" style={{ marginBottom: '1.5rem' }}>
+          {([
+            { id: 'bible' as const,        label: '📖 Voice Bible' },
+            { id: 'scripts' as const,      label: '✍️ Script Generator' },
+            { id: 'subscription' as const, label: '💌 Subscription Model' },
+            { id: 'calendar' as const,     label: '📅 Content Calendar' },
+            { id: 'video' as const,        label: '🎬 Video Setup' },
+          ]).map(t => (
+            <button key={t.id} className={`tab-btn ${grannyTab === t.id ? 'active' : ''}`} onClick={() => setGrannyTab(t.id)}>{t.label}</button>
+          ))}
+        </div>
+
+        {/* ── VOICE BIBLE TAB ── */}
+        {grannyTab === 'bible' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(320px,1fr))', gap: '1.25rem' }}>
+            {/* Voice Formula */}
+            <div className="section-card">
+              <h2 style={{ color: '#d97706' }}>🎙️ The Granny Voice Formula</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
+                {[
+                  ['Warm Southern grandma', '#10b981'],
+                  ['Calm and reassuring', '#3b82f6'],
+                  ['Speaks slowly, never rushes', '#8b5cf6'],
+                  ['Gentle humor', '#f59e0b'],
+                  ['Encouraging, not preachy', '#10b981'],
+                ].map(([trait, color]) => (
+                  <div key={trait} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: color as string, flexShrink: 0 }} />
+                    <span style={{ color: '#1c2b33', fontSize: '0.875rem' }}>{trait}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: '#fffbeb', borderRadius: '0.6rem', padding: '0.85rem', fontSize: '0.8125rem', color: '#78350f', lineHeight: 1.7, fontStyle: 'italic' }}>
+                "Now honey, let me tell you something."<br/>
+                "I've been around long enough to know that being kind is never a mistake."<br/>
+                "Put the phone down for a minute and call somebody you love."
+              </div>
+            </div>
+
+            {/* Signature Phrases */}
+            <div className="section-card">
+              <h2 style={{ color: '#d97706' }}>💬 Signature Phrases</h2>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#637381', marginBottom: '0.4rem' }}>Opening Lines</div>
+                {['Now honey...', 'Pull up a chair.', 'Let Granny tell you something.'].map(p => (
+                  <div key={p} style={{ background: '#f0fdf4', borderRadius: '0.4rem', padding: '0.4rem 0.7rem', marginBottom: '0.3rem', fontSize: '0.875rem', color: '#065f46', fontStyle: 'italic' }}>"{p}"</div>
+                ))}
+              </div>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#637381', marginBottom: '0.4rem' }}>During Advice</div>
+                {['The hard way taught me that lesson.', "I've seen this before.", 'Life has a funny way of teaching us.'].map(p => (
+                  <div key={p} style={{ background: '#eff6ff', borderRadius: '0.4rem', padding: '0.4rem 0.7rem', marginBottom: '0.3rem', fontSize: '0.875rem', color: '#1e40af', fontStyle: 'italic' }}>"{p}"</div>
+                ))}
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#637381', marginBottom: '0.4rem' }}>Sign-offs</div>
+                {["That's enough wisdom for today.", 'Love somebody well.', "I'll see you on the porch tomorrow."].map(p => (
+                  <div key={p} style={{ background: '#fff0f9', borderRadius: '0.4rem', padding: '0.4rem 0.7rem', marginBottom: '0.3rem', fontSize: '0.875rem', color: '#9d174d', fontStyle: 'italic' }}>"{p}"</div>
+                ))}
+              </div>
+            </div>
+
+            {/* Never Says / Always Says */}
+            <div className="section-card">
+              <h2 style={{ color: '#d97706' }}>📜 Voice Bible Rules</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#ef4444', marginBottom: '0.5rem' }}>❌ Granny Never Says</div>
+                  {['Crush it', 'Hustle harder', 'Scale your business', 'Leverage opportunities', 'Content strategy', 'Monetize', 'Personal brand'].map(w => (
+                    <div key={w} style={{ fontSize: '0.8125rem', color: '#dc2626', padding: '0.2rem 0', borderBottom: '1px solid #fee2e2' }}>{w}</div>
+                  ))}
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color: '#10b981', marginBottom: '0.5rem' }}>✅ Granny Always Says</div>
+                  {['Honey', 'Sweetheart', 'Bless your heart', 'Let me tell you', 'I\'ve seen this before', 'Trust me on that', 'Love somebody well'].map(w => (
+                    <div key={w} style={{ fontSize: '0.8125rem', color: '#065f46', padding: '0.2rem 0', borderBottom: '1px solid #bbf7d0' }}>{w}</div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Speaking Style + ElevenLabs */}
+            <div className="section-card">
+              <h2 style={{ color: '#d97706' }}>🎚️ ElevenLabs Voice Settings</h2>
+              <div style={{ background: '#1e293b', borderRadius: '0.6rem', padding: '1rem', fontFamily: 'monospace', fontSize: '0.8125rem', color: '#94a3b8', lineHeight: 1.8, marginBottom: '1rem' }}>
+                <span style={{ color: '#f59e0b' }}>Age:</span> 70-80<br/>
+                <span style={{ color: '#f59e0b' }}>Gender:</span> Female<br/>
+                <span style={{ color: '#f59e0b' }}>Tone:</span> Warm<br/>
+                <span style={{ color: '#f59e0b' }}>Accent:</span> Southern American (Light)<br/>
+                <span style={{ color: '#f59e0b' }}>Stability:</span> High<br/>
+                <span style={{ color: '#f59e0b' }}>Style:</span> Storytelling
+              </div>
+              <div style={{ marginBottom: '0.5rem', fontSize: '0.78rem', fontWeight: 700, color: '#637381', textTransform: 'uppercase' }}>Voice Generation Prompt</div>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.6rem', padding: '0.85rem', fontSize: '0.8125rem', color: '#78350f', lineHeight: 1.7, fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                You are Granny Spills, a kind-hearted grandmother sharing life lessons on a front porch. Speak slowly and warmly. Pause naturally. Smile while speaking. Never sound like a salesman. Always sound encouraging and loving.
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <a href="https://elevenlabs.io" target="_blank" rel="noopener noreferrer"
+                  style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 700, textDecoration: 'none' }}>
+                  🔗 Open ElevenLabs →
+                </a>
+                <a href="https://play.ht" target="_blank" rel="noopener noreferrer"
+                  style={{ background: '#6366f1', color: '#fff', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontSize: '0.8125rem', fontWeight: 700, textDecoration: 'none' }}>
+                  🔗 Try Play.ht →
+                </a>
+              </div>
+            </div>
+
+            {/* Sample 30-sec script */}
+            <div className="section-card" style={{ gridColumn: '1 / -1' }}>
+              <h2 style={{ color: '#d97706' }}>📋 Sample 30-Second Script</h2>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '1.25rem', fontStyle: 'italic', color: '#78350f', lineHeight: 2, fontSize: '1rem', marginBottom: '0.75rem' }}>
+                "Now honey, let me tell you something."<br/><br/>
+                "I've lived long enough to learn that most arguments aren't worth winning."<br/><br/>
+                "You can be right... or you can have peace."<br/><br/>
+                "And most days, peace is a whole lot better."<br/><br/>
+                "Call somebody you love today."<br/><br/>
+                "I'll see you on the porch tomorrow."
+              </div>
+              <button onClick={() => grannyCopy(`"Now honey, let me tell you something."\n\n"I've lived long enough to learn that most arguments aren't worth winning."\n\n"You can be right... or you can have peace."\n\n"And most days, peace is a whole lot better."\n\n"Call somebody you love today."\n\n"I'll see you on the porch tomorrow."`, 'sample')}
+                style={{ background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                {grannyCopied === 'sample' ? '✓ Copied!' : '📋 Copy Script'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── SCRIPT GENERATOR TAB ── */}
+        {grannyTab === 'scripts' && (
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.25rem', marginBottom: '1.25rem' }}>
+              <div className="section-card">
+                <h2>Generate a Granny Script</h2>
+                <div className="form-group">
+                  <label>Topic / Lesson *</label>
+                  <input value={grannyTopic} onChange={e => setGrannyTopic(e.target.value)}
+                    placeholder="e.g. Being kind costs nothing" />
+                </div>
+                {/* Quick topic chips */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1rem' }}>
+                  {GRANNY_TOPICS.map(t => (
+                    <button key={t} onClick={() => setGrannyTopic(t)}
+                      style={{ background: grannyTopic === t ? '#fef3c7' : '#f7f8fa', border: `1px solid ${grannyTopic === t ? '#fde68a' : '#e5e7eb'}`, borderRadius: '999px', padding: '0.25rem 0.7rem', fontSize: '0.75rem', cursor: 'pointer', color: '#1c2b33' }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <div className="form-group">
+                  <label>Script Type</label>
+                  <select value={grannyType} onChange={e => setGrannyType(e.target.value)}>
+                    {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Length</label>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {Object.entries(DUR_LABELS).map(([v, l]) => (
+                      <button key={v} onClick={() => setGrannyDuration(v)}
+                        style={{ flex: 1, background: grannyDuration === v ? '#fef3c7' : '#f7f8fa', border: `1px solid ${grannyDuration === v ? '#f59e0b' : '#e5e7eb'}`, borderRadius: '0.5rem', padding: '0.5rem', fontWeight: 700, fontSize: '0.8125rem', cursor: 'pointer', color: '#1c2b33' }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {grannyError && <div style={{ background: '#fff0f0', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', color: '#dc2626', fontSize: '0.875rem', marginBottom: '0.75rem' }}>⚠️ {grannyError}</div>}
+                <button onClick={generateGrannyScript} disabled={grannyLoading || !grannyTopic.trim()}
+                  style={{ width: '100%', background: grannyLoading ? '#e5e7eb' : '#d97706', color: grannyLoading ? '#9ca3af' : '#fff', border: 'none', borderRadius: '0.6rem', padding: '0.8rem', fontWeight: 800, fontSize: '1rem', cursor: grannyLoading ? 'not-allowed' : 'pointer' }}>
+                  {grannyLoading ? '✍️ Writing Granny\'s script…' : '👵🏻 Generate Script'}
+                </button>
+              </div>
+
+              {/* Result card */}
+              {grannyScript && (
+                <div className="section-card" style={{ gridColumn: 'span 1' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <h2 style={{ margin: 0 }}>Generated Script</h2>
+                    <button onClick={() => grannyCopy(grannyScript.script, 'script')}
+                      style={{ background: '#f59e0b', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.4rem 0.85rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                      {grannyCopied === 'script' ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                  </div>
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '1.25rem', fontStyle: 'italic', color: '#78350f', lineHeight: 2, fontSize: '0.9375rem', marginBottom: '1rem', whiteSpace: 'pre-wrap' }}>
+                    {grannyScript.script}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {[
+                      { label: '🎙️ ElevenLabs Voice Prompt', value: grannyScript.elevenlabs_prompt, key: 'el', bg: '#eff6ff', color: '#1e40af' },
+                      { label: '🖼️ Thumbnail Idea',          value: grannyScript.thumbnail_idea,   key: 'th', bg: '#f0fdf4', color: '#065f46' },
+                      { label: '📲 Hook Caption (social)',   value: grannyScript.hook_caption,     key: 'hk', bg: '#fff0f9', color: '#9d174d' },
+                    ].map(({ label, value, key, bg, color }) => (
+                      <div key={key} style={{ background: bg, borderRadius: '0.6rem', padding: '0.75rem' }}>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 800, textTransform: 'uppercase', color, marginBottom: '0.3rem' }}>{label}</div>
+                        <div style={{ fontSize: '0.875rem', color: '#1c2b33', lineHeight: 1.6 }}>{value}</div>
+                        <button onClick={() => grannyCopy(value, key)}
+                          style={{ marginTop: '0.4rem', background: 'none', border: `1px solid ${color}40`, borderRadius: '0.4rem', padding: '0.25rem 0.6rem', fontSize: '0.75rem', fontWeight: 700, color, cursor: 'pointer' }}>
+                          {grannyCopied === key ? '✓ Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── SUBSCRIPTION MODEL TAB ── */}
+        {grannyTab === 'subscription' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* Business overview */}
+            <div className="section-card" style={{ background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fde68a' }}>
+              <h2 style={{ color: '#92400e' }}>💰 The Granny Spills Business Model</h2>
+              <p style={{ color: '#78350f', fontSize: '0.9rem', marginBottom: '1rem', lineHeight: 1.7 }}>
+                The voice is the product. People don't follow Granny for information — they follow her for <strong>how she makes them feel</strong>.
+                That emotional connection converts to newsletter subscribers, book buyers, and community members.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: '1rem' }}>
+                {[
+                  { tier: 'Free',             price: '$0/mo',    desc: 'Daily 30-sec videos on TikTok, Instagram, YouTube Shorts',            icon: '🎥', color: '#6b7280' },
+                  { tier: 'Newsletter',        price: '$0/mo',    desc: 'Weekly wisdom email — Granny\'s letter to the porch. Grows email list.', icon: '📬', color: '#3b82f6' },
+                  { tier: 'Granny\'s Circle',  price: '$9/mo',    desc: 'Weekly longer audio/video + downloadable wisdom cards',               icon: '☕', color: '#10b981' },
+                  { tier: 'Front Porch VIP',   price: '$27/mo',   desc: 'Monthly live Q&A, exclusive letters, printable recipe/life cards',    icon: '🌿', color: '#8b5cf6' },
+                  { tier: 'Granny\'s Books',   price: '$9-19',    desc: '"Porch Wisdom" PDF/print books sold on Gumroad',                     icon: '📖', color: '#f59e0b' },
+                  { tier: 'Brand Deals',       price: '$500+',    desc: 'Home goods, tea brands, greeting cards at 100K+ followers',          icon: '🤝', color: '#ef4444' },
+                ].map(item => (
+                  <div key={item.tier} style={{ background: '#fff', border: `1px solid ${item.color}30`, borderRadius: '0.75rem', padding: '1rem' }}>
+                    <div style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>{item.icon}</div>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1c2b33', marginBottom: '0.2rem' }}>{item.tier}</div>
+                    <div style={{ fontWeight: 700, fontSize: '1rem', color: item.color, marginBottom: '0.4rem' }}>{item.price}</div>
+                    <div style={{ color: '#637381', fontSize: '0.8rem', lineHeight: 1.5 }}>{item.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Email/newsletter setup */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.25rem' }}>
+              <div className="section-card">
+                <h2 style={{ color: '#3b82f6' }}>📬 Newsletter Strategy</h2>
+                <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1rem', lineHeight: 1.6 }}>
+                  The newsletter is the backbone. Every video ends with: <em>"Subscribe to Granny's weekly letter at [link]."</em> You own this list forever.
+                </p>
+                {[
+                  { step: '1', title: 'Set up Beehiiv (free)', detail: 'Granny sends every Sunday morning — "Granny\'s Porch Letter"', link: 'https://beehiiv.com', linkLabel: 'beehiiv.com →' },
+                  { step: '2', title: 'Welcome sequence (3 emails)', detail: 'Day 1: Welcome. Day 3: Best piece of advice. Day 7: Invite to Granny\'s Circle ($9/mo)', link: null, linkLabel: '' },
+                  { step: '3', title: 'Weekly send — every Sunday', detail: '300-word wisdom letter. 1 life lesson. 1 quote. 1 call to action (buy book or upgrade).', link: null, linkLabel: '' },
+                  { step: '4', title: 'Convert to paid', detail: 'At 500 subscribers → launch $9/mo Granny\'s Circle. At 2K → $27/mo Front Porch VIP.', link: null, linkLabel: '' },
+                ].map(item => (
+                  <div key={item.step} style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.85rem', alignItems: 'flex-start' }}>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 900, flexShrink: 0 }}>{item.step}</div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1c2b33', marginBottom: '0.2rem' }}>{item.title}</div>
+                      <div style={{ color: '#637381', fontSize: '0.8125rem', lineHeight: 1.5 }}>{item.detail}</div>
+                      {item.link && <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', fontSize: '0.78rem', fontWeight: 700 }}>{item.linkLabel}</a>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="section-card">
+                <h2 style={{ color: '#8b5cf6' }}>📚 Gumroad Book Products</h2>
+                <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1rem' }}>These write themselves — just compile Granny's wisdom into themed PDFs.</p>
+                {[
+                  { title: '"Porch Wisdom: 52 Weekly Letters"', price: '$12', desc: '52 short wisdom pieces — one for every Sunday of the year' },
+                  { title: '"What Granny Knows About Love"',     price: '$9',  desc: '30 short lessons on relationships, kindness, and family' },
+                  { title: '"Letters I Wish I\'d Gotten"',       price: '$15', desc: 'Longer personal letters for life moments: grief, new baby, divorce' },
+                  { title: '"The Slow Life Guide"',              price: '$19', desc: 'Granny\'s guide to slowing down, being present, and finding peace' },
+                ].map(book => (
+                  <div key={book.title} style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: '0.6rem', padding: '0.75rem', marginBottom: '0.6rem' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1c2b33' }}>{book.title}</div>
+                    <div style={{ fontWeight: 800, color: '#8b5cf6', fontSize: '0.9rem' }}>{book.price}</div>
+                    <div style={{ color: '#637381', fontSize: '0.8rem', marginTop: '0.2rem' }}>{book.desc}</div>
+                  </div>
+                ))}
+                <button onClick={() => { setCurrentPage('gumroad'); }}
+                  style={{ width: '100%', marginTop: '0.5rem', background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                  Create in Gumroad Studio →
+                </button>
+              </div>
+
+              {/* Revenue timeline */}
+              <div className="section-card" style={{ gridColumn: '1 / -1' }}>
+                <h2 style={{ color: '#10b981' }}>📈 Realistic Revenue Timeline</h2>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f0fdf4' }}>
+                        {['Period', 'Followers', 'Email Subs', 'Revenue', 'Focus'].map(h => (
+                          <th key={h} style={{ padding: '0.65rem 0.85rem', textAlign: 'left', color: '#065f46', fontWeight: 800, borderBottom: '2px solid #bbf7d0' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        ['Month 1-2',  '0 → 500',    '0 → 100',     '$0',          'Post daily 30-sec videos. Build voice consistency.'],
+                        ['Month 3-4',  '500 → 2K',   '100 → 400',   '$50-200',     'Launch newsletter. Publish first Gumroad book ($9).'],
+                        ['Month 5-6',  '2K → 10K',   '400 → 1.2K',  '$200-800',    'Launch $9/mo Granny\'s Circle. Second book.'],
+                        ['Month 7-9',  '10K → 30K',  '1.2K → 4K',   '$1K-3K',      'Add $27/mo VIP tier. HeyGen lip-sync videos.'],
+                        ['Month 10-12','30K → 75K',  '4K → 10K',    '$3K-8K',      'Brand deals. Course. Physical book pitch.'],
+                      ].map((row, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #e5e7eb', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                          {row.map((cell, j) => (
+                            <td key={j} style={{ padding: '0.65rem 0.85rem', color: j === 3 ? '#10b981' : '#1c2b33', fontWeight: j === 3 ? 800 : 400 }}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── CONTENT CALENDAR TAB ── */}
+        {grannyTab === 'calendar' && (
+          <div>
+            <div className="section-card" style={{ marginBottom: '1.25rem' }}>
+              <h2>📅 Granny's Weekly Posting Schedule</h2>
+              <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1.25rem' }}>Consistency is everything. Granny posts the same time every day — readers should expect her like clockwork.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: '0.75rem' }}>
+                {[
+                  { day: 'Monday',    type: '☀️ Morning Reminder',  platform: 'TikTok + Reels',    tip: '"Start the week right, honey."' },
+                  { day: 'Tuesday',   type: '🌿 Life Lesson',        platform: 'YouTube Shorts',    tip: 'Longer 60-sec wisdom piece' },
+                  { day: 'Wednesday', type: '💬 Signature Quote',    platform: 'Instagram Post',    tip: 'Quote card — simple design' },
+                  { day: 'Thursday',  type: '📖 Story Time',         platform: 'TikTok + Reels',    tip: 'Personal story with lesson' },
+                  { day: 'Friday',    type: '❤️ Encouragement',      platform: 'All platforms',      tip: '"You\'ve done good this week."' },
+                  { day: 'Saturday',  type: '🎁 Subscribe Invite',   platform: 'TikTok + YouTube',  tip: 'Soft pitch for newsletter' },
+                  { day: 'Sunday',    type: '📬 Newsletter Send',     platform: 'Email (Beehiiv)',    tip: 'Granny\'s weekly letter goes out' },
+                ].map(item => (
+                  <div key={item.day} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.85rem' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.875rem', color: '#92400e', marginBottom: '0.2rem' }}>{item.day}</div>
+                    <div style={{ fontSize: '0.9rem', marginBottom: '0.3rem' }}>{item.type}</div>
+                    <div style={{ fontSize: '0.72rem', color: '#d97706', fontWeight: 700, marginBottom: '0.4rem' }}>{item.platform}</div>
+                    <div style={{ fontSize: '0.78rem', color: '#78350f', fontStyle: 'italic' }}>{item.tip}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="section-card">
+              <h2>🌱 30-Day Quick-Start Topics</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(200px,1fr))', gap: '0.4rem' }}>
+                {[
+                  'Why kindness is never a mistake', 'Put the phone down', 'Call somebody you love',
+                  'Most arguments aren\'t worth winning', 'Say sorry first', 'Sleep is wisdom',
+                  'A good meal fixes almost anything', 'Slow down and notice things', 'Write a thank-you note',
+                  'Don\'t compare your life', 'Be someone\'s reason to smile', 'Fix what you can, let go of the rest',
+                  'Tell people you love them now', 'Forgiveness is peace, not approval', 'Plant something and watch it grow',
+                  'Cook for someone who needs it', 'Read something every day', 'Make your bed every morning',
+                  'Visit someone who is lonely', 'Keep a few good friends', 'Pray or be grateful daily',
+                  'Don\'t rush the good parts', 'A walk cures most things', 'Bake for your neighbors',
+                  'Write down what you\'re thankful for', 'Rest is not lazy', 'Talk to elderly people — they know',
+                  'Save something for a rainy day', 'Mean what you say', 'Leave things better than you found them',
+                ].map((topic, i) => (
+                  <button key={i} onClick={() => { setGrannyTopic(topic); setGrannyTab('scripts'); }}
+                    style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: '0.5rem', padding: '0.5rem 0.65rem', fontSize: '0.8rem', cursor: 'pointer', color: '#78350f', textAlign: 'left', fontWeight: 500 }}>
+                    {i+1}. {topic}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── VIDEO SETUP TAB ── */}
+        {grannyTab === 'video' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '1.25rem' }}>
+            <div className="section-card">
+              <h2 style={{ color: '#d97706' }}>🖼️ Granny Visual Style</h2>
+              <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                Warm, inviting, and timeless. Viewers should feel like they stepped onto a front porch.
+              </p>
+              {[
+                { label: 'Setting',    val: 'Front porch, rocking chair, soft afternoon light' },
+                { label: 'Colors',     val: 'Warm amber, cream, sage green, faded wood tones' },
+                { label: 'Clothing',   val: 'Floral housedress or soft cardigan, reading glasses' },
+                { label: 'Props',      val: 'Cup of tea, open book, garden flowers, handkerchief' },
+                { label: 'Camera',     val: 'Close-up or medium shot. Never fast cuts. Slow and steady.' },
+                { label: 'Captions',   val: 'Simple serif font, warm color, large and readable' },
+              ].map(item => (
+                <div key={item.label} style={{ borderBottom: '1px solid #fde68a', padding: '0.5rem 0', display: 'flex', gap: '0.75rem' }}>
+                  <span style={{ fontWeight: 800, fontSize: '0.8rem', color: '#d97706', minWidth: '70px' }}>{item.label}</span>
+                  <span style={{ color: '#78350f', fontSize: '0.8rem', lineHeight: 1.5 }}>{item.val}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="section-card">
+              <h2 style={{ color: '#8b5cf6' }}>🤖 HeyGen Lip-Sync Setup</h2>
+              <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                Once you have consistent Granny images, combine with ElevenLabs audio using HeyGen for talking videos.
+              </p>
+              <div style={{ background: '#1e293b', borderRadius: '0.6rem', padding: '1rem', fontFamily: 'monospace', fontSize: '0.8rem', color: '#94a3b8', lineHeight: 2, marginBottom: '1rem' }}>
+                <span style={{ color: '#a78bfa' }}>Step 1:</span> Generate Granny image (consistent look)<br/>
+                <span style={{ color: '#a78bfa' }}>Step 2:</span> Generate audio via ElevenLabs<br/>
+                <span style={{ color: '#a78bfa' }}>Step 3:</span> Upload both to HeyGen<br/>
+                <span style={{ color: '#a78bfa' }}>Step 4:</span> Generate lip-sync video (2-3 min)<br/>
+                <span style={{ color: '#a78bfa' }}>Step 5:</span> Add captions + post
+              </div>
+              <a href="https://heygen.com" target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-block', background: '#8b5cf6', color: '#fff', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8125rem', textDecoration: 'none' }}>
+                🔗 Open HeyGen →
+              </a>
+            </div>
+
+            <div className="section-card">
+              <h2 style={{ color: '#10b981' }}>✍️ AI Image Prompt — Granny</h2>
+              <div style={{ background: '#1e293b', borderRadius: '0.6rem', padding: '1rem', fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.8, fontFamily: 'monospace', marginBottom: '0.75rem' }}>
+                Photorealistic elderly Southern grandmother, age 72, silver-white hair in a soft bun, warm smile with kind eyes, wearing a floral housedress and pearl earrings, sitting on a wooden front porch rocking chair, holding a cup of tea, afternoon golden hour light, lush green garden background, warm amber tones, cozy and inviting atmosphere, 4K, hyperrealistic
+              </div>
+              <button onClick={() => grannyCopy('Photorealistic elderly Southern grandmother, age 72, silver-white hair in a soft bun, warm smile with kind eyes, wearing a floral housedress and pearl earrings, sitting on a wooden front porch rocking chair, holding a cup of tea, afternoon golden hour light, lush green garden background, warm amber tones, cozy and inviting atmosphere, 4K, hyperrealistic', 'img')}
+                style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8125rem', cursor: 'pointer' }}>
+                {grannyCopied === 'img' ? '✓ Copied!' : '📋 Copy Prompt'}
+              </button>
+              <div style={{ marginTop: '0.85rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <a href="https://www.midjourney.com" target="_blank" rel="noopener noreferrer"
+                  style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>Midjourney →</a>
+                <a href="https://creator.nightcafe.studio" target="_blank" rel="noopener noreferrer"
+                  style={{ background: '#4c1d95', color: '#fff', borderRadius: '0.5rem', padding: '0.4rem 0.8rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>NightCafe →</a>
+              </div>
+            </div>
+
+            {/* Quick-start button */}
+            <div className="section-card" style={{ gridColumn: '1 / -1', background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fde68a' }}>
+              <h2 style={{ color: '#92400e' }}>🚀 Quick Start — Generate Your First Granny Script</h2>
+              <p style={{ color: '#78350f', fontSize: '0.875rem', marginBottom: '1rem' }}>You have everything you need. Start with one 30-second video and post it today.</p>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <button onClick={() => { setGrannyTopic('Being kind costs nothing'); setGrannyTab('scripts'); }}
+                  style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.25rem', fontWeight: 700, cursor: 'pointer' }}>
+                  👵🏻 Write First Script →
+                </button>
+                <button onClick={() => setGrannyTab('subscription')}
+                  style={{ background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.25rem', fontWeight: 700, cursor: 'pointer' }}>
+                  💰 See Business Model →
+                </button>
+                <button onClick={() => setCurrentPage('funnel')}
+                  style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.65rem 1.25rem', fontWeight: 700, cursor: 'pointer' }}>
+                  📧 Set Up Email Funnel →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Sidebar navigation definition ──────────────────────────────────────────
 
   // -- AI Influencer Studio state --
@@ -6630,6 +7154,7 @@ Example:
         { id: 'videos',      icon: '🎬', label: 'Video Generator',  badge: videoProvider?.provider === 'veo' ? 'Veo3' : null },
         { id: 'visuals',     icon: '🎨', label: 'AI Visuals',       badge: null },
         { id: 'influencer',  icon: 'AI', label: 'AI Influencer',    badge: 'New' },
+        { id: 'granny',      icon: '👵🏻', label: 'Granny Spills',    badge: 'New' },
       ],
     },
     {
@@ -6664,7 +7189,8 @@ Example:
     parrot:      { page: 'trending',  label: 'See Trending →',         hint: 'Find what is trending right now' },
     trending:    { page: 'scripts',   label: 'Write Script →',         hint: 'Turn a trending topic into a script' },
     visuals:     { page: 'videos',    label: 'Generate Video →',       hint: 'Use your visuals in a full video' },
-    influencer:  { page: 'visuals',   label: 'AI Visuals ->',  hint: 'Generate profile images and content packs for your influencer' },
+    influencer:  { page: 'granny',    label: 'Granny Spills →', hint: 'Build the Granny Spills subscription character' },
+    granny:      { page: 'visuals',   label: 'AI Visuals →',    hint: 'Generate Granny images for video thumbnails' },
     diagnostics: { page: 'help',      label: 'Read Guide →',           hint: 'Full workflow guide and tips' },
     help:        { page: 'home',      label: '← Dashboard',            hint: 'Return to your dashboard' },
   };
@@ -6929,6 +7455,7 @@ Example:
            currentPage === 'monetize'    ? renderMonetize() :
            currentPage === 'visuals'     ? renderVisuals() :
            currentPage === 'influencer'  ? renderInfluencer() :
+           currentPage === 'granny'      ? renderGranny() :
            renderHelp()}
           {/* What's Next bar on every page */}
           <WhatsNext page={currentPage} />

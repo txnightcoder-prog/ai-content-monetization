@@ -829,6 +829,95 @@ async def growth_advisor(
         raise HTTPException(status_code=500, detail=f"Growth advisor failed: {exc}")
 
 
+# ── Granny Spills ─────────────────────────────────────────────────────────────
+
+GRANNY_SYSTEM = (
+    "You are Granny Spills — a warm Southern grandmother sharing life lessons on a front porch. "
+    "Your voice is calm, reassuring, and never rushed. You speak in short, simple sentences with natural pauses. "
+    "You use words like 'honey', 'sweetheart', 'bless your heart', 'let me tell you something'. "
+    "You NEVER say: crush it, hustle harder, scale your business, leverage opportunities, or any marketing jargon. "
+    "Your tone is encouraging, gentle, and hopeful — never preachy, never argumentative. "
+    "You smile while speaking. Every script ends with a loving sign-off like 'I'll see you on the porch tomorrow.'"
+)
+
+GRANNY_OPENINGS = [
+    "Now honey, let me tell you something.",
+    "Pull up a chair, sweetheart.",
+    "Let Granny tell you something.",
+    "Come sit down for a minute, honey.",
+]
+
+GRANNY_CLOSINGS = [
+    "I'll see you on the porch tomorrow.",
+    "That's enough wisdom for today. Love somebody well.",
+    "Now go on and call somebody you love.",
+    "That's all Granny's got for today, honey.",
+]
+
+
+class GrannyScriptRequest(BaseModel):
+    topic: str
+    script_type: str = "life_lesson"  # life_lesson | morning_reminder | weekly_wisdom | newsletter_welcome | subscription_pitch
+    duration: str = "30_seconds"       # 30_seconds | 60_seconds | 2_minutes
+
+
+@router.post("/granny-script")
+async def granny_script(
+    request: GrannyScriptRequest,
+    openai=Depends(_make_ai_service),
+):
+    """
+    Generate a Granny Spills script with the exact voice formula:
+    warm Southern grandmother, short sentences, natural pauses, signature phrases.
+    """
+    type_guide = {
+        "life_lesson": "a short life lesson or piece of wisdom",
+        "morning_reminder": "a gentle morning reminder or encouragement",
+        "weekly_wisdom": "a weekly wisdom drop for email/newsletter subscribers",
+        "newsletter_welcome": "a warm welcome email to new newsletter subscribers",
+        "subscription_pitch": "a gentle, non-salesy invitation to subscribe to Granny's weekly newsletter",
+    }
+    dur_guide = {
+        "30_seconds": "30 seconds (~75 words). End with a one-line sign-off.",
+        "60_seconds": "60 seconds (~150 words). Build gently, end with warmth.",
+        "2_minutes":  "2 minutes (~300 words). Tell a short story with a lesson. Include opening, middle, and closing.",
+    }
+
+    prompt = (
+        f"Write {type_guide.get(request.script_type, 'a short life lesson')} about: {request.topic}\n\n"
+        f"Length: {dur_guide.get(request.duration, dur_guide['30_seconds'])}\n\n"
+        "Rules:\n"
+        "- Start with one of Granny's signature openings\n"
+        "- Short sentences. Simple words. Lots of natural pauses (use '...' for pause)\n"
+        "- Warm, Southern grandmother voice — never robotic, never a salesman\n"
+        "- Include at least one of: honey, sweetheart, bless your heart\n"
+        "- End with a Granny sign-off\n\n"
+        "Also return:\n"
+        "- elevenlabs_prompt: the voice generation prompt for ElevenLabs (3-4 sentences describing exactly how to say it)\n"
+        "- thumbnail_idea: a simple description for a thumbnail image (Granny on porch, what she's doing/holding)\n"
+        "- hook_caption: a 10-word social media caption hook\n\n"
+        "Return ONLY a valid JSON object:\n"
+        '{"script": "...", "elevenlabs_prompt": "...", "thumbnail_idea": "...", "hook_caption": "..."}'
+    )
+
+    try:
+        import json, re
+        raw = await openai.generate_completion(
+            prompt=prompt,
+            system_message=GRANNY_SYSTEM,
+            temperature=0.85,
+            max_tokens=800,
+        )
+        text = raw.strip()
+        m = re.search(r'\{.*\}', text, re.DOTALL)
+        if m:
+            text = m.group(0)
+        return json.loads(text)
+    except Exception as exc:
+        logger.exception("granny-script failed")
+        raise HTTPException(status_code=500, detail=f"Script generation failed: {exc}")
+
+
 # Made with Bob
 
 
