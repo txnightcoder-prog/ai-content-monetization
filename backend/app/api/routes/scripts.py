@@ -747,3 +747,61 @@ async def generate_from_top_performers(
 
 
 # Made with Bob
+
+
+class PdfProductIdeasRequest(BaseModel):
+    niche: str = "AI tools"
+    trending_topics: list[str] = []   # optional — pass trending titles to anchor ideas
+
+
+@router.post("/pdf-product-ideas")
+async def pdf_product_ideas(
+    request: PdfProductIdeasRequest,
+    openai=Depends(_make_ai_service),
+):
+    """
+    **Generate Gumroad PDF product ideas** based on trending topics in the niche.
+
+    Returns 5 product ideas, each with:
+    - title, tagline, price, target_audience
+    - chapters (outline), gumroad_description, promo_hook (for video CTA)
+    """
+    trending_context = ""
+    if request.trending_topics:
+        trending_context = (
+            f"\n\nCurrently trending topics in this niche:\n"
+            + "\n".join(f"- {t}" for t in request.trending_topics[:10])
+        )
+
+    prompt = (
+        f"You are a digital product expert. Generate 5 high-converting Gumroad PDF product ideas "
+        f"for the '{request.niche}' niche.{trending_context}\n\n"
+        "For each product return a JSON object with:\n"
+        "- title (string): compelling product name\n"
+        "- tagline (string): one-line value proposition\n"
+        "- price (number): suggested price in USD (e.g. 9, 17, 27, 37, 47)\n"
+        "- target_audience (string): who this is for\n"
+        "- chapters (array of 5-7 strings): PDF chapter titles\n"
+        "- gumroad_description (string): 2-3 sentence Gumroad product description\n"
+        "- promo_hook (string): 15-word video hook to promote this product\n"
+        "- trending_angle (string): why this topic is hot right now\n\n"
+        "Return ONLY a valid JSON array of 5 objects. No markdown, no explanation."
+    )
+
+    try:
+        raw = await openai.generate_completion(
+            prompt=prompt,
+            system_message="You are a digital product expert who helps creators sell PDFs and guides on Gumroad.",
+            temperature=0.8,
+            max_tokens=2000,
+        )
+        import json, re
+        match = re.search(r"\[[\s\S]*\]", raw)
+        if not match:
+            raise ValueError("No JSON array in response")
+        ideas = json.loads(match.group())
+        return {"ideas": ideas, "niche": request.niche}
+    except Exception as exc:
+        logger.exception("PDF product ideas failed")
+        raise HTTPException(status_code=500, detail=f"Failed to generate ideas: {exc}")
+

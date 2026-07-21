@@ -178,6 +178,23 @@ interface AIImage {
   provider: string;
 }
 
+// ── Workflow steps banner ─────────────────────────────────────────────────────
+function WorkflowSteps({ steps }: { steps: { n: number; label: string; detail: string }[] }) {
+  return (
+    <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', overflow: 'hidden', flexWrap: 'wrap' }}>
+      {steps.map((s, i) => (
+        <div key={s.n} style={{ flex: '1 1 160px', display: 'flex', gap: '0.75rem', alignItems: 'flex-start', padding: '0.875rem 1rem', borderRight: i < steps.length - 1 ? '1px solid #e5e7eb' : 'none', background: 'transparent' }}>
+          <div style={{ minWidth: '1.75rem', height: '1.75rem', borderRadius: '50%', background: '#3b82d4', color: '#fff', fontWeight: 800, fontSize: '0.8125rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '0.05rem' }}>{s.n}</div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.8125rem', color: '#1f2328', lineHeight: 1.3 }}>{s.label}</div>
+            <div style={{ fontSize: '0.75rem', color: '#57606a', marginTop: '0.2rem', lineHeight: 1.4 }}>{s.detail}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Login screen ─────────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = React.useState('');
@@ -266,7 +283,7 @@ function App() {
     return fetch(url, { ...init, headers });
   }, []);
 
-  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'source' | 'scripts' | 'blueprint' | 'videos' | 'parrot' | 'trending' | 'diagnostics' | 'monetize' | 'analytics' | 'help' | 'visuals' | 'monitor' | 'orders' | 'influencer' | 'users' | 'gumroad'>('home');
   const [sourceTab, setSourceTab] = useState<'parrot' | 'trending'>('parrot');
   const [scriptTab, setScriptTab] = useState<'quick' | 'blueprint'>('quick');
   const [topic, setTopic] = useState('');
@@ -1540,6 +1557,12 @@ function App() {
     <div className="videos-page">
       <h1>🦜 Parrot a Video</h1>
       <p className="subtitle">Find a YouTube video you love → AI reverse-engineers its structure → creates a Blueprint in your niche</p>
+      <WorkflowSteps steps={[
+        { n: 1, label: 'Paste a YouTube URL', detail: 'Any video that\'s performing well in your niche' },
+        { n: 2, label: 'Analyse It', detail: 'AI reverse-engineers the structure, hooks and shot list' },
+        { n: 3, label: 'Generate Your Script', detail: 'One click creates a script in your niche from the blueprint' },
+        { n: 4, label: 'Go to Videos', detail: 'Paste the Script ID to generate your Veo 3 video' },
+      ]} />
 
       <div className="generator-form">
         <div className="form-group">
@@ -1791,6 +1814,12 @@ function App() {
     <div className="videos-page">
       <h1>🔥 Trending Now</h1>
       <p className="subtitle">See what's hot across YouTube, TikTok and Instagram — with a suggested angle for your niche</p>
+      <WorkflowSteps steps={[
+        { n: 1, label: 'Pick your niche', detail: 'Choose the topic area you create content for' },
+        { n: 2, label: 'Fetch Trending Now', detail: 'Pull live trending videos from YouTube, TikTok & Instagram' },
+        { n: 3, label: 'Auto-Script All Trends', detail: 'AI generates a script for every trending topic in one click' },
+        { n: 4, label: 'Generate & Post All Videos', detail: 'Veo 3 creates each video then posts to all your social platforms' },
+      ]} />
 
       <div className="generator-form">
         <div className="form-group">
@@ -3738,6 +3767,314 @@ function App() {
   );
 
 
+  // ── Gumroad Studio page ───────────────────────────────────────────────────
+  const [gmTab,           setGmTab]           = useState<'ideas'|'products'|'analytics'>('ideas');
+  const [gmNiche,         setGmNiche]         = useState('AI tools');
+  const [gmIdeas,         setGmIdeas]         = useState<any[]>([]);
+  const [gmIdeasLoading,  setGmIdeasLoading]  = useState(false);
+  const [gmIdeasError,    setGmIdeasError]    = useState('');
+  const [gmExpanded,      setGmExpanded]      = useState<number|null>(null);
+  const [gmProducts,      setGmProducts]      = useState<any[]>([]);
+  const [gmProdLoading,   setGmProdLoading]   = useState(false);
+  const [gmProdError,     setGmProdError]     = useState('');
+  const [gmNewName,       setGmNewName]       = useState('');
+  const [gmNewPrice,      setGmNewPrice]      = useState('');
+  const [gmNewDesc,       setGmNewDesc]       = useState('');
+  const [gmNewGumId,      setGmNewGumId]      = useState('');
+  const [gmSaving,        setGmSaving]        = useState(false);
+  const [gmSaveMsg,       setGmSaveMsg]       = useState('');
+  const [gmOrders,        setGmOrders]        = useState<any[]>([]);
+  const [gmOrdersLoading, setGmOrdersLoading] = useState(false);
+  const [gmRevenue,       setGmRevenue]       = useState(0);
+
+  const fetchGmProducts = async () => {
+    setGmProdLoading(true); setGmProdError('');
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/products/?limit=50`);
+      if (!r.ok) throw new Error('Failed to load products');
+      const d = await r.json(); setGmProducts(d.items ?? []);
+    } catch (e) { setGmProdError(e instanceof Error ? e.message : 'Error'); }
+    finally { setGmProdLoading(false); }
+  };
+
+  const fetchGmOrders = async () => {
+    setGmOrdersLoading(true);
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/orders/?limit=100`);
+      if (r.ok) {
+        const d = await r.json();
+        const items = d.items ?? [];
+        setGmOrders(items);
+        setGmRevenue(items.reduce((s: number, o: any) => s + (o.price_cents ?? 0) / 100, 0));
+      }
+    } catch { /* ignore */ }
+    finally { setGmOrdersLoading(false); }
+  };
+
+  const saveGmProduct = async () => {
+    if (!gmNewName.trim() || !gmNewPrice.trim()) { setGmSaveMsg('Name and price are required'); return; }
+    setGmSaving(true); setGmSaveMsg('');
+    try {
+      const r = await apiFetch(`${API_BASE}/api/v1/products/`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: gmNewName.trim(), price: parseFloat(gmNewPrice), description: gmNewDesc.trim() || undefined, stan_store_product_id: gmNewGumId.trim() || undefined }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Save failed'); }
+      setGmSaveMsg('✅ Product saved!');
+      setGmNewName(''); setGmNewPrice(''); setGmNewDesc(''); setGmNewGumId('');
+      fetchGmProducts();
+    } catch (e) { setGmSaveMsg(`❌ ${e instanceof Error ? e.message : 'Error'}`); }
+    finally { setGmSaving(false); }
+  };
+
+  const fetchPdfIdeas = async () => {
+    setGmIdeasLoading(true); setGmIdeasError(''); setGmIdeas([]);
+    try {
+      const trendingTopics = autoQueueResult?.scripts?.map((s: any) => s.topic) ?? [];
+      const r = await apiFetch(`${API_BASE}/api/v1/scripts/pdf-product-ideas`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ niche: gmNiche, trending_topics: trendingTopics }),
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.detail ?? 'Failed'); }
+      const d = await r.json(); setGmIdeas(d.ideas ?? []);
+    } catch (e) { setGmIdeasError(e instanceof Error ? e.message : 'Error'); }
+    finally { setGmIdeasLoading(false); }
+  };
+
+  const renderGumroad = () => {
+    const TAB = (id: typeof gmTab, label: string) => (
+      <button onClick={() => { setGmTab(id); if (id === 'products') fetchGmProducts(); if (id === 'analytics') { fetchGmProducts(); fetchGmOrders(); } }}
+        style={{ padding: '0.5rem 1.25rem', borderRadius: '999px', border: `2px solid #8b5cf6`, background: gmTab === id ? '#8b5cf6' : 'transparent', color: gmTab === id ? '#fff' : '#8b5cf6', fontWeight: 700, cursor: 'pointer', fontSize: '0.9rem' }}>
+        {label}
+      </button>
+    );
+    const statusColor = (s: string) => ({ delivered: '#10b981', failed: '#ef4444', generating: '#f59e0b', queued: '#3b82f6' }[s] ?? '#94a3b8');
+
+    return (
+      <div className="videos-page">
+        <h1>🛒 Gumroad Studio</h1>
+        <p className="subtitle">Find trending PDF ideas, manage your products, and track orders & revenue</p>
+        <WorkflowSteps steps={[
+          { n: 1, label: 'Find trending PDF ideas', detail: 'AI picks hot topics your audience will buy based on what\'s trending' },
+          { n: 2, label: 'Create your product', detail: 'Add it to Gumroad and paste the product ID here to track sales' },
+          { n: 3, label: 'Promote with a video', detail: 'Use the promo hook to make a video — Generate & Post from Trending' },
+          { n: 4, label: 'Track orders & revenue', detail: 'Gumroad pings this app on every sale — see revenue in Analytics tab' },
+        ]} />
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+          {TAB('ideas', '💡 Trending PDF Ideas')}
+          {TAB('products', '📦 My Products')}
+          {TAB('analytics', '📈 Orders & Revenue')}
+        </div>
+
+        {/* ── IDEAS TAB ─────────────────────────────────────────────────── */}
+        {gmTab === 'ideas' && (
+          <div>
+            <div className="generator-form" style={{ marginBottom: '1.5rem' }}>
+              <div className="form-group">
+                <label>Your Niche</label>
+                <select value={gmNiche} onChange={e => setGmNiche(e.target.value)}>
+                  <option value="AI tools">💰 AI Tools / Online Business</option>
+                  <option value="technology">💻 Technology</option>
+                  <option value="education">📚 Education</option>
+                  <option value="health">💪 Health & Fitness</option>
+                  <option value="side hustles">💸 Side Hustles</option>
+                  <option value="finance">📈 Finance / Investing</option>
+                  <option value="kids">🧒 Kids & Family</option>
+                  <option value="productivity">⚡ Productivity</option>
+                  <option value="marketing">📣 Marketing</option>
+                </select>
+              </div>
+              <button className="generate-button" onClick={fetchPdfIdeas} disabled={gmIdeasLoading}>
+                {gmIdeasLoading ? '⏳ Finding trending ideas…' : '🔍 Find Trending PDF Ideas to Sell'}
+              </button>
+              {autoQueueResult?.scripts?.length ? (
+                <p style={{ color: '#2a9d5c', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>✅ Using {autoQueueResult.scripts.length} trending topics from your last Auto-Script run to personalise ideas</p>
+              ) : (
+                <p style={{ color: '#57606a', fontSize: '0.8rem', margin: '0.5rem 0 0' }}>Tip: Run Auto-Script on the Trending page first to anchor ideas to what's actually getting views right now</p>
+              )}
+              {gmIdeasError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{gmIdeasError}</div>}
+            </div>
+
+            {gmIdeas.map((idea, i) => (
+              <div key={i} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.875rem', marginBottom: '1rem', overflow: 'hidden' }}>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', gap: '1rem', flexWrap: 'wrap', cursor: 'pointer' }}
+                  onClick={() => setGmExpanded(gmExpanded === i ? null : i)}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <span style={{ background: '#8b5cf6', color: '#fff', borderRadius: '999px', padding: '0.2rem 0.75rem', fontWeight: 700, fontSize: '0.78rem' }}>${idea.price}</span>
+                      <span style={{ fontWeight: 800, fontSize: '0.9375rem', color: '#1f2328' }}>{idea.title}</span>
+                    </div>
+                    <p style={{ color: '#57606a', fontSize: '0.8125rem', margin: '0.25rem 0 0' }}>{idea.tagline}</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+                    <span style={{ background: 'rgba(16,185,129,0.1)', color: '#059669', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '0.375rem', padding: '0.2rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}>🔥 {idea.trending_angle?.split(' ').slice(0,5).join(' ')}</span>
+                    <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>{gmExpanded === i ? '▲' : '▼'}</span>
+                  </div>
+                </div>
+
+                {/* Expanded detail */}
+                {gmExpanded === i && (
+                  <div style={{ borderTop: '1px solid #e5e7eb', padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: '1rem' }}>
+                      {/* Chapters */}
+                      <div>
+                        <p style={{ fontWeight: 700, fontSize: '0.8rem', color: '#3b82d4', textTransform: 'uppercase', marginBottom: '0.4rem' }}>📄 PDF Chapters</p>
+                        {(idea.chapters ?? []).map((ch: string, ci: number) => (
+                          <div key={ci} style={{ display: 'flex', gap: '0.5rem', padding: '0.3rem 0', borderBottom: '1px solid #f0f0f0' }}>
+                            <span style={{ color: '#94a3b8', fontWeight: 700, fontSize: '0.78rem', flexShrink: 0 }}>{ci+1}.</span>
+                            <span style={{ color: '#374151', fontSize: '0.8125rem' }}>{ch}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Right column */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                          <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#57606a', textTransform: 'uppercase', margin: '0 0 0.35rem' }}>👥 Target Audience</p>
+                          <p style={{ color: '#1f2328', fontSize: '0.8125rem', margin: 0 }}>{idea.target_audience}</p>
+                        </div>
+                        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                          <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#57606a', textTransform: 'uppercase', margin: '0 0 0.35rem' }}>🛒 Gumroad Description</p>
+                          <p style={{ color: '#1f2328', fontSize: '0.8125rem', margin: 0, lineHeight: 1.5 }}>{idea.gumroad_description}</p>
+                          <button onClick={() => navigator.clipboard.writeText(idea.gumroad_description)}
+                            style={{ marginTop: '0.5rem', background: 'none', border: '1px solid #e5e7eb', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontSize: '0.75rem', cursor: 'pointer', color: '#57606a' }}>📋 Copy</button>
+                        </div>
+                        <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                          <p style={{ fontWeight: 700, fontSize: '0.78rem', color: '#d97706', textTransform: 'uppercase', margin: '0 0 0.35rem' }}>🎬 Video Promo Hook</p>
+                          <p style={{ color: '#1f2328', fontSize: '0.8125rem', margin: 0, fontStyle: 'italic' }}>"{idea.promo_hook}"</p>
+                          <button onClick={() => { setTopic(idea.promo_hook); setNiche(gmNiche); setCurrentPage('scripts'); }}
+                            style={{ marginTop: '0.5rem', background: 'linear-gradient(135deg,#f59e0b,#d97706)', color: '#fff', border: 'none', borderRadius: '0.375rem', padding: '0.35rem 0.85rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>
+                            ✍️ Write Script for This →
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Pre-fill product form */}
+                    <button onClick={() => { setGmNewName(idea.title); setGmNewPrice(String(idea.price)); setGmNewDesc(idea.gumroad_description); setGmTab('products'); }}
+                      style={{ alignSelf: 'flex-start', background: 'linear-gradient(135deg,#8b5cf6,#7c3aed)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.25rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+                      📦 Add This to My Products →
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── PRODUCTS TAB ──────────────────────────────────────────────── */}
+        {gmTab === 'products' && (
+          <div>
+            {/* Add product form */}
+            <div className="generator-form" style={{ marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: '0 0 1rem', fontSize: '1rem', color: '#1f2328' }}>➕ Add New Product</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '0.75rem' }}>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Product Name *</label>
+                  <input value={gmNewName} onChange={e => setGmNewName(e.target.value)} placeholder="e.g. AI Tools Beginner Guide" style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Price (USD) *</label>
+                  <input type="number" value={gmNewPrice} onChange={e => setGmNewPrice(e.target.value)} placeholder="27" min="1" style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Gumroad Product ID <span style={{ fontWeight: 400, color: '#94a3b8' }}>(optional)</span></label>
+                  <input value={gmNewGumId} onChange={e => setGmNewGumId(e.target.value)} placeholder="from Gumroad dashboard" style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem' }} />
+                </div>
+              </div>
+              <div className="form-group" style={{ margin: '0.75rem 0 0' }}>
+                <label>Description</label>
+                <textarea value={gmNewDesc} onChange={e => setGmNewDesc(e.target.value)} rows={3} placeholder="What's in this PDF? Who is it for?" style={{ width: '100%', padding: '0.6rem 0.85rem', borderRadius: '0.5rem', border: '1px solid #d0d7de', fontSize: '0.9rem', resize: 'vertical' }} />
+              </div>
+              <button className="generate-button" onClick={saveGmProduct} disabled={gmSaving} style={{ marginTop: '0.75rem' }}>
+                {gmSaving ? '⏳ Saving…' : '💾 Save Product'}
+              </button>
+              {gmSaveMsg && <p style={{ color: gmSaveMsg.startsWith('✅') ? '#059669' : '#dc2626', fontSize: '0.875rem', marginTop: '0.5rem' }}>{gmSaveMsg}</p>}
+            </div>
+
+            {/* Products list */}
+            {gmProdLoading ? <p style={{ color: '#94a3b8' }}>Loading…</p> : gmProdError ? <p style={{ color: '#dc2626' }}>{gmProdError}</p> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {gmProducts.length === 0 && <p style={{ color: '#94a3b8', textAlign: 'center', padding: '2rem' }}>No products yet — add one above or generate ideas on the PDF Ideas tab</p>}
+                {gmProducts.map((p: any) => (
+                  <div key={p.id} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 800, color: '#1f2328' }}>{p.name}</span>
+                        <span style={{ background: p.active ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: p.active ? '#059669' : '#dc2626', border: `1px solid ${p.active ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}`, borderRadius: '999px', padding: '0.1rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>{p.active ? 'Active' : 'Inactive'}</span>
+                      </div>
+                      {p.description && <p style={{ color: '#57606a', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{p.description}</p>}
+                      {p.stan_store_product_id && <p style={{ color: '#94a3b8', fontSize: '0.75rem', margin: '0.2rem 0 0' }}>Gumroad ID: {p.stan_store_product_id}</p>}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                      <span style={{ fontWeight: 800, fontSize: '1.1rem', color: '#059669' }}>${Number(p.price).toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── ANALYTICS TAB ─────────────────────────────────────────────── */}
+        {gmTab === 'analytics' && (
+          <div>
+            {/* Revenue summary cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              {[
+                { label: 'Total Revenue', value: `$${gmRevenue.toFixed(2)}`, color: '#059669' },
+                { label: 'Total Orders', value: gmOrders.length, color: '#3b82d4' },
+                { label: 'Delivered', value: gmOrders.filter((o:any) => o.status === 'delivered').length, color: '#10b981' },
+                { label: 'Failed', value: gmOrders.filter((o:any) => o.status === 'failed').length, color: '#ef4444' },
+                { label: 'Avg Order Value', value: gmOrders.length ? `$${(gmRevenue / gmOrders.length).toFixed(2)}` : '—', color: '#8b5cf6' },
+              ].map(c => (
+                <div key={c.label} style={{ background: `${c.color}10`, border: `1px solid ${c.color}30`, borderRadius: '0.75rem', padding: '1rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 900, color: c.color }}>{c.value}</div>
+                  <div style={{ color: '#57606a', fontSize: '0.78rem', marginTop: '0.2rem' }}>{c.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Webhook setup reminder */}
+            <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '0.75rem', padding: '1rem 1.25rem', marginBottom: '1.5rem' }}>
+              <p style={{ fontWeight: 700, color: '#d97706', margin: '0 0 0.35rem' }}>⚙️ Connect Gumroad Webhook to receive live orders</p>
+              <p style={{ color: '#57606a', fontSize: '0.8125rem', margin: '0 0 0.5rem' }}>In Gumroad: Settings → Advanced → Webhooks → Add this URL:</p>
+              <code style={{ background: 'rgba(0,0,0,0.06)', padding: '0.35rem 0.75rem', borderRadius: '0.375rem', fontSize: '0.8rem', display: 'block', wordBreak: 'break-all', color: '#1f2328' }}>
+                https://ai-content-backend.victoriousmeadow-edd1d4e3.eastus.azurecontainerapps.io/api/v1/orders/webhook/gumroad
+              </code>
+            </div>
+
+            {/* Orders table */}
+            {gmOrdersLoading ? <p style={{ color: '#94a3b8' }}>Loading orders…</p> : (
+              <div>
+                <h2 style={{ fontSize: '1rem', color: '#1f2328', marginBottom: '0.75rem' }}>Recent Orders ({gmOrders.length})</h2>
+                {gmOrders.length === 0 ? (
+                  <p style={{ color: '#94a3b8', textAlign: 'center', padding: '2rem' }}>No orders yet — connect the Gumroad webhook above to start receiving orders automatically</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {gmOrders.slice(0, 50).map((o: any) => (
+                      <div key={o.id} style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '0.875rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, color: '#1f2328', fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.customer_name || o.customer_email}</div>
+                          <div style={{ color: '#57606a', fontSize: '0.78rem', marginTop: '0.15rem' }}>{o.product_name ?? 'Unknown product'} · {new Date(o.created_at).toLocaleDateString()}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                          <span style={{ fontWeight: 800, color: '#059669' }}>${((o.price_cents ?? 0) / 100).toFixed(2)}</span>
+                          <span style={{ background: `${statusColor(o.status)}18`, color: statusColor(o.status), border: `1px solid ${statusColor(o.status)}40`, borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.72rem', fontWeight: 700 }}>{o.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── Monetize page ─────────────────────────────────────────────────────────
   const renderMonetize = () => (
     <div className="videos-page">
@@ -5602,6 +5939,7 @@ Example:
         { id: 'monitor',     icon: '📡', label: 'Performance',      badge: null },
         { id: 'analytics',   icon: '📊', label: 'Analytics',        badge: null },
         { id: 'orders',      icon: '🛍️', label: 'Orders',           badge: null },
+        { id: 'gumroad',     icon: '🛒', label: 'Gumroad Studio',   badge: 'New' },
         { id: 'monetize',    icon: '💰', label: 'Monetize',         badge: null },
       ],
     },
@@ -5905,6 +6243,7 @@ Example:
            currentPage === 'monitor'     ? renderMonitor() :
            currentPage === 'analytics'   ? renderAnalytics() :
            currentPage === 'orders'      ? renderOrders() :
+           currentPage === 'gumroad'     ? renderGumroad() :
            currentPage === 'monetize'    ? renderMonetize() :
            currentPage === 'visuals'     ? renderVisuals() :
            currentPage === 'influencer'  ? renderInfluencer() :
