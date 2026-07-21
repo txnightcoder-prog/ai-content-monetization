@@ -189,7 +189,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
     e.preventDefault();
     setLoading(true); setError('');
     try {
-      const res = await apiFetch(`${API_BASE}/api/v1/auth/login`, {
+      const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, totp_code: '' }),
