@@ -189,7 +189,7 @@ function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
     e.preventDefault();
     setLoading(true); setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password, totp_code: '' }),
@@ -435,7 +435,7 @@ function App() {
     if (!question) return;
     setAskLoading(true); setAskError(''); setAskAnswer('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/ask`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
@@ -455,12 +455,12 @@ function App() {
 
   // Fetch video provider + all videos + dashboard metrics once on mount
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/health/video-provider`)
+    apiFetch(`${API_BASE}/api/v1/health/video-provider`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setVideoProvider(d); })
       .catch(() => {});
     loadAllVideos();
-    fetch(`${API_BASE}/api/v1/dashboard/metrics`)
+    apiFetch(`${API_BASE}/api/v1/dashboard/metrics`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setDashboardMetrics(d); })
       .catch(() => {});
@@ -469,7 +469,7 @@ function App() {
   const loadAllVideos = async () => {
     setAllVideosLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/videos/?limit=50`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/?limit=50`);
       if (res.ok) {
         const data = await res.json();
         setAllVideos(data.items ?? []);
@@ -482,9 +482,9 @@ function App() {
   const loadEditorOptions = async () => {
     try {
       const [vRes, mRes, cRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/videos/voices`),
-        fetch(`${API_BASE}/api/v1/videos/music-tracks`),
-        fetch(`${API_BASE}/api/v1/videos/caption-styles`),
+        apiFetch(`${API_BASE}/api/v1/videos/voices`),
+        apiFetch(`${API_BASE}/api/v1/videos/music-tracks`),
+        apiFetch(`${API_BASE}/api/v1/videos/caption-styles`),
       ]);
       if (vRes.ok) setVoices((await vRes.json()).voices ?? []);
       if (mRes.ok) setMusicTracks((await mRes.json()).tracks ?? []);
@@ -515,7 +515,7 @@ function App() {
       body.caption_style = editorCaptionStyle;
       body.music_volume = editorMusicVol;
 
-      const res = await fetch(`${API_BASE}/api/v1/videos/${editorVideoId}/edit`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/${editorVideoId}/edit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -539,7 +539,7 @@ function App() {
   const runAutoQueue = async () => {
     setAutoQueueLoading(true); setAutoQueueError(''); setAutoQueueResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/trending-to-queue`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/trending-to-queue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ niche: trendNiche, count: 5 }),
@@ -562,7 +562,7 @@ function App() {
     if (!videoScriptId.trim()) { setVideoError('Paste a Script ID first'); return; }
     setVideoLoading(true); setVideoError(''); setActiveVideo(null); setPublishSuccess('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/videos/generate`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ script_id: videoScriptId.trim() }),
@@ -596,7 +596,7 @@ function App() {
     if (!id.trim()) { setPreviewScript(null); return; }
     setScriptPreviewLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/${id.trim()}`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/${id.trim()}`);
       if (!res.ok) { setPreviewScript(null); return; }
       const s: Script = await res.json();
       setPreviewScript(s);
@@ -613,7 +613,7 @@ function App() {
     if (!previewScript) return;
     setEditSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/${previewScript.id}`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/${previewScript.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ hook: editHook, body: editBody, cta: editCta }),
@@ -629,7 +629,7 @@ function App() {
 
   const pollVideo = async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/videos/${id}`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/${id}`);
       if (!res.ok) return;
       const video: VideoRecord = await res.json();
       setActiveVideo(video);
@@ -644,7 +644,7 @@ function App() {
   const publishVideo = async (id: string) => {
     setPublishLoading(true); setVideoError(''); setPublishSuccess('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/videos/${id}/publish`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/${id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platforms: ['youtube'] }),
@@ -1269,7 +1269,7 @@ function App() {
     setVarLoading(true); setVarError(''); setVarResults([]);
     setVarSourceId(scriptId);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/${scriptId.trim()}`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/${scriptId.trim()}`);
       if (!res.ok) throw new Error('Script not found');
       const original: Script = await res.json();
       // Ask AI to generate 3 variations by generating new scripts on the same topic
@@ -1278,7 +1278,7 @@ function App() {
           topic: `${original.topic} — ${style}`,
           niche: original.script_metadata?.niche as string ?? 'AI tools',
         });
-        const r = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+        const r = await apiapiFetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         });
@@ -1365,7 +1365,7 @@ function App() {
     if (!parrotUrl.trim()) { setParrotError('Paste a YouTube URL first'); return; }
     setParrotLoading(true); setParrotError(''); setParrotResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/parrot`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/parrot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1407,7 +1407,7 @@ function App() {
     setParrotScriptLoading(true); setParrotScriptError('');
     try {
       const params = new URLSearchParams({ topic, niche });
-      const res = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -1623,7 +1623,7 @@ function App() {
   const fetchTrending = async () => {
     setTrendLoading(true); setTrendError(''); setTrendResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/trending`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/trending`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ niche: trendNiche, count: 8 }),
@@ -1650,7 +1650,7 @@ function App() {
     try {
       const topic = item.use_for_niche || item.title;
       const params = new URLSearchParams({ topic, niche: itemNiche });
-      const res = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -1806,7 +1806,7 @@ function App() {
   const runDiagnostics = async () => {
     setDiagLoading(true); setDiagResult(null); setDiagError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/health/checks`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/health/checks`);
       if (!res.ok) throw new Error(`Backend returned ${res.status} — is the backend running?`);
       setDiagResult(await res.json());
     } catch (err) {
@@ -1819,7 +1819,7 @@ function App() {
     const set = service === 'backend' ? setRestartBackendState : setRestartFrontendState;
     set('loading'); setRestartMsg('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/health/restart/${service}`, { method: 'POST' });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/health/restart/${service}`, { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? res.statusText);
       set('ok');
@@ -2008,7 +2008,7 @@ function App() {
     if (!url) { setImportUrlError('Paste a direct MP4 URL first'); return; }
     setImportUrlLoading(true); setImportUrlError(''); setImportUrlSuccess('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/videos/import-url`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/import-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, title: uploadTitle.trim() || undefined }),
@@ -2051,6 +2051,8 @@ function App() {
         });
         xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
         xhr.open('POST', `${API_BASE}/api/v1/videos/upload`);
+        const token = localStorage.getItem('auth_token');
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.send(form);
       });
 
@@ -2077,7 +2079,7 @@ function App() {
     setSchedLoading(true); setSchedError(''); setSchedResult('');
     try {
       const iso = new Date(`${schedDate}T${schedTime}:00Z`).toISOString();
-      const res = await fetch(`${API_BASE}/api/v1/videos/${scheduleVideoId.trim()}/schedule`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/videos/${scheduleVideoId.trim()}/schedule`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ platforms: schedPlatforms, scheduled_at: iso, caption: schedCaption || undefined }),
@@ -2148,7 +2150,7 @@ function App() {
   const runOptimize = async (scriptTopic: string, scriptNiche: string, hook?: string, body?: string, cta?: string) => {
     setOptLoading(true); setOptError(''); setOptResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/optimize`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/optimize`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: scriptTopic, niche: scriptNiche, hook, body, cta }),
       });
@@ -2169,7 +2171,7 @@ function App() {
     if (!kwTopic.trim()) { setKwError('Enter a topic first'); return; }
     setKwLoading(true); setKwError(''); setKwResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/keywords`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/keywords`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: kwTopic.trim(), niche: kwNiche, count: 10 }),
       });
@@ -2190,7 +2192,7 @@ function App() {
     if (!auditChannel.trim()) { setAuditError('Enter a channel ID, handle or URL'); return; }
     setAuditLoading(true); setAuditError(''); setAuditResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/analytics/channel-audit`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/analytics/channel-audit`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: auditChannel.trim(), niche: auditNiche }),
       });
@@ -2205,9 +2207,9 @@ function App() {
     setAnalyticsLoading(true); setAnalyticsError('');
     try {
       const [summaryRes, topRes, dashRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/analytics/summary`),
-        fetch(`${API_BASE}/api/v1/analytics/top-posts?limit=10&metric=${metric}`),
-        fetch(`${API_BASE}/api/v1/dashboard/metrics`),
+        apiFetch(`${API_BASE}/api/v1/analytics/summary`),
+        apiFetch(`${API_BASE}/api/v1/analytics/top-posts?limit=10&metric=${metric}`),
+        apiFetch(`${API_BASE}/api/v1/dashboard/metrics`),
       ]);
       if (summaryRes.ok) setAnalyticsSummary(await summaryRes.json());
       if (topRes.ok) { const d = await topRes.json(); setAnalyticsTopPosts(d.posts ?? []); }
@@ -2219,7 +2221,7 @@ function App() {
   const syncAnalytics = async () => {
     setAnalyticsSyncing(true); setAnalyticsSyncMsg('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const d = await res.json();
       setAnalyticsSyncMsg(`✅ Synced ${d.total_records} records at ${new Date(d.synced_at).toLocaleTimeString()}`);
@@ -2236,7 +2238,7 @@ function App() {
     try {
       const status = filter !== 'all' ? `&status=${filter}` : '';
       const skip   = (page - 1) * 20;
-      const res    = await fetch(`${API_BASE}/api/v1/orders/?skip=${skip}&limit=20${status}`);
+      const res    = await apiapiFetch(`${API_BASE}/api/v1/orders/?skip=${skip}&limit=20${status}`);
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const d = await res.json();
       setOrdersList(d.items ?? []);
@@ -2248,7 +2250,7 @@ function App() {
   const retryOrder = async (orderId: string) => {
     setOrderRetrying(orderId); setOrderRetryMsg('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/orders/${orderId}/retry`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/orders/${orderId}/retry`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       });
@@ -2256,7 +2258,7 @@ function App() {
       setOrderRetryMsg('✅ Order re-queued — pipeline restarting…');
       await fetchOrders();
       if (selectedOrder?.id === orderId) {
-        const updated = await fetch(`${API_BASE}/api/v1/orders/${orderId}`);
+        const updated = await apiapiFetch(`${API_BASE}/api/v1/orders/${orderId}`);
         if (updated.ok) setSelectedOrder(await updated.json());
       }
     } catch (err) { setOrderRetryMsg(`❌ ${err instanceof Error ? err.message : 'Retry failed'}`); }
@@ -2685,7 +2687,7 @@ function App() {
   const loadMonitorData = async (days = monitorDays) => {
     setMonitorLoading(true); setMonitorError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/analytics/performance-monitor?days=${days}`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/analytics/performance-monitor?days=${days}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setMonitorData(await res.json());
     } catch (e) { setMonitorError(e instanceof Error ? e.message : 'Failed to load'); }
@@ -2695,7 +2697,7 @@ function App() {
   const syncAndReload = async () => {
     setMonitorSyncing(true); setMonitorSyncMsg('');
     try {
-      const r = await fetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
+      const r = await apiapiFetch(`${API_BASE}/api/v1/analytics/sync`, { method: 'POST' });
       if (!r.ok) throw new Error(`Sync failed: HTTP ${r.status}`);
       const d = await r.json();
       const total = d.total_records ?? 0;
@@ -2708,7 +2710,7 @@ function App() {
   const runImprove = async () => {
     setImproveLoading(true); setImproveError(''); setImproveData(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/analytics/improve-suggestions`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/analytics/improve-suggestions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ threshold_views: improveThreshold, limit: 10 }),
@@ -2722,7 +2724,7 @@ function App() {
   const loadConnStatus = async () => {
     setConnLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/v1/analytics/platform-status`);
+      const r = await apiapiFetch(`${API_BASE}/api/v1/analytics/platform-status`);
       if (r.ok) setConnStatus(await r.json());
     } catch { /* ignore */ }
     finally { setConnLoading(false); }
@@ -3751,7 +3753,7 @@ function App() {
     setError('');
     
     try {
-      const response = await fetch(`${API_BASE}/api/v1/scripts/topic-ideas`, {
+      const response = await apiapiFetch(`${API_BASE}/api/v1/scripts/topic-ideas`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3785,7 +3787,7 @@ function App() {
     setTopPerfNote('');
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/api/v1/scripts/generate-from-top-performers`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/generate-from-top-performers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ niche, count: 10 }),
@@ -3820,7 +3822,7 @@ function App() {
         niche: niche
       });
       
-      const response = await fetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
+      const response = await apiapiFetch(`${API_BASE}/api/v1/scripts/generate?${params}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3853,7 +3855,7 @@ function App() {
     setGeneratedBlueprint(null);
 
     try {
-      const response = await fetch(`${API_BASE}/api/v1/scripts/blueprint`, {
+      const response = await apiapiFetch(`${API_BASE}/api/v1/scripts/blueprint`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -3897,7 +3899,7 @@ function App() {
     if (!oaTopic.trim()) { setOaError('Enter a video topic first'); return; }
     setOaLoading(true); setOaError(''); setOaImages([]);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/openart/thumbnail`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/openart/thumbnail`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: oaTopic.trim(), niche: oaNiche, style: oaStyle, aspect_ratio: oaAspect }),
       });
@@ -3913,7 +3915,7 @@ function App() {
     if (!oaTopic.trim()) { setOaError('Enter a video topic first'); return; }
     setOaLoading(true); setOaError(''); setOaPack(null);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/openart/social-pack`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/openart/social-pack`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic: oaTopic.trim(), niche: oaNiche }),
       });
@@ -3929,7 +3931,7 @@ function App() {
     if (!oaPrompt.trim()) { setOaError('Enter a prompt first'); return; }
     setOaLoading(true); setOaError(''); setOaImages([]);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/openart/image`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/openart/image`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: oaPrompt.trim(), style_preset: oaStyle || null, aspect_ratio: oaAspect, n: 2 }),
       });
@@ -3944,7 +3946,7 @@ function App() {
   const runOaAvatar = async () => {
     setOaLoading(true); setOaError(''); setOaImages([]);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/openart/avatar`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/openart/avatar`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ description: oaAvatarDesc }),
       });
@@ -5146,7 +5148,7 @@ Example:
     setInfCalLoading(true);
     try {
       const prompt = `Create a 30-day social media content calendar for an AI education influencer named ${infName}, age ${infAge}, ${infHair} hair. Niche: ${infNiche}. Tagline: "${infTagline}". Platforms: ${infPlatforms.join(', ')}. Return a JSON array of 30 objects: {day, platform, type (Reel|Short|Post|Story|LinkedIn), topic, hook (opening line max 15 words)}. Return ONLY the JSON array.`;
-      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
       const data = await res.json();
       const raw = (data.answer || data.response || '').trim();
       const match = raw.match(/\[[\s\S]*\]/);
@@ -5160,7 +5162,7 @@ Example:
     try {
       const typeLabel: Record<string,string> = { tiktok_reel: 'viral TikTok/Reels (60 sec)', youtube_short: 'YouTube Short (60 sec)', youtube_long: 'YouTube video (8 min)', linkedin_post: 'LinkedIn post', instagram_caption: 'Instagram carousel caption' };
       const prompt = `Write a ${typeLabel[infScriptType] || infScriptType} for ${infName}, an AI education influencer, age ${infAge}. Niche: ${infNiche}. Personality: ${infPersonality}. Tagline: "${infTagline}". Include hook, main content, and CTA. Format clearly with sections.`;
-      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
       const data = await res.json();
       setInfScriptResult(data.answer || data.response || 'No response from AI');
     } catch { setInfScriptResult('Error generating script.'); }
@@ -5171,7 +5173,7 @@ Example:
     setInfImgLoading(true); setInfImgPrompts([]);
     try {
       const prompt = `Generate 8 detailed photorealistic AI image prompts for ${infName}, age ${infAge}, ${infHair} hair, ${infEyes} eyes. Niche: ${infNiche}. Each prompt: specific scene, outfit, pose, lighting, mood. Vary locations: home office, coffee shop, campus, outdoors, gym, library, studio, rooftop. Style: photorealistic, bright clean Instagram aesthetic. Return ONLY a JSON array of 8 strings.`;
-      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
       const data = await res.json();
       const raw = (data.answer || data.response || '').trim();
       const match = raw.match(/\[[\s\S]*\]/);
@@ -5184,7 +5186,7 @@ Example:
     setInfLookLoading(true); setInfLook('');
     try {
       const prompt = `You are Roxy AI. Create a detailed AI character sheet for a social media influencer named ${infName}, age ${infAge}, ${infHair} hair, ${infEyes} eyes. Niche: ${infNiche}. Include: full physical description for AI image generation, wardrobe style guide, color palette, background/setting guide, facial expression guide, lighting style, and a LoRA training prompt for visual consistency. Make it detailed enough to maintain 100% visual consistency across hundreds of AI-generated images.`;
-      const res = await fetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/scripts/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: prompt }) });
       const data = await res.json();
       setInfLook(data.answer || data.response || '');
     } catch { setInfLook('Error generating character sheet.'); }
@@ -5570,7 +5572,7 @@ Example:
   const loadUsers = async () => {
     setUsersLoading(true); setUsersError('');
     try {
-      const res = await apiFetch(`${API_BASE}/api/v1/auth/users`);
+      const res = await apiapiFetch(`${API_BASE}/api/v1/auth/users`);
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       setUsersList(await res.json());
     } catch (err) { setUsersError(err instanceof Error ? err.message : 'Failed to load users'); }
@@ -5581,7 +5583,7 @@ Example:
     if (!newEmail.trim() || !newPassword.trim()) return;
     setAddingUser(true); setAddUserError(''); setAddUserSuccess('');
     try {
-      const res = await apiFetch(`${API_BASE}/api/v1/auth/users`, {
+      const res = await apiapiFetch(`${API_BASE}/api/v1/auth/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: newEmail.trim(), password: newPassword, role: newRole }),
@@ -5597,7 +5599,7 @@ Example:
   const deleteUser = async (id: string, email: string) => {
     if (!window.confirm(`Delete ${email}?`)) return;
     try {
-      const res = await apiFetch(`${API_BASE}/api/v1/auth/users/${id}`, { method: 'DELETE' });
+      const res = await apiapiFetch(`${API_BASE}/api/v1/auth/users/${id}`, { method: 'DELETE' });
       if (!res.ok && res.status !== 204) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       await loadUsers();
     } catch (err) { setUsersError(err instanceof Error ? err.message : 'Delete failed'); }
