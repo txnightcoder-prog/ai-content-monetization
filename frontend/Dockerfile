@@ -1,4 +1,5 @@
 # ── Stage 1: build ───────────────────────────────────────────────────────────
+# cache-bust: 2026-07-21
 FROM node:20-slim AS builder
 
 WORKDIR /app
