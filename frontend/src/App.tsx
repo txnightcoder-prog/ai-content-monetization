@@ -1172,25 +1172,64 @@ function App() {
             </div>
           )}
 
-          {activeVideo.status === 'failed' && (
-            <div style={{ marginTop: '1rem' }}>
-              {/* Real error from backend */}
-              {activeVideo.error_message && (
-                <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
-                  <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: 0, fontWeight: 600 }}>❌ {activeVideo.error_message}</p>
+          {activeVideo.status === 'failed' && (() => {
+            const err = activeVideo.error_message ?? '';
+            const isVeoPermission = err.includes('PERMISSION_DENIED') || err.includes('403') || err.includes('denied access');
+            const isVeoQuota      = err.includes('quota') || err.includes('exhausted');
+            const isVeoIssue      = isVeoPermission || isVeoQuota || err.includes('Veo');
+            return (
+              <div style={{ marginTop: '1rem' }}>
+                {/* Error message */}
+                {err && (
+                  <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                    <p style={{ color: '#fca5a5', fontSize: '0.875rem', margin: '0 0 0.4rem', fontWeight: 600 }}>❌ {err}</p>
+                    {isVeoPermission && (
+                      <p style={{ color: '#fbbf24', fontSize: '0.8rem', margin: 0 }}>
+                        ⚠️ Veo 3 requires your Google project to be explicitly allowlisted.{' '}
+                        <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" style={{ color: '#fbbf24', fontWeight: 700 }}>
+                          Request access at aistudio.google.com →
+                        </a>
+                      </p>
+                    )}
+                    {isVeoQuota && (
+                      <p style={{ color: '#fbbf24', fontSize: '0.8rem', margin: 0 }}>
+                        ⚠️ Daily Veo quota hit — resets at midnight UTC. Use Import from URL below in the meantime.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Immediate workaround — Import from URL */}
+                {isVeoIssue && (
+                  <div style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid #6ee7b7', borderRadius: '0.5rem', padding: '0.75rem 1rem', marginBottom: '0.75rem' }}>
+                    <p style={{ color: '#34d399', fontSize: '0.8125rem', fontWeight: 700, margin: '0 0 0.3rem' }}>✅ Workaround: Import a video from URL</p>
+                    <p style={{ color: '#6ee7b7', fontSize: '0.8rem', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                      Generate your video in CapCut, HeyGen, or Davinci.ai — then paste the direct MP4 link below to import it as ready-to-publish.
+                    </p>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <a href="https://capcut.com" target="_blank" rel="noopener noreferrer"
+                        style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>CapCut →</a>
+                      <a href="https://heygen.com" target="_blank" rel="noopener noreferrer"
+                        style={{ background: '#8b5cf6', color: '#fff', borderRadius: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>HeyGen →</a>
+                      <a href="https://davinci.ai" target="_blank" rel="noopener noreferrer"
+                        style={{ background: '#3b82f6', color: '#fff', borderRadius: '0.4rem', padding: '0.35rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>Davinci.ai →</a>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <button
+                    onClick={() => retryVideo(activeVideo)}
+                    style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
+                    🔁 Edit Script & Retry
+                  </button>
+                  <button className="inline-link" onClick={() => setCurrentPage('diagnostics')} style={{ fontSize: '0.8125rem' }}>
+                    🔧 Run Diagnostics
+                  </button>
                 </div>
-              )}
-              <p style={{ color: '#637381', fontSize: '0.875rem', marginBottom: '0.75rem' }}>
-                Go to <button className="inline-link" onClick={() => setCurrentPage('diagnostics')}>🔧 Diagnostics</button> to run all checks
-                {' — verify your ElevenLabs and Pexels keys'}.
-              </p>
-              <button
-                onClick={() => retryVideo(activeVideo)}
-                style={{ background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.35)', color: '#a78bfa', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.9rem' }}>
-                🔁 Edit Script & Retry
-              </button>
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

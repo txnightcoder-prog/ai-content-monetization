@@ -192,9 +192,9 @@ class VeoVideoService:
             voice_style = "kids" if character_image_path else "default"
             await tts.speak(script, voice_path, voice_style=voice_style)
 
-            # ── 2. Generate Veo clips concurrently ────────────────────────────
+            # ── 2. Generate Veo clips (with automatic fallback to Kling/Pexels) ─
             scenes = _split_into_scenes(script, max_scenes=4)
-            logger.info("VeoService: generating %d Veo clips for job %s", len(scenes), video_id)
+            logger.info("VeoService: generating %d clips for job %s", len(scenes), video_id)
 
             clip_paths = await self._generate_clips(
                 scenes=scenes,
@@ -204,7 +204,26 @@ class VeoVideoService:
             )
 
             if not clip_paths:
-                raise RuntimeError("Veo returned no clips — check GOOGLE_API_KEY quota")
+                # Veo failed (quota, permission denied, etc.) — fall back to ClipService
+                logger.warning(
+                    "VeoService: Veo returned no clips for job %s — "
+                    "falling back to Kling/Pexels via ClipService", video_id
+                )
+                from app.services.clip_service import ClipService
+                clip_svc = ClipService()
+                clip_paths = await clip_svc.get_clips(
+                    prompt=f"{niche} theme. {script[:200]}",
+                    count=4,
+                    aspect_ratio="9:16",
+                    niche=niche,
+                )
+
+            if not clip_paths:
+                raise RuntimeError(
+                    "Video generation failed: Veo 3 returned 403 PERMISSION_DENIED — "
+                    "your Google project needs Veo access (aistudio.google.com → request access). "
+                    "Kling/Pexels fallback also failed — check FAL_API_KEY and PEXELS_API_KEY."
+                )
 
             logger.info("VeoService: %d clips ready, assembling…", len(clip_paths))
 
