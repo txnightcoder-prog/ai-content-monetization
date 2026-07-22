@@ -97,7 +97,6 @@ jobs:
           TIKTOK_CLIENT_SECRET:        ${{ secrets.TIKTOK_CLIENT_SECRET }}
           TIKTOK_REFRESH_TOKEN:        ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           INSTAGRAM_ACCESS_TOKEN:      ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
-          GOOGLE_API_KEY:              ${{ secrets.GOOGLE_API_KEY }}
           GEMINI_MODEL:                ${{ secrets.GEMINI_MODEL }}
           FAL_API_KEY:                 ${{ secrets.FAL_API_KEY }}
           PIXABAY_API_KEY:             ${{ secrets.PIXABAY_API_KEY }}
@@ -141,7 +140,6 @@ jobs:
           [ -n "$TIKTOK_CLIENT_SECRET" ]        && VARS="$VARS TIKTOK_CLIENT_SECRET=$TIKTOK_CLIENT_SECRET"
           [ -n "$TIKTOK_REFRESH_TOKEN" ]        && VARS="$VARS TIKTOK_REFRESH_TOKEN=$TIKTOK_REFRESH_TOKEN"
           [ -n "$INSTAGRAM_ACCESS_TOKEN" ]      && VARS="$VARS INSTAGRAM_ACCESS_TOKEN=$INSTAGRAM_ACCESS_TOKEN"
-          [ -n "$GOOGLE_API_KEY" ]              && VARS="$VARS GOOGLE_API_KEY=$GOOGLE_API_KEY"
           [ -n "$GEMINI_MODEL" ]                && VARS="$VARS GEMINI_MODEL=$GEMINI_MODEL"
           [ -n "$FAL_API_KEY" ]                 && VARS="$VARS FAL_API_KEY=$FAL_API_KEY"
           [ -n "$PIXABAY_API_KEY" ]             && VARS="$VARS PIXABAY_API_KEY=$PIXABAY_API_KEY"
