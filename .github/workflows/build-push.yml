@@ -79,7 +79,6 @@ jobs:
           DASHBOARD_PASSWORD:          ${{ secrets.DASHBOARD_PASSWORD }}
           DASHBOARD_SECRET:            ${{ secrets.DASHBOARD_SECRET }}
           DASHBOARD_TOTP_SECRET:       ${{ secrets.DASHBOARD_TOTP_SECRET }}
-          DATABASE_URL:                ${{ secrets.DATABASE_URL }}
           ELEVENLABS_API_KEY:          ${{ secrets.ELEVENLABS_API_KEY }}
           ELEVENLABS_VOICE_ID:         ${{ secrets.ELEVENLABS_VOICE_ID }}
           PEXELS_API_KEY:              ${{ secrets.PEXELS_API_KEY }}
@@ -121,7 +120,6 @@ jobs:
           [ -n "$DASHBOARD_PASSWORD" ]          && VARS="$VARS DASHBOARD_PASSWORD=$DASHBOARD_PASSWORD"
           [ -n "$DASHBOARD_SECRET" ]            && VARS="$VARS DASHBOARD_SECRET=$DASHBOARD_SECRET"
           [ -n "$DASHBOARD_TOTP_SECRET" ]       && VARS="$VARS DASHBOARD_TOTP_SECRET=$DASHBOARD_TOTP_SECRET"
-          [ -n "$DATABASE_URL" ]                && VARS="$VARS DATABASE_URL=$DATABASE_URL"
           VARS="$VARS OPENAI_API_KEY="
           [ -n "$ELEVENLABS_API_KEY" ]          && VARS="$VARS ELEVENLABS_API_KEY=$ELEVENLABS_API_KEY"
           [ -n "$ELEVENLABS_VOICE_ID" ]         && VARS="$VARS ELEVENLABS_VOICE_ID=$ELEVENLABS_VOICE_ID"
