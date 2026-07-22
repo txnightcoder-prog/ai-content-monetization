@@ -138,7 +138,7 @@ _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_origin_regex=r"https://[a-z0-9\-]+\.azurecontainerapps\.io$",
+    allow_origin_regex=r"https://[a-z0-9\-]+(\.[a-z0-9\-]+)*\.azurecontainerapps\.io$",
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
