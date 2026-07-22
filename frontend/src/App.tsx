@@ -6822,7 +6822,7 @@ Example:
   };
 
   // ── Granny Spills Studio state ───────────────────────────────────────────
-  const [grannyTab,         setGrannyTab]         = useState<'bible' | 'scripts' | 'subscription' | 'calendar' | 'video'>('bible');
+  const [grannyTab,         setGrannyTab]         = useState<'guide' | 'bible' | 'scripts' | 'subscription' | 'calendar' | 'video'>('guide');
   const [grannyTopic,       setGrannyTopic]       = useState('');
   const [grannyType,        setGrannyType]        = useState('life_lesson');
   const [grannyDuration,    setGrannyDuration]    = useState('30_seconds');
@@ -6900,6 +6900,7 @@ Example:
         {/* Tabs */}
         <div className="tab-bar" style={{ marginBottom: '1.5rem' }}>
           {([
+            { id: 'guide' as const,        label: '🗺️ Launch Guide' },
             { id: 'bible' as const,        label: '📖 Voice Bible' },
             { id: 'scripts' as const,      label: '✍️ Script Generator' },
             { id: 'subscription' as const, label: '💌 Subscription Model' },
@@ -6909,6 +6910,231 @@ Example:
             <button key={t.id} className={`tab-btn ${grannyTab === t.id ? 'active' : ''}`} onClick={() => setGrannyTab(t.id)}>{t.label}</button>
           ))}
         </div>
+
+        {/* ── LAUNCH GUIDE TAB ── */}
+        {grannyTab === 'guide' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+            {/* Phase banner */}
+            <div style={{ background: 'linear-gradient(135deg,#fffbeb,#fef3c7)', border: '1px solid #fde68a', borderRadius: '1rem', padding: '1.25rem 1.5rem' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', color: '#92400e', marginBottom: '0.4rem' }}>How this works end-to-end</div>
+              <p style={{ color: '#78350f', fontSize: '0.875rem', lineHeight: 1.7, margin: 0 }}>
+                Follow these four phases in order. Each phase has exact tools, steps, and links.
+                Complete Phase 1 before Phase 2 — you need the character and voice locked in before you start posting.
+              </p>
+            </div>
+
+            {/* ── PHASE 1 ── */}
+            <div className="section-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#d97706', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1rem', flexShrink: 0 }}>1</div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1c2b33' }}>Create the Granny Character</div>
+                  <div style={{ color: '#637381', fontSize: '0.8rem' }}>One-time setup · ~2 hours · Do this before anything else</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                {[
+                  {
+                    n: 'A', title: 'Generate the Granny image',
+                    detail: 'Copy the AI image prompt from the Video Setup tab and paste it into Midjourney or NightCafe. Generate 4–6 variations and pick the one that feels warmest. Save this as your "master Granny image" — use it everywhere for consistency.',
+                    action: () => setGrannyTab('video'), actionLabel: '→ Get Image Prompt',
+                    link: 'https://www.midjourney.com', linkLabel: 'Open Midjourney',
+                    tag: 'Midjourney / NightCafe',
+                  },
+                  {
+                    n: 'B', title: 'Create the ElevenLabs voice',
+                    detail: 'Go to ElevenLabs → Voice Lab → Create Voice. Set Age: 70–80, Gender: Female, Accent: Southern American. Name her "Granny Spills". Use the Voice Generation Prompt from the Voice Bible tab as her description. Record or clone 30 seconds of warm, slow grandmother speech as the reference sample.',
+                    action: null, actionLabel: '',
+                    link: 'https://elevenlabs.io', linkLabel: 'Open ElevenLabs',
+                    tag: 'ElevenLabs',
+                  },
+                  {
+                    n: 'C', title: 'Read the Voice Bible — memorise her rules',
+                    detail: 'Open the Voice Bible tab and read every section. Know what Granny never says ("hustle", "crush it", "monetize") and what she always says ("honey", "pull up a chair", "I\'ll see you on the porch tomorrow"). Every script must pass this test.',
+                    action: () => setGrannyTab('bible'), actionLabel: '→ Open Voice Bible',
+                    link: null, linkLabel: '',
+                    tag: 'This dashboard',
+                  },
+                ].map(step => (
+                  <div key={step.n} style={{ display: 'flex', gap: '0.85rem', padding: '0.85rem', background: '#fffbeb', borderRadius: '0.75rem', border: '1px solid #fde68a' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#f59e0b', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.8rem', flexShrink: 0, marginTop: '2px' }}>{step.n}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.3rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1c2b33' }}>{step.title}</span>
+                        <span style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: '#92400e' }}>{step.tag}</span>
+                      </div>
+                      <p style={{ color: '#78350f', fontSize: '0.8125rem', lineHeight: 1.65, margin: '0 0 0.5rem' }}>{step.detail}</p>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {step.action && <button onClick={step.action} style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>{step.actionLabel}</button>}
+                        {step.link && <a href={step.link} target="_blank" rel="noopener noreferrer" style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>{step.linkLabel} →</a>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── PHASE 2 ── */}
+            <div className="section-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1rem', flexShrink: 0 }}>2</div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1c2b33' }}>Create Your First Video</div>
+                  <div style={{ color: '#637381', fontSize: '0.8rem' }}>Per-video workflow · ~30 minutes per video once you have the process down</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                {[
+                  {
+                    n: '1', title: 'Pick a topic and generate the script',
+                    detail: 'Go to the Script Generator tab. Pick a topic from the quick-chips or type your own (e.g. "Being kind costs nothing"). Set type to "Life Lesson", length to "30 seconds". Click Generate. You\'ll get the full Granny script, an ElevenLabs voice prompt, a thumbnail idea, and a social caption.',
+                    action: () => setGrannyTab('scripts'), actionLabel: '→ Script Generator',
+                    link: null, linkLabel: '', tag: 'This dashboard',
+                  },
+                  {
+                    n: '2', title: 'Generate the voiceover audio',
+                    detail: 'Copy the script from the result. Go to ElevenLabs → select your "Granny Spills" voice → paste the script → Generate. Download the MP3. Settings: Stability 80%, Similarity 75%, Style 0%, Speaker Boost on. The voice should sound slow, warm, and natural — not rushed.',
+                    action: null, actionLabel: '',
+                    link: 'https://elevenlabs.io', linkLabel: 'Open ElevenLabs', tag: 'ElevenLabs',
+                  },
+                  {
+                    n: '3', title: 'Create the lip-sync video',
+                    detail: 'Go to HeyGen → New Video → Avatar Video. Upload your master Granny image as a Photo Avatar. Upload the ElevenLabs MP3 as the audio. Set aspect ratio to 9:16 (vertical for TikTok/Reels) or 16:9 (YouTube). Click Generate — takes 2–3 minutes. Download the MP4.',
+                    action: null, actionLabel: '',
+                    link: 'https://heygen.com', linkLabel: 'Open HeyGen', tag: 'HeyGen',
+                  },
+                  {
+                    n: '4', title: 'Add captions',
+                    detail: 'Open CapCut (free) or HeyGen\'s built-in captions. Auto-generate captions from the audio. Style: large serif font, warm cream/amber color, centered at the bottom third. Captions make the video 40% more watchable — don\'t skip this step.',
+                    action: null, actionLabel: '',
+                    link: 'https://capcut.com', linkLabel: 'Open CapCut', tag: 'CapCut (free)',
+                  },
+                  {
+                    n: '5', title: 'Create the thumbnail',
+                    detail: 'Use the Thumbnail Idea from the generated script. Open Canva → create a 1080×1920 design. Place the Granny image, add the headline text in large bold serif font, warm amber background. Keep it simple — one face, one phrase.',
+                    action: null, actionLabel: '',
+                    link: 'https://canva.com', linkLabel: 'Open Canva', tag: 'Canva (free)',
+                  },
+                ].map(step => (
+                  <div key={step.n} style={{ display: 'flex', gap: '0.85rem', padding: '0.85rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #bfdbfe' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.8rem', flexShrink: 0, marginTop: '2px' }}>{step.n}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.3rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1c2b33' }}>{step.title}</span>
+                        <span style={{ background: '#dbeafe', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: '#1e40af' }}>{step.tag}</span>
+                      </div>
+                      <p style={{ color: '#1e3a5f', fontSize: '0.8125rem', lineHeight: 1.65, margin: '0 0 0.5rem' }}>{step.detail}</p>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {step.action && <button onClick={step.action} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>{step.actionLabel}</button>}
+                        {step.link && <a href={step.link} target="_blank" rel="noopener noreferrer" style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>{step.linkLabel} →</a>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* ── PHASE 3 ── */}
+            <div className="section-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#10b981', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1rem', flexShrink: 0 }}>3</div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1c2b33' }}>Publish to Social Media</div>
+                  <div style={{ color: '#637381', fontSize: '0.8rem' }}>Per-video · 10 minutes · Post the same video to all three platforms</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '0.85rem', marginBottom: '1rem' }}>
+                {[
+                  {
+                    platform: 'TikTok', icon: '🎵', color: '#10b981',
+                    steps: [
+                      'Open TikTok app → + (Create)',
+                      'Upload the MP4 from HeyGen',
+                      'Paste the Hook Caption as the description',
+                      'Add hashtags: #GrannySpills #Wisdom #LifeLessons #Grandma #Motivation',
+                      'Post at 7–9am or 7–9pm for best reach',
+                    ],
+                  },
+                  {
+                    platform: 'Instagram Reels', icon: '📸', color: '#8b5cf6',
+                    steps: [
+                      'Open Instagram → + → Reel',
+                      'Upload the same MP4',
+                      'Paste the Hook Caption as caption',
+                      'Add hashtags: #Reels #GrandmaWisdom #LifeAdvice #Inspiration',
+                      'Tag location (optional) → Share',
+                    ],
+                  },
+                  {
+                    platform: 'YouTube Shorts', icon: '▶️', color: '#ef4444',
+                    steps: [
+                      'Go to YouTube Studio → Create → Upload',
+                      'Upload the MP4 (vertical 9:16)',
+                      'Title: use the generated hook caption',
+                      'Add #Shorts in the title or description',
+                      'Set thumbnail → Publish',
+                    ],
+                  },
+                ].map(p => (
+                  <div key={p.platform} style={{ background: '#f0fdf4', border: `1px solid ${p.color}30`, borderRadius: '0.75rem', padding: '0.85rem' }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1c2b33', marginBottom: '0.6rem' }}>{p.icon} {p.platform}</div>
+                    {p.steps.map((s, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.35rem', alignItems: 'flex-start' }}>
+                        <span style={{ width: '16px', height: '16px', borderRadius: '50%', background: p.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 900, flexShrink: 0, marginTop: '2px' }}>{i+1}</span>
+                        <span style={{ color: '#065f46', fontSize: '0.8rem', lineHeight: 1.5 }}>{s}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.85rem' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#92400e', marginBottom: '0.4rem' }}>💡 End every video caption with:</div>
+                <div style={{ fontStyle: 'italic', color: '#78350f', fontSize: '0.875rem' }}>"Subscribe to Granny's weekly letter → [your Beehiiv link]. New wisdom every Sunday morning."</div>
+              </div>
+            </div>
+
+            {/* ── PHASE 4 ── */}
+            <div className="section-card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#8b5cf6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '1rem', flexShrink: 0 }}>4</div>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1c2b33' }}>Build the Subscription Business</div>
+                  <div style={{ color: '#637381', fontSize: '0.8rem' }}>Start after 30 days of consistent posting</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {[
+                  { n: '1', title: 'Set up Beehiiv newsletter (free)', detail: 'Create a free account at beehiiv.com. Publication name: "Granny\'s Porch Letter". Every Sunday morning, send a 300-word wisdom letter — 1 life lesson, 1 quote, 1 CTA (buy a book or upgrade to paid).', link: 'https://beehiiv.com', linkLabel: 'Sign up free', color: '#3b82f6' },
+                  { n: '2', title: 'Publish your first Gumroad book', detail: 'Collect your first 30 generated scripts. Format them as a simple PDF: "Porch Wisdom: 30 Days of Granny\'s Letters". Sell on Gumroad for $9. Link every video bio to this. This is your first income stream.', action: () => setCurrentPage('gumroad'), actionLabel: '→ Open Gumroad Studio', color: '#f59e0b' },
+                  { n: '3', title: 'Launch $9/mo Granny\'s Circle at 500 subs', detail: 'Once your email list hits 500, create a paid tier on Beehiiv ($9/mo). Members get weekly longer audio, downloadable wisdom cards, and exclusive letters. Announce it in 3 consecutive videos and emails.', link: null, linkLabel: '', color: '#10b981' },
+                  { n: '4', title: 'Add $27/mo Front Porch VIP at 2K subs', detail: 'Monthly live Zoom "porch chat" with Granny (you or your AI avatar via HeyGen live). Exclusive letters, printable recipe and life cards. At this level you\'re earning $1,000–3,000/month from subscriptions alone.', link: null, linkLabel: '', color: '#8b5cf6' },
+                ].map(step => (
+                  <div key={step.n} style={{ display: 'flex', gap: '0.85rem', padding: '0.85rem', background: '#faf5ff', borderRadius: '0.75rem', border: '1px solid #e9d5ff' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: step.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: '0.8rem', flexShrink: 0, marginTop: '2px' }}>{step.n}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1c2b33', marginBottom: '0.25rem' }}>{step.title}</div>
+                      <p style={{ color: '#4c1d95', fontSize: '0.8125rem', lineHeight: 1.65, margin: '0 0 0.4rem' }}>{step.detail}</p>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {'action' in step && step.action && <button onClick={step.action as () => void} style={{ background: step.color, color: '#fff', border: 'none', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}>{step.actionLabel}</button>}
+                        {step.link && <a href={step.link} target="_blank" rel="noopener noreferrer" style={{ background: '#1c2b33', color: '#fff', borderRadius: '0.4rem', padding: '0.3rem 0.75rem', fontSize: '0.78rem', fontWeight: 700, textDecoration: 'none' }}>{step.linkLabel} →</a>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick nav footer */}
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button onClick={() => setGrannyTab('scripts')} style={{ background: '#d97706', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>✍️ Generate a Script</button>
+              <button onClick={() => setGrannyTab('video')}   style={{ background: '#8b5cf6', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>🎬 Video Setup Guide</button>
+              <button onClick={() => setGrannyTab('subscription')} style={{ background: '#10b981', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>💰 Business Model</button>
+              <button onClick={() => setGrannyTab('calendar')} style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.6rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>📅 Content Calendar</button>
+            </div>
+
+          </div>
+        )}
 
         {/* ── VOICE BIBLE TAB ── */}
         {grannyTab === 'bible' && (
