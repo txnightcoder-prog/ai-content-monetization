@@ -65,13 +65,8 @@ class GeminiService:
             full_input = prompt
 
         body: dict = {
-            "model":  f"models/{use_model}",
-            "input":  full_input,
-            "config": {
-                "temperature":     temperature,
-                "maxOutputTokens": max_tokens,
-                "topP":            0.95,
-            },
+            "model": f"models/{use_model}",
+            "input": full_input,
         }
 
         url = f"{INTERACTIONS_BASE}?key={self.api_key}"
