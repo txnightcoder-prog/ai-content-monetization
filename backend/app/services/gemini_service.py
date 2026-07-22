@@ -21,8 +21,8 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-GEMINI_BASE   = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-2.5-flash"
+GEMINI_BASE   = "https://generativelanguage.googleapis.com/v1"
+DEFAULT_MODEL = "gemini-2.0-flash"
 
 
 class GeminiService:
