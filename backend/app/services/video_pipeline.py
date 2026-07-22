@@ -302,18 +302,25 @@ class VideoPipelineService:
                     video.status     = VideoStatus.POSTED
                     logger.info("Video %s posted to YouTube as %s", video_id, yt_id)
                 else:
-                    # Buffer handles TikTok, Instagram, Facebook, Twitter
-                    from app.services.buffer_service import BufferService  # noqa: PLC0415
-                    result = BufferService().post_to_all_platforms(
-                        text=caption,
+                    # Direct platform APIs — no Buffer needed
+                    from app.services.social_publisher import publish_to_platform  # noqa: PLC0415
+                    result = await publish_to_platform(
+                        platform=platform_name.lower(),
                         video_url=str(video.video_url),
-                        platforms=[platform_name.lower()],
+                        caption=caption,
                     )
-                    buf_id = str(result.get("id", ""))
-                    post.external_id = buf_id or None
-                    post.status      = PostStatus.POSTED
-                    video.status     = VideoStatus.POSTED
-                    logger.info("Video %s posted to %s via Buffer (id=%s)", video_id, platform_name, buf_id)
+                    if result["status"] == "posted":
+                        post.external_id = result.get("external_id")
+                        post.post_url    = result.get("url")
+                        post.status      = PostStatus.POSTED
+                        video.status     = VideoStatus.POSTED
+                        logger.info("Video %s posted to %s (id=%s)", video_id, platform_name, result.get("external_id"))
+                    elif result["status"] == "skipped":
+                        post.status = PostStatus.FAILED
+                        logger.warning("Video %s skipped for %s: %s", video_id, platform_name, result.get("error"))
+                        raise ValueError(result.get("error", "Platform not configured"))
+                    else:
+                        raise RuntimeError(result.get("error", "Unknown publish error"))
             except Exception as exc:
                 logger.error("%s publish failed for video %s: %s", platform_name, video_id, exc)
                 post.status = PostStatus.FAILED

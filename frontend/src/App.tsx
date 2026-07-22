@@ -526,7 +526,6 @@ function App() {
   const [videoHistory, setVideoHistory]         = useState<VideoRecord[]>([]);
   const [allVideos, setAllVideos]               = useState<VideoRecord[]>([]);
   const [allVideosLoading, setAllVideosLoading] = useState(false);
-  const [publishLoading, setPublishLoading]     = useState(false);
   const [publishSuccess, setPublishSuccess]     = useState('');
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -869,26 +868,29 @@ function App() {
     } catch { /* ignore transient errors */ }
   };
 
-  const publishVideo = async (id: string) => {
-    setPublishLoading(true); setVideoError(''); setPublishSuccess('');
+  const [publishingPlatform, setPublishingPlatform] = useState<string | null>(null);
+  const [platformResults, setPlatformResults] = useState<Record<string, {status:string; url?:string|null; error?:string|null}>>({});
+
+  const publishVideo = async (id: string, platform = 'youtube') => {
+    setPublishingPlatform(platform); setVideoError(''); setPublishSuccess('');
     try {
       const res = await apiFetch(`${API_BASE}/api/v1/videos/${id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platforms: ['youtube'] }),
+        body: JSON.stringify({ platforms: [platform] }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? res.statusText); }
       const posts = await res.json();
       const post = posts[0];
-      setPublishSuccess(
-        post?.status === 'posted'
-          ? `✅ Uploaded to YouTube! Video ID: ${post.external_id ?? 'check YouTube Studio'}`
-          : `⚠️ Upload queued (status: ${post?.status ?? 'unknown'})`
-      );
+      const ok = post?.status === 'posted';
+      setPlatformResults(prev => ({ ...prev, [platform]: { status: ok ? 'posted' : 'failed', url: post?.post_url, error: ok ? null : post?.status } }));
+      if (ok) setPublishSuccess(`✅ Posted to ${platform}!${post?.post_url ? ` → ${post.post_url}` : ''}`);
+      else setVideoError(`⚠️ ${platform} upload issue: status=${post?.status}`);
     } catch (err) {
-      setVideoError(err instanceof Error ? err.message : 'Failed to upload');
+      setPlatformResults(prev => ({ ...prev, [platform]: { status: 'failed', error: err instanceof Error ? err.message : 'Failed' } }));
+      setVideoError(err instanceof Error ? err.message : `Failed to post to ${platform}`);
     } finally {
-      setPublishLoading(false);
+      setPublishingPlatform(null);
     }
   };
 
@@ -1231,16 +1233,49 @@ function App() {
                 <p className="video-duration">Duration: {activeVideo.duration}s</p>
               )}
               <p className="script-id-copy">🆔 Video ID: <strong>{activeVideo.id}</strong></p>
-              {publishSuccess
-                ? <div className="publish-success">{publishSuccess}</div>
-                : (
-                  <button className="publish-button"
-                    onClick={() => publishVideo(activeVideo.id)}
-                    disabled={publishLoading}>
-                    {publishLoading ? '⏳ Uploading to YouTube…' : '▶ Upload to YouTube'}
-                  </button>
-                )
-              }
+              {publishSuccess && <div className="publish-success">{publishSuccess}</div>}
+              {/* ── Multi-platform publish grid ── */}
+              <div style={{ marginTop: '0.75rem' }}>
+                <p style={{ color: '#57606a', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.6rem' }}>Publish to:</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.5rem' }}>
+                  {([
+                    { id: 'youtube',   label: 'YouTube',   emoji: '▶️', color: '#ef4444' },
+                    { id: 'tiktok',    label: 'TikTok',    emoji: '🎵', color: '#000000' },
+                    { id: 'instagram', label: 'Instagram', emoji: '📸', color: '#e1306c' },
+                    { id: 'facebook',  label: 'Facebook',  emoji: '👥', color: '#1877f2' },
+                    { id: 'twitter',   label: 'Twitter/X', emoji: '🐦', color: '#1da1f2' },
+                  ] as const).map(({ id, label, emoji, color }) => {
+                    const result = platformResults[id];
+                    const busy   = publishingPlatform === id;
+                    const posted = result?.status === 'posted';
+                    const failed = result?.status === 'failed';
+                    return (
+                      <button key={id}
+                        onClick={() => publishVideo(activeVideo.id, id)}
+                        disabled={!!publishingPlatform || posted}
+                        style={{
+                          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
+                          padding: '0.6rem 0.5rem', borderRadius: '0.5rem', border: `1px solid`,
+                          borderColor: posted ? '#10b981' : failed ? '#ef4444' : `${color}55`,
+                          background: posted ? 'rgba(16,185,129,0.1)' : failed ? 'rgba(239,68,68,0.08)' : `${color}11`,
+                          color: posted ? '#059669' : failed ? '#dc2626' : color,
+                          cursor: (!!publishingPlatform || posted) ? 'not-allowed' : 'pointer',
+                          opacity: (!!publishingPlatform && !busy) ? 0.5 : 1,
+                          fontSize: '0.78rem', fontWeight: 700, transition: 'all 0.15s',
+                        }}>
+                        <span style={{ fontSize: '1.2rem' }}>{busy ? '⏳' : posted ? '✅' : failed ? '❌' : emoji}</span>
+                        <span>{busy ? 'Posting…' : posted ? 'Posted!' : label}</span>
+                        {posted && result?.url && (
+                          <a href={result.url} target="_blank" rel="noopener noreferrer"
+                            style={{ fontSize: '0.7rem', color: '#059669', textDecoration: 'underline' }}
+                            onClick={e => e.stopPropagation()}>View →</a>
+                        )}
+                        {failed && <span style={{ fontSize: '0.68rem', color: '#dc2626', textAlign: 'center', lineHeight: 1.2 }}>{result?.error?.slice(0,40)}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <button className="idea-button" style={{ marginTop: '0.5rem' }}
                 onClick={() => { setScheduleVideoId(activeVideo.id); document.getElementById('scheduler')?.scrollIntoView({ behavior: 'smooth' }); }}>
                 📅 Schedule for Later
