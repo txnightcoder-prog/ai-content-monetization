@@ -218,6 +218,33 @@ function WorkflowSteps({ steps }: { steps: { n: number; label: string; detail: s
 }
 
 // ── Login screen ─────────────────────────────────────────────────────────────
+
+// ── Copy Script button — proper component so useState is valid ─────────────
+function CopyScriptButton({ script }: { script: { hook: string; body: string; cta: string } }) {
+  const [copied, setCopied] = React.useState(false);
+  const scriptText = `HOOK:\n${script.hook}\n\nBODY:\n${script.body}\n\nCTA:\n${script.cta}`;
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(scriptText);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+        background: copied ? 'rgba(52,211,153,0.2)' : 'rgba(99,102,241,0.12)',
+        color: copied ? '#059669' : '#6366f1',
+        border: `1px solid ${copied ? 'rgba(52,211,153,0.4)' : 'rgba(99,102,241,0.4)'}`,
+        borderRadius: '0.5rem', padding: '0.55rem 1rem',
+        fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap',
+      }}
+    >
+      {copied ? '✓ Copied!' : '📋 Copy Script'}
+    </button>
+  );
+}
+
+
 function LoginScreen({ onLogin }: { onLogin: (token: string) => void }) {
   const [username, setUsername] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -804,6 +831,8 @@ function App() {
       setEditCta(s.cta ?? '');
       setEditingScript(false);
       setEditSaved(false);
+      // Auto-fill video title from script topic so user doesn't have to type it
+      if (s.topic && !uploadTitle.trim()) setUploadTitle(s.topic);
     } catch { setPreviewScript(null); }
     finally { setScriptPreviewLoading(false); }
   };
@@ -928,24 +957,34 @@ function App() {
               <p style={{ color: '#637381', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
                 AI-powered video editor — use your script, add AI avatars, voiceover &amp; captions, then export as MP4.
               </p>
+              {previewScript && (
+                <p style={{ color: '#6366f1', fontSize: '0.78rem', margin: '0.4rem 0 0', fontWeight: 600 }}>
+                  📄 Script loaded: <em>{previewScript.topic}</em> — copy it below, then open Davinci.ai
+                </p>
+              )}
             </div>
-            <a
-              href="https://davinci.ai/app/home"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
-                background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-                color: '#fff', borderRadius: '0.5rem', padding: '0.65rem 1.25rem',
-                fontWeight: 700, fontSize: '0.875rem', textDecoration: 'none',
-                whiteSpace: 'nowrap', flexShrink: 0,
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
-              </svg>
-              Open Davinci.ai →
-            </a>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0 }}>
+              {previewScript && (
+                <CopyScriptButton script={previewScript} />
+              )}
+              <a
+                href="https://davinci.ai/app/home"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.45rem',
+                  background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                  color: '#fff', borderRadius: '0.5rem', padding: '0.65rem 1.25rem',
+                  fontWeight: 700, fontSize: '0.875rem', textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                Open Davinci.ai →
+              </a>
+            </div>
           </div>
         </div>
 
@@ -983,8 +1022,17 @@ function App() {
                 {importUrlLoading ? '⏳ Importing…' : '🔗 Import URL'}
               </button>
             </div>
-            {importUrlError   && <div className="error-message">{importUrlError}</div>}
-            {importUrlSuccess && <div className="publish-success">{importUrlSuccess}</div>}
+            {importUrlError && <div className="error-message">{importUrlError}</div>}
+            {importUrlSuccess && (
+              <div style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.35)', borderRadius: '0.5rem', padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <span style={{ color: '#059669', fontWeight: 700, fontSize: '0.875rem' }}>✅ Video imported — ready to publish!</span>
+                <button
+                  onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  style={{ background: 'linear-gradient(135deg,#059669,#10b981)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}>
+                  ▲ Scroll to Publish →
+                </button>
+              </div>
+            )}
 
             {/* Divider */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
