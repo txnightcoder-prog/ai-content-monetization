@@ -13,6 +13,7 @@ Required env vars:
 Endpoint: https://generativelanguage.googleapis.com/v1beta/models/...
 """
 
+import asyncio
 import os
 import logging
 from typing import Optional
@@ -82,16 +83,27 @@ class GeminiService:
 
         url = f"{GEMINI_BASE}/models/{use_model}:generateContent?key={self.api_key}"
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(url, json=body)
-            if resp.status_code == 401:
-                raise ValueError("Invalid GOOGLE_API_KEY (401). Check your key at aistudio.google.com.")
-            if resp.status_code == 429:
-                raise RuntimeError("Gemini rate limit hit (429). Try again in a moment.")
-            if resp.status_code != 200:
-                raise RuntimeError(
-                    f"Gemini API error {resp.status_code}: {resp.text[:300]}"
-                )
+        # Retry up to 3 times on 429 with exponential backoff (5s, 15s, 30s)
+        delays = [5, 15, 30]
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            for attempt, delay in enumerate(delays, 1):
+                resp = await client.post(url, json=body)
+                if resp.status_code == 401:
+                    raise ValueError("Invalid GOOGLE_API_KEY (401). Check your key at aistudio.google.com.")
+                if resp.status_code == 429:
+                    if attempt == len(delays):
+                        raise RuntimeError(
+                            "Gemini rate limit hit — all retries exhausted. "
+                            "Wait a minute and try again, or add a paid Gemini key."
+                        )
+                    logger.warning("Gemini 429 on attempt %d — retrying in %ds", attempt, delay)
+                    await asyncio.sleep(delay)
+                    continue
+                if resp.status_code != 200:
+                    raise RuntimeError(
+                        f"Gemini API error {resp.status_code}: {resp.text[:300]}"
+                    )
+                break  # success
 
         data = resp.json()
         try:
