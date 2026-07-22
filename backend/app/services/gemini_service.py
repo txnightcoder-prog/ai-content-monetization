@@ -1,16 +1,17 @@
 """
 Gemini AI Service
 =================
-Drop-in replacement for OpenAIService using Google Gemini 2.0 Flash.
-Uses the same GOOGLE_API_KEY already set for Veo video generation.
+Drop-in replacement for OpenAIService using Google Gemini via the Interactions API.
+New Google Cloud projects (created after mid-2026) only support the Interactions API;
+the legacy generateContent endpoint returns 404 for new projects.
 
-Model: gemini-2.0-flash  — fast, cheap, excellent for scripts & content
-       gemini-1.5-pro     — higher quality, slower
+Auth keys (AQ.Ab8...) use ?key= query param — NOT a Bearer header.
 
 Required env vars:
-    GOOGLE_API_KEY  — same key used for Veo video generation
+    GOOGLE_API_KEY  — auth key from aistudio.google.com/apikey
+    GEMINI_MODEL    — optional override (default: gemini-3.1-flash-lite)
 
-Endpoint: https://generativelanguage.googleapis.com/v1beta/models/...
+Endpoint: https://generativelanguage.googleapis.com/v1beta/interactions
 """
 
 import asyncio
@@ -21,13 +22,13 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-GEMINI_BASE   = "https://generativelanguage.googleapis.com/v1"
-DEFAULT_MODEL = "gemini-2.0-flash"
+INTERACTIONS_BASE = "https://generativelanguage.googleapis.com/v1beta/interactions"
+DEFAULT_MODEL     = "gemini-3.1-flash-lite"
 
 
 class GeminiService:
     """
-    Generate text completions using Google Gemini 2.0 Flash.
+    Generate text completions using Google Gemini via the Interactions API.
     Same interface as OpenAIService so it can be swapped in transparently.
     """
 
@@ -38,7 +39,7 @@ class GeminiService:
         if not self.api_key:
             raise ValueError(
                 "GOOGLE_API_KEY not set. "
-                "Get one free at https://aistudio.google.com/app/apikey"
+                "Get one at https://aistudio.google.com/apikey"
             )
 
     # ------------------------------------------------------------------
@@ -51,72 +52,82 @@ class GeminiService:
         model: Optional[str] = None,
     ) -> str:
         """
-        Generate a text completion via Gemini REST API.
+        Generate a text completion via Gemini Interactions API.
         Returns the generated text as a plain string.
         """
         use_model = model or self.model
 
-        # Build the contents list
-        contents = []
+        # Build full prompt — Interactions API uses a single "input" string,
+        # so we prepend the system message as an instruction block.
         if system_message:
-            # Gemini uses a system_instruction field, not a message role
-            pass  # handled below
-
-        contents.append({
-            "role": "user",
-            "parts": [{"text": prompt}],
-        })
+            full_input = f"{system_message}\n\n{prompt}"
+        else:
+            full_input = prompt
 
         body: dict = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": temperature,
+            "model":  f"models/{use_model}",
+            "input":  full_input,
+            "config": {
+                "temperature":     temperature,
                 "maxOutputTokens": max_tokens,
-                "topP": 0.95,
+                "topP":            0.95,
             },
         }
 
-        if system_message:
-            body["system_instruction"] = {
-                "parts": [{"text": system_message}]
-            }
+        url = f"{INTERACTIONS_BASE}?key={self.api_key}"
 
-        # Auth keys (AQ.Ab8...) use Bearer header; standard keys (AIza...) use ?key= param
-        is_auth_key = self.api_key.startswith("AQ.")
-        if is_auth_key:
-            url = f"{GEMINI_BASE}/models/{use_model}:generateContent"
-            req_headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        else:
-            url = f"{GEMINI_BASE}/models/{use_model}:generateContent?key={self.api_key}"
-            req_headers = {"Content-Type": "application/json"}
-
-        # Retry up to 3 times on 429 with exponential backoff (5s, 15s, 30s)
+        # Retry up to 3 times on 429 / transient errors with exponential backoff
         delays = [5, 15, 30]
+        last_exc: Exception = RuntimeError("No attempts made")
         async with httpx.AsyncClient(timeout=120.0) as client:
             for attempt, delay in enumerate(delays, 1):
-                resp = await client.post(url, json=body, headers=req_headers)
+                resp = await client.post(url, json=body)
+
                 if resp.status_code == 401:
-                    raise ValueError("Invalid GOOGLE_API_KEY (401). Check your key at aistudio.google.com.")
+                    raise ValueError(
+                        "Invalid GOOGLE_API_KEY (401). Check your key at aistudio.google.com."
+                    )
+
                 if resp.status_code == 429:
                     if attempt == len(delays):
                         raise RuntimeError(
                             "Gemini rate limit hit — all retries exhausted. "
-                            "Wait a minute and try again, or add a paid Gemini key."
+                            "Wait a minute and try again."
                         )
                     logger.warning("Gemini 429 on attempt %d — retrying in %ds", attempt, delay)
                     await asyncio.sleep(delay)
                     continue
+
                 if resp.status_code != 200:
-                    raise RuntimeError(
-                        f"Gemini API error {resp.status_code}: {resp.text[:300]}"
-                    )
+                    data = resp.json()
+                    msg = data.get("error", {}).get("message", resp.text[:300])
+                    # Transient server errors — retry
+                    if resp.status_code >= 500 or "high demand" in msg:
+                        if attempt < len(delays):
+                            logger.warning("Gemini %d on attempt %d — retrying in %ds: %s",
+                                           resp.status_code, attempt, delay, msg)
+                            await asyncio.sleep(delay)
+                            continue
+                    raise RuntimeError(f"Gemini API error {resp.status_code}: {msg}")
+
                 break  # success
 
         data = resp.json()
+
+        # Extract text from the Interactions API response:
+        # { "steps": [ {"type":"thought",...}, {"type":"model_output","content":[{"text":"..."}]} ] }
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError) as exc:
-            raise RuntimeError(f"Unexpected Gemini response shape: {data}") from exc
+            steps = data.get("steps", [])
+            for step in steps:
+                if step.get("type") == "model_output":
+                    content = step.get("content", [])
+                    for part in content:
+                        if part.get("type") == "text" and part.get("text"):
+                            return part["text"].strip()
+        except Exception:
+            pass
+
+        raise RuntimeError(f"Unexpected Gemini response shape: {data}")
 
     # ------------------------------------------------------------------
     async def generate_topics(self, niche: str, count: int = 5) -> list[str]:
@@ -145,18 +156,13 @@ class GeminiService:
     async def text_to_speech(self, text: str, output_path: str) -> str:
         """
         Generate voiceover MP3 using Google Cloud TTS REST API.
-        Uses the same GOOGLE_API_KEY — no extra billing setup needed.
+        Uses the same GOOGLE_API_KEY.
         Returns output_path on success.
         """
-        is_auth_key = self.api_key.startswith("AQ.")
-        if is_auth_key:
-            tts_url = "https://texttospeech.googleapis.com/v1/text:synthesize"
-            tts_headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-        else:
-            tts_url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self.api_key}"
-            tts_headers = {"Content-Type": "application/json"}
+        tts_url     = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self.api_key}"
+        tts_headers = {"Content-Type": "application/json"}
 
-        # Split into 5000-char chunks (Cloud TTS limit per request)
+        # Split into 4900-char chunks (Cloud TTS limit per request)
         chunks = [text[i:i+4900] for i in range(0, len(text), 4900)]
         audio_parts: list[bytes] = []
 
@@ -166,7 +172,7 @@ class GeminiService:
                     "input": {"text": chunk},
                     "voice": {
                         "languageCode": "en-US",
-                        "name": "en-US-Neural2-D",       # natural male voice
+                        "name": "en-US-Neural2-D",
                         "ssmlGender": "MALE",
                     },
                     "audioConfig": {
@@ -176,8 +182,7 @@ class GeminiService:
                     },
                 }
                 resp = await client.post(tts_url, json=body, headers=tts_headers)
-                if resp.status_code == 400 and "API_KEY" in resp.text:
-                    # Cloud TTS may need to be enabled — fall back to silent placeholder
+                if resp.status_code in (400, 403) and ("API_KEY" in resp.text or "disabled" in resp.text.lower()):
                     logger.warning("GeminiService TTS: Cloud TTS not enabled for this key — creating silent placeholder")
                     return self._silent_mp3(output_path)
                 resp.raise_for_status()
