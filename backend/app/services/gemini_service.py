@@ -81,13 +81,20 @@ class GeminiService:
                 "parts": [{"text": system_message}]
             }
 
-        url = f"{GEMINI_BASE}/models/{use_model}:generateContent?key={self.api_key}"
+        # Auth keys (AQ.Ab8...) use Bearer header; standard keys (AIza...) use ?key= param
+        is_auth_key = self.api_key.startswith("AQ.")
+        if is_auth_key:
+            url = f"{GEMINI_BASE}/models/{use_model}:generateContent"
+            req_headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        else:
+            url = f"{GEMINI_BASE}/models/{use_model}:generateContent?key={self.api_key}"
+            req_headers = {"Content-Type": "application/json"}
 
         # Retry up to 3 times on 429 with exponential backoff (5s, 15s, 30s)
         delays = [5, 15, 30]
         async with httpx.AsyncClient(timeout=120.0) as client:
             for attempt, delay in enumerate(delays, 1):
-                resp = await client.post(url, json=body)
+                resp = await client.post(url, json=body, headers=req_headers)
                 if resp.status_code == 401:
                     raise ValueError("Invalid GOOGLE_API_KEY (401). Check your key at aistudio.google.com.")
                 if resp.status_code == 429:
@@ -141,7 +148,13 @@ class GeminiService:
         Uses the same GOOGLE_API_KEY — no extra billing setup needed.
         Returns output_path on success.
         """
-        url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self.api_key}"
+        is_auth_key = self.api_key.startswith("AQ.")
+        if is_auth_key:
+            tts_url = "https://texttospeech.googleapis.com/v1/text:synthesize"
+            tts_headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        else:
+            tts_url = f"https://texttospeech.googleapis.com/v1/text:synthesize?key={self.api_key}"
+            tts_headers = {"Content-Type": "application/json"}
 
         # Split into 5000-char chunks (Cloud TTS limit per request)
         chunks = [text[i:i+4900] for i in range(0, len(text), 4900)]
@@ -162,7 +175,7 @@ class GeminiService:
                         "pitch": 0.0,
                     },
                 }
-                resp = await client.post(url, json=body)
+                resp = await client.post(tts_url, json=body, headers=tts_headers)
                 if resp.status_code == 400 and "API_KEY" in resp.text:
                     # Cloud TTS may need to be enabled — fall back to silent placeholder
                     logger.warning("GeminiService TTS: Cloud TTS not enabled for this key — creating silent placeholder")
