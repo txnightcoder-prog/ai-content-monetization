@@ -32,8 +32,9 @@ logger = logging.getLogger(__name__)
 
 
 def _make_ai_service():
+    """Use Gemini by default. Only use OpenAI if key is present and valid (starts with sk-)."""
     import os
-    if os.getenv("OPENAI_API_KEY"):
+    if os.getenv("OPENAI_API_KEY", "").startswith("sk-"):
         from app.services.openai_service import OpenAIService
         return OpenAIService()
     from app.services.gemini_service import GeminiService

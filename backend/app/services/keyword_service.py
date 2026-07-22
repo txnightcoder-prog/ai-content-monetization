@@ -22,7 +22,8 @@ _YT_API_BASE = "https://www.googleapis.com/youtube/v3"
 
 
 def _make_ai_service():
-    if os.getenv("OPENAI_API_KEY"):
+    """Use Gemini by default. Only use OpenAI if key is present and valid (starts with sk-)."""
+    if os.getenv("OPENAI_API_KEY", "").startswith("sk-"):
         from app.services.openai_service import OpenAIService
         return OpenAIService()
     from app.services.gemini_service import GeminiService
