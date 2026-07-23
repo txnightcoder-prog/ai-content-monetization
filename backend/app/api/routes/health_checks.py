@@ -53,20 +53,6 @@ async def run_checks() -> Dict[str, Any]:
         finally:
             db.close()
 
-    async def _openai():
-        key = os.getenv("OPENAI_API_KEY", "")
-        if not key:
-            raise ValueError("OPENAI_API_KEY is not set")
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(
-                "https://api.openai.com/v1/models",
-                headers={"Authorization": f"Bearer {key}"},
-            )
-            if r.status_code == 401:
-                raise ValueError("Invalid API key (401 Unauthorized)")
-            r.raise_for_status()
-        return "OpenAI key is valid"
-
     async def _elevenlabs():
         key = os.getenv("ELEVENLABS_API_KEY", "")
         if not key:
@@ -138,23 +124,6 @@ async def run_checks() -> Dict[str, Any]:
             r.raise_for_status()
         return "YouTube Data API key is valid"
 
-    async def _buffer():
-        token = os.getenv("BUFFER_ACCESS_TOKEN", "")
-        if not token:
-            raise ValueError("BUFFER_ACCESS_TOKEN is not set — social scheduling disabled")
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(
-                "https://api.buffer.com/1/profiles.json",
-                params={"access_token": token},
-            )
-            if r.status_code == 401:
-                raise ValueError("Invalid Buffer access token — regenerate at buffer.com/app/account/apps")
-            if r.status_code not in (200, 400):
-                r.raise_for_status()
-            profiles = r.json() if r.status_code == 200 else []
-            count = len(profiles) if isinstance(profiles, list) else 0
-        return f"Buffer connected — {count} channel(s) linked"
-
     async def _ffmpeg():
         import subprocess
         try:
@@ -171,10 +140,14 @@ async def run_checks() -> Dict[str, Any]:
                 "On Linux: apt-get install ffmpeg  On Windows: winget install Gyan.FFmpeg"
             )
 
-    async def _dalle():
-        if os.getenv("OPENAI_API_KEY"):
-            return "DALL·E 3 ready — thumbnail & social-pack generation active"
-        raise ValueError("OPENAI_API_KEY not set — image generation disabled")
+    async def _gemini():
+        key = os.getenv("GOOGLE_API_KEY", "")
+        if not key:
+            raise ValueError("GOOGLE_API_KEY not set — AI features inactive")
+        from app.services.gemini_service import GeminiService  # noqa: PLC0415
+        svc = GeminiService(api_key=key)
+        result = await svc.generate_completion("Say ok in one word.", max_tokens=5)
+        return f"Gemini AI ready — model={svc.model}, response='{result[:20]}'"
 
     async def _veo():
         key = os.getenv("GOOGLE_API_KEY", "")
@@ -189,18 +162,16 @@ async def run_checks() -> Dict[str, Any]:
 
     # ── Run ALL checks concurrently ───────────────────────────────────────────
     results = await asyncio.gather(
-        # Critical — these block core features
+        # Critical
         _check("Database",               "Set DATABASE_URL and restart. Check firewall rules.", _db()),
-        _check("OpenAI API Key",         "Set OPENAI_API_KEY. Get a key at platform.openai.com/api-keys", _openai()),
-        # Video providers — warn level (at least one should be set)
+        _check("Gemini AI",              "Set GOOGLE_API_KEY at aistudio.google.com/apikey", _gemini()),
+        # Video providers
         _warn_check("Google Veo 3 (AI video)", "Set GOOGLE_API_KEY. Get a key at aistudio.google.com/apikey", _veo()),
-        _warn_check("ElevenLabs API Key",  "Set ELEVENLABS_API_KEY for local stock-footage pipeline. Get free key at elevenlabs.io", _elevenlabs()),
+        _warn_check("ElevenLabs API Key",  "Set ELEVENLABS_API_KEY for voiceover. Get free key at elevenlabs.io", _elevenlabs()),
         _warn_check("Pexels API Key",      "Set PEXELS_API_KEY for stock footage B-roll. Free at pexels.com/api", _pexels()),
-        # Publishing & distribution
+        # Publishing
         _warn_check("YouTube OAuth (upload)",  "Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN via console.cloud.google.com", _yt_oauth()),
         _warn_check("YouTube Data API Key",    "Set YOUTUBE_DATA_API_KEY at console.cloud.google.com → APIs → Credentials", _yt_data()),
-        _warn_check("Buffer (social posting)", "Set BUFFER_ACCESS_TOKEN at buffer.com → Settings → Apps & Integrations", _buffer()),
-        _warn_check("AI Image Generation",     "Set OPENAI_API_KEY — same key used for scripts.", _dalle()),
     )
 
     checks: List[Dict[str, Any]] = [

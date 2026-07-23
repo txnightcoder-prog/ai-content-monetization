@@ -356,6 +356,19 @@ function App() {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [topicIdeas, setTopicIdeas] = useState<string[]>([]);
   const [showIdeas, setShowIdeas] = useState(false);
+  // Saved scripts panel
+  const [savedScriptsOpen,    setSavedScriptsOpen]    = useState(false);
+  const [savedScriptsLoading, setSavedScriptsLoading] = useState(false);
+  const [savedScripts,        setSavedScripts]        = useState<Script[]>([]);
+  // Import-text mode
+  const [scriptInputMode,  setScriptInputMode]  = useState<'generate' | 'import'>('generate');
+  const [importTitle,      setImportTitle]      = useState('');
+  const [importHook,       setImportHook]       = useState('');
+  const [importBody,       setImportBody]       = useState('');
+  const [importCta,        setImportCta]        = useState('');
+  const [importRawText,    setImportRawText]    = useState('');
+  const [importSaveLoading,setImportSaveLoading]= useState(false);
+  const [importSaveError,  setImportSaveError]  = useState('');
   // Top Performers feedback loop
   const [topPerfLoading, setTopPerfLoading]         = useState(false);
   const [topPerfDataAvailable, setTopPerfDataAvailable] = useState(false);
@@ -600,6 +613,14 @@ function App() {
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
+
+  // Load saved scripts from DB whenever scripts page is opened
+  useEffect(() => {
+    if (currentPage === 'scripts') {
+      loadSavedScripts();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage]);
 
   // Fetch video provider + all videos + dashboard metrics once on mount
   useEffect(() => {
@@ -4838,6 +4859,60 @@ function App() {
     </div>
   );
 
+  // ── Load saved scripts from PostgreSQL ────────────────────────────────────
+  const loadSavedScripts = async () => {
+    setSavedScriptsLoading(true);
+    try {
+      const res = await apiFetch(`${API_BASE}/api/v1/scripts/?limit=50`);
+      if (!res.ok) throw new Error('Failed to load');
+      const data = await res.json();
+      const items: Script[] = data.items ?? data ?? [];
+      setSavedScripts(items);
+      // Also merge into the in-page scripts list so they show below
+      setScripts(prev => {
+        const ids = new Set(prev.map((s: Script) => s.id));
+        return [...prev, ...items.filter((s: Script) => !ids.has(s.id))];
+      });
+    } catch { /* silent — scripts list just stays empty */ }
+    finally { setSavedScriptsLoading(false); }
+  };
+
+  // ── Save imported/pasted script to DB ─────────────────────────────────────
+  const saveImportedScript = async () => {
+    const title = importTitle.trim();
+    const hook  = importHook.trim()  || importRawText.trim().slice(0, 200);
+    const body  = importBody.trim()  || importRawText.trim();
+    const cta   = importCta.trim()   || '';
+    if (!title) { setImportSaveError('Give this script a title first'); return; }
+    if (!body)  { setImportSaveError('Paste your script text first'); return; }
+    setImportSaveLoading(true); setImportSaveError('');
+    try {
+      const res = await apiFetch(`${API_BASE}/api/v1/scripts/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topic: title,
+          hook:  hook || body.slice(0, 150),
+          body,
+          cta:   cta || 'Follow for more!',
+          status: 'approved',
+          script_metadata: { niche, source: 'imported' },
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail ?? 'Save failed'); }
+      const saved: Script = await res.json();
+      setScripts(prev => [saved, ...prev]);
+      setSavedScripts(prev => [saved, ...prev]);
+      setGeneratedScript(saved);
+      setImportTitle(''); setImportHook(''); setImportBody(''); setImportCta(''); setImportRawText('');
+      setScriptInputMode('generate');
+    } catch (err) {
+      setImportSaveError(err instanceof Error ? err.message : 'Save failed');
+    } finally {
+      setImportSaveLoading(false);
+    }
+  };
+
   const getTopicIdeas = async () => {
     setLoadingIdeas(true);
     setTopPerfDataAvailable(false);
@@ -5807,10 +5882,113 @@ function App() {
 
   const renderScripts = () => (
     <div className="scripts-page">
-      <h1>Script Generator</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.25rem' }}>
+        <h1 style={{ margin: 0 }}>Script Generator</h1>
+        {/* ── My Scripts button ── */}
+        <button
+          onClick={() => { setSavedScriptsOpen(o => { if (!o) loadSavedScripts(); return !o; }); }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', background: savedScriptsOpen ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.4)', color: '#6366f1', borderRadius: '0.5rem', padding: '0.55rem 1.1rem', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+          📂 {savedScriptsOpen ? 'Hide' : 'My Scripts'} {savedScripts.length > 0 ? `(${savedScripts.length})` : ''}
+        </button>
+      </div>
       <p className="subtitle">Generate viral short-form video scripts with AI</p>
 
-      <div className="generator-form">
+      {/* ── Saved scripts dropdown ── */}
+      {savedScriptsOpen && (
+        <div style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '1rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+            <span style={{ fontWeight: 700, color: '#1f2328', fontSize: '0.9rem' }}>📂 Saved Scripts</span>
+            <button onClick={loadSavedScripts} disabled={savedScriptsLoading}
+              style={{ background: 'none', border: '1px solid #e5e7eb', color: '#57606a', borderRadius: '0.375rem', padding: '0.25rem 0.65rem', fontSize: '0.78rem', cursor: 'pointer' }}>
+              {savedScriptsLoading ? '⏳ Loading…' : '↺ Refresh'}
+            </button>
+          </div>
+          {savedScriptsLoading && <p style={{ color: '#57606a', fontSize: '0.875rem' }}>Loading your scripts…</p>}
+          {!savedScriptsLoading && savedScripts.length === 0 && (
+            <p style={{ color: '#57606a', fontSize: '0.875rem', margin: 0 }}>No saved scripts yet — generate or import one below.</p>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '320px', overflowY: 'auto' }}>
+            {savedScripts.map(s => (
+              <div key={s.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.65rem 0.85rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 700, color: '#1f2328', fontSize: '0.875rem', margin: '0 0 0.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.topic}</p>
+                  <p style={{ color: '#57606a', fontSize: '0.78rem', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.hook?.slice(0, 80)}…</p>
+                  <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: '0.2rem 0 0', fontFamily: 'monospace' }}>ID: {s.id.slice(0, 16)}…</p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
+                  <button onClick={() => { setGeneratedScript(s); setTopic(s.topic); setSavedScriptsOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', color: '#6366f1', borderRadius: '0.375rem', padding: '0.3rem 0.65rem', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    Load
+                  </button>
+                  <button onClick={() => { setVideoScriptId(s.id); loadScript(s.id); setCurrentPage('videos'); }}
+                    style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', color: '#059669', borderRadius: '0.375rem', padding: '0.3rem 0.65rem', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    🎬 Use
+                  </button>
+                  <button onClick={() => { navigator.clipboard.writeText(s.id); copyId(s.id); }}
+                    style={{ background: copiedId === s.id ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.08)', border: '1px solid #e5e7eb', color: copiedId === s.id ? '#059669' : '#9ca3af', borderRadius: '0.375rem', padding: '0.3rem 0.55rem', fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                    {copiedId === s.id ? '✓' : '📋 ID'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mode tabs: Generate | Import Text ── */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
+        <button onClick={() => setScriptInputMode('generate')}
+          style={{ flex: 1, padding: '0.65rem', borderRadius: '0.5rem', border: `2px solid ${scriptInputMode === 'generate' ? '#6366f1' : '#e5e7eb'}`, background: scriptInputMode === 'generate' ? 'rgba(99,102,241,0.1)' : '#f7f8fa', color: scriptInputMode === 'generate' ? '#6366f1' : '#57606a', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+          ✨ Generate with AI
+        </button>
+        <button onClick={() => setScriptInputMode('import')}
+          style={{ flex: 1, padding: '0.65rem', borderRadius: '0.5rem', border: `2px solid ${scriptInputMode === 'import' ? '#6366f1' : '#e5e7eb'}`, background: scriptInputMode === 'import' ? 'rgba(99,102,241,0.1)' : '#f7f8fa', color: scriptInputMode === 'import' ? '#6366f1' : '#57606a', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer' }}>
+          📋 Import / Paste Text
+        </button>
+      </div>
+
+      {/* ── Import Text panel ── */}
+      {scriptInputMode === 'import' && (
+        <div style={{ background: '#f7f8fa', border: '1px solid #e5e7eb', borderRadius: '0.75rem', padding: '1.25rem', marginBottom: '1.25rem' }}>
+          <p style={{ color: '#57606a', fontSize: '0.8125rem', marginBottom: '1rem', lineHeight: 1.6 }}>
+            Paste a script from <strong>Davinci.ai</strong>, a <strong>.txt file</strong>, ChatGPT, or anywhere else.<br />
+            Either fill in Hook / Body / CTA separately, or paste the whole thing into the Body field.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>Script Title / Topic *</label>
+              <input type="text" value={importTitle} onChange={e => setImportTitle(e.target.value)}
+                placeholder="e.g. 5 AI Tools That Save 10 Hours a Week"
+                style={{ width: '100%', background: '#fff', border: '1px solid #d0d7de', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>Hook (opening line, 3-5 sec) — optional</label>
+              <textarea value={importHook} onChange={e => setImportHook(e.target.value)} rows={2}
+                placeholder="e.g. Stop wasting 3 hours a day on tasks AI can do in seconds..."
+                style={{ width: '100%', background: '#fff', border: '1px solid #d0d7de', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>Body / Full Script *</label>
+              <textarea value={importBody} onChange={e => setImportBody(e.target.value)} rows={8}
+                placeholder="Paste your full script here — or just paste everything and it will be saved as the body..."
+                style={{ width: '100%', background: '#fff', border: '1px solid #d0d7de', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.875rem', resize: 'vertical', fontFamily: 'inherit', boxSizing: 'border-box' }} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: '0.8rem', color: '#57606a', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.3rem' }}>Call to Action — optional</label>
+              <input type="text" value={importCta} onChange={e => setImportCta(e.target.value)}
+                placeholder="e.g. Follow for more AI tips every day!"
+                style={{ width: '100%', background: '#fff', border: '1px solid #d0d7de', borderRadius: '0.5rem', padding: '0.6rem 0.85rem', fontSize: '0.875rem', boxSizing: 'border-box' }} />
+            </div>
+          </div>
+          {importSaveError && <div className="error-message" style={{ marginTop: '0.75rem' }}>{importSaveError}</div>}
+          <button onClick={saveImportedScript} disabled={importSaveLoading}
+            style={{ marginTop: '1rem', width: '100%', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: '#fff', border: 'none', borderRadius: '0.5rem', padding: '0.75rem', fontWeight: 700, fontSize: '0.9375rem', cursor: importSaveLoading ? 'not-allowed' : 'pointer', opacity: importSaveLoading ? 0.7 : 1 }}>
+            {importSaveLoading ? '💾 Saving…' : '💾 Save Script to Library'}
+          </button>
+        </div>
+      )}
+
+      {scriptInputMode === 'generate' && <div className="generator-form">
         <div className="form-group">
           <label htmlFor="topic">Video Topic *</label>
           <input
@@ -5913,7 +6091,7 @@ function App() {
         >
           {loading ? 'Generating...' : 'Generate Script'}
         </button>
-      </div>
+      </div>}
 
       {generatedScript && (
         <div className="generated-script">
